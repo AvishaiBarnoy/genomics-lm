@@ -19,8 +19,16 @@ The goal is to explore embeddings, motif discovery, and sequence prediction with
 Clone the repository and create a conda environment:
 
 ```bash
-git clone https://github.com/<your-username>/genomics-lm.git
+git clone https://github.com/AvishaiBarnoy/genomics-lm.git
 cd genomics-lm
 conda env create -f env/conda-environment.yml
 conda activate codonlm
+```
+
+## Training 
+
+Running the training scrpt is easy with:
+
+```chmod +x pipeline.sh
+./pipeline.sh````
 
