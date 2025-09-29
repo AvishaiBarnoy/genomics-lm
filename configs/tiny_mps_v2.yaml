@@ -1,0 +1,8 @@
+# add/modify:
+optimizer: "adafactor"   # or "adamw"
+amp: true
+use_checkpoint: true
+plateau_patience: 2
+early_stop_patience: 5
+log_csv: "outputs/checkpoints_tiny/train_log.csv"
+

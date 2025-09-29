@@ -1,0 +1,24 @@
+genomics-lm/
+├─ README.md
+├─ env/                      # environment & reproducibility
+│  ├─ conda-environment.yml
+│  └─ requirements.txt
+├─ data/
+│  ├─ raw/                   # .gbff or .fna + .gff you download
+│  └─ processed/             # tokenized/packed arrays for training
+├─ configs/
+│  ├─ tiny_mps.yaml          # fits M2 8GB
+│  └─ small_mps.yaml         # fits M4 16GB
+└─ src/
+   └─ codonlm/
+      ├─ __init__.py
+      ├─ utils_io.py                 # file helpers, RNG seeding
+      ├─ extract_cds_from_genbank.py # turn .gbff → CDS FASTA
+      ├─ codon_tokenize.py           # DNA→codon ids (+vocab)
+      ├─ build_dataset.py            # pack codon ids → train/val npz
+      ├─ model_tiny_gpt.py           # ~nanoGPT in ~100 lines
+      ├─ train_codon_lm.py           # training loop (PyTorch, MPS)
+      ├─ eval_perplexity.py          # PPL on a FASTA or packed set
+      ├─ score_mutations.py          # ΔlogP mutation heatmap for one CDS
+      └─ mine_motifs.py              # crude motif mining from embeddings
+

@@ -1,0 +1,5 @@
+1. what are weights in layers, heads structure.
+2. what does the embedding value mean and why do I need `n_embed % n_head ==0`?
+3. What is `qkv` what is the math behind it?
+4. what is inductive bias (is there non-inductive bias)?
+5.

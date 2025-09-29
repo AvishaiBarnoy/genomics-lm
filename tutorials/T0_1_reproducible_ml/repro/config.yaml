@@ -1,0 +1,12 @@
+seed: 1337            # master seed (python/numpy/torch)
+data_seed: 202        # dataset generation
+split_seed: 303       # train/val split
+loader_seed: 404      # dataloader shuffle generator
+n: 4096
+d: 16
+batch_size: 128
+grad_accum_steps: 4   # emulate 512 batch with 128 microbatch
+epochs: 8
+lr: 1.0e-2
+weight_decay: 0.0
+
