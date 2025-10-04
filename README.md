@@ -27,7 +27,7 @@ conda activate codonlm
 
 ## Training 
 
-Running the training scrpt is easy with:
+Running the training script is easy with:
 
 ```
 chmod +x pipeline.sh
