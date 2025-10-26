@@ -55,3 +55,11 @@ python -m scripts.probe_linear          $RUN_ID
 python -m scripts.summarize_one_cds     $RUN_ID  # optional
 python -m scripts.compare_runs $RUN_ID <other_run_ids...>
 ```
+
+For Step 6 linear probes:
+
+```bash
+python -m scripts.generate_probe_labels <RUN_ID>
+python -m scripts.probe_linear <RUN_ID>
+python -m scripts.export_run_summary <RUN_ID>
+```
