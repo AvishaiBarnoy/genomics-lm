@@ -3,15 +3,18 @@
 Training with:
 - MPS autocast float16 (Apple Silicon)
 - optional gradient checkpointing
-- ReduceLROnPlateau scheduler + early stopping
+- cosine or plateau LR schedules with early stopping
 - CSV logging
 
-New config keys:
+Config highlights:
   amp: true/false
   use_checkpoint: true/false
-  early_stop_patience: 5
-  log_csv: "outputs/train_log.csv"
   optimizer: "adamw" or "adafactor"
+  scheduler: "cosine" (default) or "plateau"
+  warmup_steps: linear warmup period
+  min_lr: final LR for cosine schedule / floor for plateau
+  early_stop_patience: epochs without improvement before stopping
+  log_csv: where to append training curves (relative to scores_dir by default)
 """
 
 import argparse, yaml, math, csv, time, torch, numpy as np, json, os
@@ -91,10 +94,40 @@ def main():
     else:
         optim = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
 
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, mode="min", factor=0.5,
-                                                           patience=cfg.get("plateau_patience", 2), min_lr=1e-6)
-    warmup = cfg.get("warmup_steps", 200)
+    scheduler_name = str(cfg.get("scheduler", "cosine")).lower()
+    if scheduler_name not in {"cosine", "plateau"}:
+        print(f"[warn] Unknown scheduler '{scheduler_name}', defaulting to cosine.")
+        scheduler_name = "cosine"
+
     gacc = cfg.get("grad_accum_steps", 16)
+    warmup_steps = int(cfg.get("warmup_steps", 200))
+    min_lr = float(cfg.get("min_lr", 1e-5))
+    base_lr = float(cfg["lr"])
+
+    max_epochs = int(cfg.get("epochs", 5))
+    use_cosine = scheduler_name == "cosine"
+    if use_cosine:
+        steps_per_epoch = math.ceil(len(train_loader) / max(1, gacc))
+        total_steps = max(1, steps_per_epoch * max_epochs)
+        warmup_for_lambda = max(1, warmup_steps)
+        min_lr_ratio = (min_lr / base_lr) if base_lr > 0 else 0.0
+
+        def lr_lambda(step_idx: int) -> float:
+            if step_idx < warmup_for_lambda:
+                return float(step_idx + 1) / warmup_for_lambda
+            progress = (step_idx - warmup_for_lambda) / max(1, total_steps - warmup_for_lambda)
+            cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
+            return min_lr_ratio + (1 - min_lr_ratio) * cosine
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda)
+    else:
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optim,
+            mode="min",
+            factor=0.5,
+            patience=cfg.get("plateau_patience", 2),
+            min_lr=min_lr,
+        )
 
     run_id = _normalize_run_id(args.run_id or cfg.get("run_id") or os.environ.get(RUN_ID_ENV))
     if run_id:
@@ -130,16 +163,18 @@ def main():
             if split=="train":
                 loss.backward()
                 if (n+1) % gacc == 0:
-                    # warmup (linear)
-                    if step < warmup:
+                    if (not use_cosine) and warmup_steps > 0 and step < warmup_steps:
+                        scale = float(step + 1) / max(1, warmup_steps)
                         for pg in optim.param_groups:
-                            pg["lr"] = cfg["lr"] * float(step+1)/warmup
-                    optim.step(); optim.zero_grad(set_to_none=True)
+                            pg["lr"] = base_lr * scale
+                    optim.step()
+                    optim.zero_grad(set_to_none=True)
                     step += 1
+                    if use_cosine:
+                        scheduler.step()
             total += loss.item()*gacc; n += 1
         return total / max(n,1)
 
-    max_epochs = int(cfg.get("epochs", 5))
     history = []
     best_epoch = None
     if run_id:
@@ -152,7 +187,8 @@ def main():
         with torch.no_grad():
             val_loss = one_pass("val", val_loader)
         ppl = math.exp(min(20.0, val_loss))
-        scheduler.step(val_loss)
+        if not use_cosine:
+            scheduler.step(val_loss)
         lr_now = optim.param_groups[0]["lr"]
         print(f"[epoch {epoch_idx}] train {train_loss:.3f} | val {val_loss:.3f} | ppl {ppl:.2f} | lr {lr_now:.2e}")
 

@@ -143,6 +143,13 @@ def run_epoch(model, loader, optimizer=None, device="cpu"):
 # --- replace your if __name__ == "__main__": block with this ---
 if __name__ == "__main__":
     args = parse_args()
+    # Deprecation notice: prefer v2 trainer
+    import sys
+    print(
+        "[deprecation] train_codon_lm.py (v1) is deprecated. "
+        "Use src.codonlm.train_codon_lm_v2 with configs/tiny_mps_v2.yaml instead.",
+        file=sys.stderr,
+    )
     run_id = _normalize_run_id(args.run_id or os.environ.get(RUN_ID_ENV))
     ckpt_dir, scores_dir = _prepare_output_dirs(args.outdir, args.scores_dir, run_id)
 

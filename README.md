@@ -56,10 +56,18 @@ python -m scripts.summarize_one_cds     $RUN_ID  # optional
 python -m scripts.compare_runs $RUN_ID <other_run_ids...>
 ```
 
+Default trainer (v2 with AMP + cosine schedule):
+
+```bash
+python -m src.codonlm.train_codon_lm_v2 --config configs/tiny_mps_v2.yaml --run_id "$RUN_ID"
+```
+
+Deprecated: The v1 trainer (`src/codonlm/train_codon_lm.py`) and older config naming are kept only for legacy runs. New training should use the v2 trainer and `configs/tiny_mps_v2.yaml`. The file `configs/tiny_mps.yaml` is an alias to the v2 settings to avoid path mismatches.
+
 For Step 6 linear probes:
 
 ```bash
-python -m scripts.generate_probe_labels <RUN_ID>
-python -m scripts.probe_linear <RUN_ID>
-python -m scripts.export_run_summary <RUN_ID>
+python -m scripts.generate_probe_labels $RUN_ID
+python -m scripts.probe_linear $RUN_ID
+python -m scripts.export_run_summary $RUN_ID
 ```

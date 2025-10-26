@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+echo "[deprecated] pipeline.sh is deprecated; please use pipeline_v2.sh" >&2
+
 # activate environment
 #conda env update -n codonlm -f env/conda-environment.yml
 
@@ -30,7 +32,7 @@ python -m src.codonlm.build_dataset \
   --ids data/processed/codon_ids.txt \
   --block_size 256 --windows_per_seq 2
 
-# Train (M2 example)
+# Train (deprecated path) — prefer pipeline_v2.sh which uses the v2 trainer
 python -m src.codonlm.train_codon_lm --config configs/tiny_mps.yaml --run_id "${RUN_ID}"
 
 # Evalutate

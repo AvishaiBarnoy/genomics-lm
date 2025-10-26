@@ -101,11 +101,31 @@ def _find_checkpoint(check_dir: Path, run_id: Optional[str] = None) -> Path:
     - check_dir (flat layout), or
     - check_dir/<run_id>/ (per-run layout)
     """
-    search_roots = [check_dir]
+    search_roots = []
     if run_id:
         run_sub = check_dir / run_id
         if run_sub.exists():
-            search_roots.insert(0, run_sub)  # prefer per-run if present
+            search_roots.append(run_sub)
+    search_roots.append(check_dir)
+
+    # fallback: allow common alternate directory names (e.g., v1 vs v2 out_dir)
+    alt_dirs = []
+    # Variants with provided run_id
+    if run_id:
+        alt_dirs.extend([
+            check_dir.parent / f"{check_dir.name}_{run_id}",              # e.g., outputs/checkpoints_<RUN_ID>
+            check_dir.parent / f"{check_dir.name}_tiny" / run_id,        # e.g., outputs/checkpoints_tiny/<RUN_ID>
+            Path("outputs") / f"{check_dir.name}" / run_id,             # e.g., outputs/checkpoints/<RUN_ID>
+            Path("outputs") / f"{check_dir.name}_tiny" / run_id,        # e.g., outputs/checkpoints_tiny/<RUN_ID>
+        ])
+    # Flat directories without run_id (v1 layout like outputs/checkpoints_tiny/best.pt)
+    alt_dirs.extend([
+        check_dir.parent / f"{check_dir.name}_tiny",                      # e.g., outputs/checkpoints_tiny
+        Path("outputs") / f"{check_dir.name}_tiny",                     # e.g., outputs/checkpoints_tiny
+    ])
+    for alt in alt_dirs:
+        if alt.exists() and alt not in search_roots:
+            search_roots.append(alt)
 
     for root in search_roots:
         for name in ("best.pt", "last.pt"):
@@ -403,4 +423,3 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
 
 if __name__ == "__main__":
     main()
-
