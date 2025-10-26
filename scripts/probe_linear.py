@@ -1,4 +1,8 @@
-"""Linear probes on token embeddings."""
+"""Linear probes on token embeddings.
+
+If probe_labels.csv is missing, attempt to generate it from the run's
+`itos.txt` using the standard genetic code mapping.
+"""
 from __future__ import annotations
 
 import argparse
@@ -11,6 +15,54 @@ import torch
 import torch.nn.functional as F
 
 from ._shared import ensure_run_layout, load_artifacts, load_token_list, stoi
+
+try:
+    # Reuse mappings from the label generator when available
+    from .generate_probe_labels import (
+        STANDARD_GENETIC_CODE,
+        POLARITY_CLASS,
+        HYDROPATHY_CLASS,
+        START_CODONS,
+    )
+except Exception:
+    STANDARD_GENETIC_CODE = {}
+    POLARITY_CLASS = {}
+    HYDROPATHY_CLASS = {}
+    START_CODONS = set()
+
+
+def _write_probe_labels_if_missing(run_dir: Path, tokens: list[str]) -> None:
+    path = run_dir / "probe_labels.csv"
+    if path.exists():
+        return
+    if not STANDARD_GENETIC_CODE:
+        # generator not available; do nothing
+        return
+    rows = []
+    stop_codons = {c for c, aa in STANDARD_GENETIC_CODE.items() if aa == "Stop"}
+    for tok in tokens:
+        codon = tok.upper()
+        aa = polarity = hyd = ""
+        is_stop = is_start = "0"
+        if len(codon) == 3 and codon.isalpha():
+            aa_or_stop = STANDARD_GENETIC_CODE.get(codon)
+            if aa_or_stop == "Stop":
+                aa = "Stop"
+                is_stop = "1"
+            elif aa_or_stop is not None:
+                aa = aa_or_stop
+                polarity = POLARITY_CLASS.get(aa, "")
+                hyd = HYDROPATHY_CLASS.get(aa, "")
+                if codon in stop_codons:
+                    is_stop = "1"
+                if codon in START_CODONS:
+                    is_start = "1"
+        rows.append((tok, aa, polarity, hyd, is_stop, is_start))
+    with path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["token", "aa", "polarity", "hydropathy", "is_stop", "is_start"])
+        for r in rows:
+            writer.writerow(list(r))
 
 TASKS = {
     "AA identity": "aa",
@@ -122,6 +174,7 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
     tokens = load_token_list(run_dir)
 
     label_path = run_dir / "probe_labels.csv"
+    _write_probe_labels_if_missing(run_dir, tokens)
     rows = _read_probe_labels(label_path, tokens)
     if not rows:
         print(f"[probe-linear] probe_labels.csv missing or empty at {label_path}")
@@ -176,4 +229,3 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
 
 if __name__ == "__main__":
     main()
-

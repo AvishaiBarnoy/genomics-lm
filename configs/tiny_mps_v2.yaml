@@ -1,8 +1,8 @@
 vocab_size: 69
 block_size: 256
-n_layer: 2
+n_layer: 6
 n_head: 4
-n_embd: 128
+n_embd: 256 
 dropout: 0.1
 
 batch_size: 2
@@ -13,7 +13,7 @@ epochs: 5
 
 optimizer: "adamw"        # or "adafactor"
 amp: true
-use_checkpoint: false
+use_checkpoint: true 
 scheduler: "cosine"       # cosine or plateau
 warmup_steps: 200
 min_lr: 1e-5

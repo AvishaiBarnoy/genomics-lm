@@ -48,20 +48,32 @@ def main():
     sd = state.get("model", state)
     cfg_saved = state.get("cfg", None)
 
-    if cfg_saved is not None:
-        mconf = Cfg(
-            vocab_size = cfg_saved["vocab_size"],
-            n_layer    = cfg_saved["n_layer"],   # matches ckpt (your runs used 2)
-            n_head     = cfg_saved["n_head"],
-            n_embd     = cfg_saved["n_embd"],
-            block_size = cfg_saved["block_size"],
-            dropout    = cfg_saved.get("dropout", 0.0),
-        )
-    else:
-        # fallback: what you trained
-        mconf = Cfg(vocab_size=69, n_layer=2, n_head=4, n_embd=128, block_size=256, dropout=0.1)
+    def detect(sd: dict) -> str:
+        ks = list(sd.keys())
+        if any(".attn.qkv.weight" in k or ".attn.attn_mask" in k for k in ks):
+            return "tiny_gpt"
+        if any(".attn.key.weight" in k or ".attn.mask" in k for k in ks):
+            return "tiny_gpt_v2"
+        return "tiny_gpt"
 
-    model = TinyGPT(mconf)
+    model_type = detect(sd)
+    if model_type == "tiny_gpt_v2":
+        from .model_tiny_gpt_v2 import TinyGPTv2
+        cfg_src = cfg_saved or {"vocab_size":69,"block_size":256,"n_layer":2,"n_head":4,"n_embd":128,"dropout":0.0}
+        model = TinyGPTv2(cfg_src["vocab_size"], cfg_src["block_size"], n_layer=cfg_src["n_layer"], n_head=cfg_src["n_head"], n_embd=cfg_src["n_embd"], dropout=cfg_src.get("dropout",0.0))
+    else:
+        if cfg_saved is not None:
+            mconf = Cfg(
+                vocab_size = cfg_saved["vocab_size"],
+                n_layer    = cfg_saved["n_layer"],
+                n_head     = cfg_saved["n_head"],
+                n_embd     = cfg_saved["n_embd"],
+                block_size = cfg_saved["block_size"],
+                dropout    = cfg_saved.get("dropout", 0.0),
+            )
+        else:
+            mconf = Cfg(vocab_size=69, n_layer=2, n_head=4, n_embd=128, block_size=256, dropout=0.1)
+        model = TinyGPT(mconf)
     missing, unexpected = model.load_state_dict(sd, strict=False)
     print("[state] missing:", missing)
     print("[state] unexpected:", unexpected)
@@ -70,7 +82,18 @@ def main():
     model.to(device).eval()
 
     print("Using TinyGPT from:", inspect.getsourcefile(TinyGPT))
-    print("Model cfg:", vars(mconf))
+    # derive a readable config summary regardless of v1/v2
+    model_cfg = {}
+    if cfg_saved:
+        model_cfg = dict(cfg_saved)
+    else:
+        # fallback to reading attributes
+        model_cfg = {
+            "vocab_size": getattr(getattr(model, "tok_emb", None), "num_embeddings", None),
+            "block_size": getattr(model, "block_size", getattr(getattr(model, "pos_emb", None), "num_embeddings", None)),
+            "n_embd": getattr(getattr(model, "ln_f", None), "normalized_shape", [None])[0],
+        }
+    print("Model cfg:", model_cfg)
     print("Model device:", next(model.parameters()).device)
     print("MPS available:", torch.backends.mps.is_available())
 
@@ -93,7 +116,12 @@ def main():
         n_samples = min(args.samples, arr.shape[0])
         for i in range(n_samples):
             # safe indices tensor on correct device
-            x = to_idx_tensor(arr[i], device, mconf.block_size)  # (1, T')
+            block_size = (
+                getattr(model, "block_size", None)
+                or getattr(getattr(model, "pos_emb", None), "num_embeddings", None)
+                or model_cfg.get("block_size", 256)
+            )
+            x = to_idx_tensor(arr[i], device, int(block_size))  # (1, T')
             feats_buf.clear()
             logits, _ = model(x)          # runs forward, hook fills feats_buf
             # take the last captured features
@@ -122,4 +150,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

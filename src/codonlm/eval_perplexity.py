@@ -7,6 +7,14 @@ import argparse, math, torch, numpy as np
 from torch.utils.data import DataLoader, Dataset
 from .model_tiny_gpt import TinyGPT, Cfg
 
+def _detect_model_type(sd: dict) -> str:
+    keys = list(sd.keys())
+    if any(".attn.qkv.weight" in k or ".attn.attn_mask" in k for k in keys):
+        return "tiny_gpt"
+    if any(".attn.key.weight" in k or ".attn.mask" in k for k in keys):
+        return "tiny_gpt_v2"
+    return "tiny_gpt"
+
 # --- utility: device + legacy ckpt conversion + layer inference ---
 def dev():
     return "mps" if torch.backends.mps.is_available() else "cpu"
@@ -76,29 +84,46 @@ def main():
     sd = state.get("model", state)
     cfg_saved = state.get("cfg", None)
 
-    # 2) build model config: prefer what the checkpoint says
-    if cfg_saved is not None:
-        # exact match to what trained
-        mconf = Cfg(
-            vocab_size = cfg_saved["vocab_size"],
-            n_layer    = cfg_saved["n_layer"],
-            n_head     = cfg_saved["n_head"],
-            n_embd     = cfg_saved["n_embd"],
-            block_size = cfg_saved["block_size"],
-            dropout    = cfg_saved.get("dropout", 0.0),
+    model_type = _detect_model_type(sd)
+    if model_type == "tiny_gpt_v2":
+        from .model_tiny_gpt_v2 import TinyGPTv2
+        cfg_src = cfg_saved or {
+            "vocab_size": getattr(args, "vocab_size", 69),
+            "block_size": getattr(args, "block_size", 256),
+            "n_layer": getattr(args, "n_layer", 2),
+            "n_head": getattr(args, "n_head", 4),
+            "n_embd": getattr(args, "n_embd", 128),
+            "dropout": getattr(args, "dropout", 0.0),
+        }
+        model = TinyGPTv2(
+            vocab_size=cfg_src["vocab_size"],
+            block_size=cfg_src["block_size"],
+            n_layer=cfg_src["n_layer"],
+            n_head=cfg_src["n_head"],
+            n_embd=cfg_src["n_embd"],
+            dropout=cfg_src.get("dropout", 0.0),
         )
     else:
-        # fallback: use CLI args
-        mconf = Cfg(
-            vocab_size = args.vocab_size,
-            n_layer    = args.n_layer,
-            n_head     = args.n_head,
-            n_embd     = args.n_embd,
-            block_size = args.block_size,
-            dropout    = getattr(args, "dropout", 0.0),
-        )
-
-    model = TinyGPT(mconf)
+        # v1
+        if cfg_saved is not None:
+            mconf = Cfg(
+                vocab_size = cfg_saved["vocab_size"],
+                n_layer    = cfg_saved["n_layer"],
+                n_head     = cfg_saved["n_head"],
+                n_embd     = cfg_saved["n_embd"],
+                block_size = cfg_saved["block_size"],
+                dropout    = cfg_saved.get("dropout", 0.0),
+            )
+        else:
+            mconf = Cfg(
+                vocab_size = args.vocab_size,
+                n_layer    = args.n_layer,
+                n_head     = args.n_head,
+                n_embd     = args.n_embd,
+                block_size = args.block_size,
+                dropout    = getattr(args, "dropout", 0.0),
+            )
+        model = TinyGPT(mconf)
 
     # 3) load weights; strict=True should work when arch matches
     missing, unexpected = model.load_state_dict(sd, strict=False)
@@ -109,4 +134,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

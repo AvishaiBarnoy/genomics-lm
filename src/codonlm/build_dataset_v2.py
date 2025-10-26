@@ -40,19 +40,45 @@ def main():
             groups.append(g)
     assert len(groups)==len(seqs), "meta and ids must align"
 
-    # split by unique groups
+    # split by unique groups (fallback to sequence-level split if too few groups)
     uniq = list(sorted(set(groups)))
     rng.shuffle(uniq)
-    n_test = max(1, int(len(uniq)*args.test_frac))
-    n_val  = max(1, int(len(uniq)*args.val_frac))
-    test_groups = set(uniq[:n_test])
-    val_groups  = set(uniq[n_test:n_test+n_val])
-    train_groups= set(uniq[n_test+n_val:])
 
-    buckets = {"train":[], "val":[], "test":[]}
-    for arr,g in zip(seqs, groups):
-        key = "train" if g in train_groups else "val" if g in val_groups else "test"
-        buckets[key].append(arr)
+    buckets = {"train": [], "val": [], "test": []}
+
+    if len(uniq) < 3:
+        # Fallback: not enough distinct genomes to form 3 splits.
+        idx = list(range(len(seqs)))
+        rng.shuffle(idx)
+        n_total = len(idx)
+        n_test_seq = max(1, int(n_total * args.test_frac)) if n_total > 2 else (1 if n_total > 0 else 0)
+        n_val_seq = max(1, int((n_total - n_test_seq) * args.val_frac)) if (n_total - n_test_seq) > 1 else 0
+        test_idx = set(idx[:n_test_seq])
+        val_idx = set(idx[n_test_seq:n_test_seq + n_val_seq])
+        for i, arr in enumerate(seqs):
+            if i in test_idx:
+                buckets["test"].append(arr)
+            elif i in val_idx:
+                buckets["val"].append(arr)
+            else:
+                buckets["train"].append(arr)
+    else:
+        n_test = max(1, int(len(uniq) * args.test_frac))
+        n_val = max(1, int(len(uniq) * args.val_frac))
+        # Ensure at least one group remains for training
+        if n_test + n_val >= len(uniq):
+            # reduce val first, then test if needed
+            n_val = max(0, len(uniq) - 1 - n_test)
+            if n_test + n_val >= len(uniq):
+                n_test = max(0, len(uniq) - 1)
+
+        test_groups = set(uniq[:n_test])
+        val_groups = set(uniq[n_test:n_test + n_val])
+        train_groups = set(uniq[n_test + n_val:])
+
+        for arr, g in zip(seqs, groups):
+            key = "train" if g in train_groups else "val" if g in val_groups else "test"
+            buckets[key].append(arr)
 
     Path(args.out_dir).mkdir(parents=True, exist_ok=True)
     def pack(name, subset):
@@ -80,4 +106,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

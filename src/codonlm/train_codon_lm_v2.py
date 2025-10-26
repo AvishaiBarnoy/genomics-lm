@@ -148,18 +148,34 @@ def main():
     best = float("inf"); no_improve = 0
     step = 0
 
-    scaler = None  # GradScaler is CUDA-only; autocast on MPS works without scaler
+    scaler = None  # GradScaler is CUDA-only; autocast on MPS may be unsupported in some torch versions
 
     def one_pass(split, loader):
         nonlocal step
+        mps_autocast_ok = True
         model.train(split=="train")
         total, n = 0.0, 0
         optim.zero_grad(set_to_none=True)
         for xb, yb in loader:
             xb, yb = xb.to(device), yb.to(device)
-            with torch.amp.autocast(device_type="mps", dtype=torch.float16, enabled=amp):
-                logits, loss = model(xb, yb)
-                loss = loss / gacc
+            def fwd():
+                logits_, loss_ = model(xb, yb)
+                return logits_, loss_ / gacc
+
+            if amp and mps_autocast_ok:
+                try:
+                    with torch.amp.autocast(device_type=device.type, dtype=torch.float16, enabled=True):
+                        logits, loss = fwd()
+                except RuntimeError as e:
+                    msg = str(e).lower()
+                    if "unsupported autocast device_type" in msg or "autocast" in msg and device.type == "mps":
+                        # Fallback: disable MPS autocast for this run
+                        mps_autocast_ok = False
+                        logits, loss = fwd()
+                    else:
+                        raise
+            else:
+                logits, loss = fwd()
             if split=="train":
                 loss.backward()
                 if (n+1) % gacc == 0:

@@ -71,7 +71,12 @@ class TinyGPTv2(nn.Module):
 
         if self.use_checkpoint and self.training:
             for blk in self.blocks:
-                x = checkpoint(lambda _x: blk(_x), x)
+                # Explicitly pass use_reentrant to silence future deprecation warnings.
+                # Fallback for older PyTorch that doesn't support the kwarg.
+                try:
+                    x = checkpoint(lambda _x: blk(_x), x, use_reentrant=False)
+                except TypeError:
+                    x = checkpoint(lambda _x: blk(_x), x)
         else:
             for blk in self.blocks:
                 x = blk(x)
@@ -82,4 +87,3 @@ class TinyGPTv2(nn.Module):
         if targets is not None:
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=0)
         return logits, loss
-

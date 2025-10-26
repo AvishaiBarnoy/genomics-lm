@@ -80,21 +80,44 @@ def main():
 
     # load model
     state = torch.load(args.ckpt, map_location="cpu")
-    sd = state.get("model", state)         # supports ckpts saved as {"model": ...}
-    cfg_saved = state.get("cfg", {})       # saved at train time in your new trainer
+    sd = state.get("model", state)
+    cfg_saved = state.get("cfg", {})
 
-    # prefer the ckpt config; fall back to CLI args if some fields are missing
-    mconf = Cfg(
-        vocab_size = cfg_saved.get("vocab_size", getattr(args, "vocab_size", 69)),
-        n_layer    = cfg_saved.get("n_layer",    getattr(args, "n_layer",    2)),
-        n_head     = cfg_saved.get("n_head",     getattr(args, "n_head",     4)),
-        n_embd     = cfg_saved.get("n_embd",     getattr(args, "n_embd",     128)),
-        block_size = cfg_saved.get("block_size", getattr(args, "block_size", 256)),
-        dropout    = cfg_saved.get("dropout",    getattr(args, "dropout",    0.0)),
-    )
-    model = TinyGPT(mconf)
+    def detect(sd: dict) -> str:
+        ks = list(sd.keys())
+        if any(".attn.qkv.weight" in k or ".attn.attn_mask" in k for k in ks):
+            return "tiny_gpt"
+        if any(".attn.key.weight" in k or ".attn.mask" in k for k in ks):
+            return "tiny_gpt_v2"
+        return "tiny_gpt"
 
-    # load weights; attn_mask is a buffer created at init, so strict=False is fine
+    model_type = detect(sd)
+    if model_type == "tiny_gpt_v2":
+        from .model_tiny_gpt_v2 import TinyGPTv2
+        cfg_src = cfg_saved or {
+            "vocab_size": 69,
+            "block_size": 256,
+            "n_layer": 2,
+            "n_head": 4,
+            "n_embd": 128,
+            "dropout": 0.0,
+        }
+        model = TinyGPTv2(
+            cfg_src["vocab_size"], cfg_src["block_size"],
+            n_layer=cfg_src["n_layer"], n_head=cfg_src["n_head"], n_embd=cfg_src["n_embd"],
+            dropout=cfg_src.get("dropout", 0.0)
+        )
+    else:
+        mconf = Cfg(
+            vocab_size = cfg_saved.get("vocab_size", getattr(args, "vocab_size", 69)),
+            n_layer    = cfg_saved.get("n_layer",    getattr(args, "n_layer",    2)),
+            n_head     = cfg_saved.get("n_head",     getattr(args, "n_head",     4)),
+            n_embd     = cfg_saved.get("n_embd",     getattr(args, "n_embd",     128)),
+            block_size = cfg_saved.get("block_size", getattr(args, "block_size", 256)),
+            dropout    = cfg_saved.get("dropout",    getattr(args, "dropout",    0.0)),
+        )
+        model = TinyGPT(mconf)
+
     missing, unexpected = model.load_state_dict(sd, strict=False)
     print("[state] missing:", missing)
     print("[state] unexpected:", unexpected)
@@ -113,7 +136,14 @@ def main():
     # compute baseline log-probs at each position (sliding window if needed)
     with torch.no_grad():
         T = x.size(1)                      # total tokens, including <bos> and <eog>
-        block = int(mconf.block_size)
+        # Determine block size from model attributes or saved config
+        block_attr = getattr(model, "block_size", None)
+        if isinstance(block_attr, int) and block_attr > 0:
+            block = block_attr
+        elif hasattr(model, "pos_emb") and hasattr(model.pos_emb, "num_embeddings"):
+            block = int(model.pos_emb.num_embeddings)
+        else:
+            block = int(cfg_saved.get("block_size", 256))
 
         if T <= block:
             # simple case: one pass; predictions for tokens 1..T-1
