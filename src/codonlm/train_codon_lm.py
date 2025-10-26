@@ -15,12 +15,13 @@ Key parameters (YAML or CLI):
 - max_steps: training length
 """
 
-import argparse, yaml, math, time
+import argparse, yaml, math, time, json, csv
 import numpy as np, torch
 from torch.utils.data import DataLoader, Dataset
 from pathlib import Path
 from tqdm import tqdm
 import os
+from typing import Optional, Tuple
 from .model_tiny_gpt import TinyGPT, Cfg
 
 class PackedDataset(Dataset):
@@ -59,11 +60,36 @@ class PackedDataset(Dataset):
         # use first T-1 as input, last T-1 as target
         return seq[:-1], seq[1:]               # (T-1,), (T-1,)
 
+RUN_ID_ENV = "RUN_ID"
+
+
+def _normalize_run_id(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    run_id = str(value).strip()
+    return run_id or None
+
+
+def _prepare_output_dirs(base_ckpt_dir: str, base_scores_dir: str, run_id: Optional[str]) -> Tuple[Path, Path]:
+    ckpt_root = Path(base_ckpt_dir)
+    if run_id:
+        ckpt_root = ckpt_root / run_id
+    ckpt_root.mkdir(parents=True, exist_ok=True)
+
+    scores_root = Path(base_scores_dir)
+    if run_id:
+        scores_root = scores_root / run_id
+    scores_root.mkdir(parents=True, exist_ok=True)
+    return ckpt_root, scores_root
+
+
 def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--train_npz", default="data/processed/train_bs256.npz")
     ap.add_argument("--val_npz",   default="data/processed/val_bs256.npz")
-    ap.add_argument("--outdir",    default="outputs/checkpoints_tiny")
+    ap.add_argument("--outdir",    default="outputs/checkpoints")
+    ap.add_argument("--scores_dir", default="outputs/scores")
+    ap.add_argument("--run_id", default=None, help=f"Unique run id; falls back to ${RUN_ID_ENV}")
     ap.add_argument("--epochs",    type=int, default=1)
     ap.add_argument("--batch_size",type=int, default=64)
     ap.add_argument("--lr",        type=float, default=3e-4)
@@ -114,16 +140,19 @@ def run_epoch(model, loader, optimizer=None, device="cpu"):
         n += 1
     return total / max(n, 1)
 
-def ensure_outdir(path):
-    os.makedirs(path, exist_ok=True)
-
 # --- replace your if __name__ == "__main__": block with this ---
 if __name__ == "__main__":
     args = parse_args()
+    run_id = _normalize_run_id(args.run_id or os.environ.get(RUN_ID_ENV))
+    ckpt_dir, scores_dir = _prepare_output_dirs(args.outdir, args.scores_dir, run_id)
+
     device = dev()
     print(f"[device] {device}")
     print(f"[cfg]   n_layer={args.n_layer} n_head={args.n_head} n_embd={args.n_embd} block_size={args.block_size} vocab={args.vocab_size}")
     print(f"[train] batch={args.batch_size} epochs={args.epochs} lr={args.lr} wd={args.weight_decay}")
+    if run_id:
+        print(f"[run]   id={run_id}")
+    print(f"[paths] ckpts={ckpt_dir} scores={scores_dir}")
 
     # ---- data ----
     train_ds = PackedDataset(args.train_npz)
@@ -144,6 +173,8 @@ if __name__ == "__main__":
         lr=args.lr, weight_decay=args.weight_decay,
         epochs=args.epochs, batch_size=args.batch_size
     )
+    if run_id:
+        cfg["run_id"] = run_id
     # Model arch: use Cfg (attribute access)
     mconf = Cfg(
         vocab_size=args.vocab_size,
@@ -189,9 +220,10 @@ if __name__ == "__main__":
     scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda)
 
     # ---- train ----
-    ensure_outdir(args.outdir)
     best_val = float("inf")
+    best_epoch = None
     global_step = 0
+    history = []
 
     for epoch in range(cfg["epochs"]):
         model.train(True)
@@ -217,21 +249,50 @@ if __name__ == "__main__":
 
         tr = running / max(1, n)
         va = run_epoch(model, val_loader, None, device)
-        print(f"[epoch {epoch+1}] train {tr:.4f} | val {va:.4f} | lr {scheduler.get_last_lr()[0]:.2e}")
+        lr_now = scheduler.get_last_lr()[0]
+        print(f"[epoch {epoch+1}] train {tr:.4f} | val {va:.4f} | lr {lr_now:.2e}")
+
+        history.append({
+            "epoch": epoch + 1,
+            "train_loss": tr,
+            "val_loss": va,
+            "lr": lr_now,
+        })
+
+        ckpt_payload = {
+            "model": model.state_dict(),
+            "cfg":   dict(
+                vocab_size=mconf.vocab_size, n_layer=mconf.n_layer, n_head=mconf.n_head,
+                n_embd=mconf.n_embd, block_size=mconf.block_size, dropout=mconf.dropout
+            ),
+            "train_cfg": cfg | {"grad_accum": args.grad_accum, "warmup_frac": args.warmup_frac, "min_lr": args.min_lr},
+            "epoch": epoch + 1,
+            "val_loss": va,
+            "train_loss": tr,
+        }
+        torch.save(ckpt_payload, ckpt_dir / "last.pt")
 
         if va < best_val:
             best_val = va
-            ckpt = {
-                "model": model.state_dict(),
-                "cfg":   dict(
-                    vocab_size=mconf.vocab_size, n_layer=mconf.n_layer, n_head=mconf.n_head,
-                    n_embd=mconf.n_embd, block_size=mconf.block_size, dropout=mconf.dropout
-                ),
-                "train_cfg": cfg | {"grad_accum": args.grad_accum, "warmup_frac": args.warmup_frac, "min_lr": args.min_lr},
-                "epoch": epoch+1,
-                "val_loss": va,
-            }
-            path = os.path.join(args.outdir, "best.pt")
-            torch.save(ckpt, path)
-            print(f"[save] {path} (val {va:.4f})")
+            best_epoch = epoch + 1
+            torch.save(ckpt_payload, ckpt_dir / "best.pt")
+            print(f"[save] {ckpt_dir / 'best.pt'} (val {va:.4f})")
 
+    if history:
+        curves_path = scores_dir / "curves.csv"
+        with curves_path.open("w", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=["epoch", "train_loss", "val_loss", "lr"])
+            writer.writeheader()
+            for row in history:
+                writer.writerow(row)
+
+        metrics = {
+            "run_id": run_id,
+            "best_epoch": best_epoch,
+            "best_val_loss": best_val if best_val != float("inf") else None,
+            "last_epoch": history[-1]["epoch"],
+            "last_val_loss": history[-1]["val_loss"],
+            "last_train_loss": history[-1]["train_loss"],
+        }
+        metrics_path = scores_dir / "metrics.json"
+        metrics_path.write_text(json.dumps(metrics, indent=2) + "\n")

@@ -27,9 +27,16 @@ conda activate codonlm
 
 ## Training
 
-Running the training script is easy with:
+Training runs now track outputs per run id. Pick a `RUN_ID` (or export `RUN_ID=...`) and pass it on the CLI:
 
+```bash
+RUN_ID=$(date +"%Y%m%d-%H%M%S")  # or any unique label
+python -m src.codonlm.train_codon_lm --config configs/tiny_mps.yaml --run_id "$RUN_ID"
 ```
+
+Checkpoints land in `outputs/checkpoints/<RUN_ID>/` (`best.pt`, `last.pt`) and metrics live in `outputs/scores/<RUN_ID>/` (`metrics.json`, `curves.csv`). The shell pipelines (`pipeline.sh`, `pipeline_v2.sh`) set a sensible default `RUN_ID` automatically, so you can still run:
+
+```bash
 chmod +x pipeline.sh
 ./pipeline.sh
 ```
@@ -48,4 +55,3 @@ python -m scripts.probe_linear          $RUN_ID
 python -m scripts.summarize_one_cds     $RUN_ID  # optional
 python -m scripts.compare_runs $RUN_ID <other_run_ids...>
 ```
-

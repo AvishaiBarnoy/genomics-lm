@@ -14,8 +14,9 @@ New config keys:
   optimizer: "adamw" or "adafactor"
 """
 
-import argparse, yaml, math, csv, time, torch, numpy as np
+import argparse, yaml, math, csv, time, torch, numpy as np, json, os
 from pathlib import Path
+from typing import Optional, Tuple
 from torch.utils.data import DataLoader, Dataset
 from .model_tiny_gpt_v2 import TinyGPTv2
 
@@ -25,6 +26,29 @@ try:
     HAS_ADAFACTOR = True
 except Exception:
     HAS_ADAFACTOR = False
+
+RUN_ID_ENV = "RUN_ID"
+
+
+def _normalize_run_id(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    run_id = str(value).strip()
+    return run_id or None
+
+
+def _prepare_output_dirs(base_ckpt_dir: str, base_scores_dir: str, run_id: Optional[str]) -> Tuple[Path, Path]:
+    ckpt_root = Path(base_ckpt_dir)
+    if run_id:
+        ckpt_root = ckpt_root / run_id
+    ckpt_root.mkdir(parents=True, exist_ok=True)
+
+    scores_root = Path(base_scores_dir)
+    if run_id:
+        scores_root = scores_root / run_id
+    scores_root.mkdir(parents=True, exist_ok=True)
+    return ckpt_root, scores_root
+
 
 class PackedDataset(Dataset):
     def __init__(self, npz_path):
@@ -40,6 +64,7 @@ def dev():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
+    ap.add_argument("--run_id", default=None, help=f"Unique run id; falls back to ${RUN_ID_ENV} or config.run_id")
     args = ap.parse_args()
     cfg = yaml.safe_load(open(args.config))
 
@@ -71,8 +96,19 @@ def main():
     warmup = cfg.get("warmup_steps", 200)
     gacc = cfg.get("grad_accum_steps", 16)
 
-    outdir = Path(cfg["out_dir"]); outdir.mkdir(parents=True, exist_ok=True)
-    log_csv = Path(cfg.get("log_csv", outdir/"train_log.csv"))
+    run_id = _normalize_run_id(args.run_id or cfg.get("run_id") or os.environ.get(RUN_ID_ENV))
+    if run_id:
+        cfg["run_id"] = run_id
+    outdir = cfg["out_dir"]
+    scores_base = cfg.get("scores_dir", "outputs/scores")
+    ckpt_dir, scores_dir = _prepare_output_dirs(outdir, scores_base, run_id)
+    log_csv_cfg = cfg.get("log_csv")
+    if log_csv_cfg:
+        log_csv_path = Path(log_csv_cfg)
+        log_csv = (scores_dir / log_csv_path).resolve() if not log_csv_path.is_absolute() else log_csv_path
+    else:
+        log_csv = scores_dir / "curves.csv"
+    log_csv.parent.mkdir(parents=True, exist_ok=True)
     with log_csv.open("w", newline="") as f:
         writer = csv.writer(f); writer.writerow(["step","train_loss","val_loss","perplexity","lr"])
 
@@ -104,28 +140,63 @@ def main():
         return total / max(n,1)
 
     max_epochs = int(cfg.get("epochs", 5))
+    history = []
+    best_epoch = None
+    if run_id:
+        print(f"[run] id={run_id}")
+    print(f"[paths] ckpts={ckpt_dir} scores={scores_dir} log_csv={log_csv}")
+
     for epoch in range(max_epochs):
+        epoch_idx = epoch + 1
         train_loss = one_pass("train", train_loader)
         with torch.no_grad():
             val_loss = one_pass("val", val_loader)
         ppl = math.exp(min(20.0, val_loss))
         scheduler.step(val_loss)
         lr_now = optim.param_groups[0]["lr"]
-        print(f"[epoch {epoch}] train {train_loss:.3f} | val {val_loss:.3f} | ppl {ppl:.2f} | lr {lr_now:.2e}")
+        print(f"[epoch {epoch_idx}] train {train_loss:.3f} | val {val_loss:.3f} | ppl {ppl:.2f} | lr {lr_now:.2e}")
 
-        torch.save({"model": model.state_dict(), "cfg": cfg}, outdir/"last.pt")
+        ckpt_payload = {
+            "model": model.state_dict(),
+            "cfg": cfg,
+            "epoch": epoch_idx,
+            "val_loss": val_loss,
+            "train_loss": train_loss,
+        }
+        torch.save(ckpt_payload, ckpt_dir / "last.pt")
         with log_csv.open("a", newline="") as f:
-            csv.writer(f).writerow([epoch, f"{train_loss:.4f}", f"{val_loss:.4f}", f"{ppl:.3f}", f"{lr_now:.3e}"])
+            csv.writer(f).writerow([epoch_idx, f"{train_loss:.4f}", f"{val_loss:.4f}", f"{ppl:.3f}", f"{lr_now:.3e}"])
+
+        history.append({
+            "epoch": epoch_idx,
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+            "perplexity": ppl,
+            "lr": lr_now,
+        })
 
         if val_loss + 1e-6 < best:
             best = val_loss; no_improve = 0
-            torch.save({"model": model.state_dict(), "cfg": cfg}, outdir/"best.pt")
+            best_epoch = epoch_idx
+            torch.save(ckpt_payload, ckpt_dir / "best.pt")
         else:
             no_improve += 1
             if no_improve >= int(cfg.get("early_stop_patience", 5)):
                 print("[early-stopping] no improvement; stopping.")
                 break
 
+    if history:
+        metrics = {
+            "run_id": run_id,
+            "best_epoch": best_epoch,
+            "best_val_loss": best if best != float("inf") else None,
+            "last_epoch": history[-1]["epoch"],
+            "last_val_loss": history[-1]["val_loss"],
+            "last_train_loss": history[-1]["train_loss"],
+            "last_perplexity": history[-1]["perplexity"],
+        }
+        metrics_path = scores_dir / "metrics.json"
+        metrics_path.write_text(json.dumps(metrics, indent=2) + "\n")
+
 if __name__ == "__main__":
     main()
-

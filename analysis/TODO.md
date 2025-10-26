@@ -1,7 +1,7 @@
 # Analysis TODOs
 
 ## Mutation Maps
-- [ ] Ingest `outputs/scores/*.tsv` into pandas
+- [ ] Ingest `outputs/scores/<RUN_ID>/*.tsv` into pandas
 - [ ] Per-position summaries: `best_delta`, `n_better`
 - [ ] Top-K mutants per position (+ synonymous flag)
 - [ ] Heatmap (positions × codons) of ΔlogP
@@ -21,4 +21,3 @@
 - [ ] Synonymous vs non-synonymous breakdown
 - [ ] Cross-dataset evaluation (organism/taxonomy mix)
 - [ ] Correlate ΔlogP with conservation scores (if available)
-

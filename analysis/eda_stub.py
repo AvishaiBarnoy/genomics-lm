@@ -2,7 +2,7 @@
 """
 EDA stub: read a score_mutations TSV and print a few summaries.
 Usage:
-  python analysis/eda_stub.py --tsv outputs/scores/EXAMPLE.tsv
+  python analysis/eda_stub.py --tsv outputs/scores/<RUN_ID>/EXAMPLE.tsv
 """
 import argparse, pandas as pd
 
@@ -24,4 +24,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

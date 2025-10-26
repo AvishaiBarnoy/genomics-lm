@@ -1,7 +1,7 @@
 """Collect model artifacts for downstream analysis.
 
 Usage:
-    python -m scripts.collect_artifacts_yaml RUN_ID path/to/config.yaml
+    python -m scripts.collect_artifacts_yaml RUN_ID configs/config.yaml
 
 The script loads the YAML configuration, locates the trained checkpoint,
 symlinks the weights into ``runs/<run_id>/weights.pt`` and saves a compact
@@ -20,8 +20,10 @@ from typing import Dict, Iterable, List, Mapping, Optional, Tuple
 
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import yaml
+import os
 
 from ._shared import (
     ArtifactError,
@@ -38,6 +40,51 @@ from ._shared import (
 BATCH_EVAL_SIZE = 16
 ATTN_DTYPE = np.float32
 
+REPO_MARKERS = {".git", "pyproject.toml", "setup.cfg", "setup.py"}
+
+def _find_repo_root(start: Path) -> Path:
+    cur = start
+    while True:
+        if any((cur / m).exists() for m in REPO_MARKERS):
+            return cur
+        if cur.parent == cur:
+            # Fallback: if we never found a marker, assume configs/ is directly under root
+            return start.parent
+        cur = cur.parent
+
+def _resolve_from(base: Path, maybe_path: Optional[str]) -> Optional[Path]:
+    """Expand ~ and $VARS, then make relative to base."""
+    if not maybe_path:
+        return None
+    p = Path(os.path.expanduser(os.path.expandvars(maybe_path)))
+    if p.is_absolute():
+        return p
+    return (base / p).resolve()
+
+
+def _extract_positional_embeddings(model: torch.nn.Module) -> np.ndarray:
+    """
+    Return positional embeddings as float32 numpy array if present, else empty array.
+    Supports:
+      - Tensor buffer (e.g., model.pos_emb is a Tensor)
+      - nn.Embedding module (use .weight)
+      - Modules with a .weight tensor
+    Also tries a few common attribute names as fallbacks.
+    """
+    cand_names = ["pos_emb", "positional_embedding", "position_embeddings", "wpe"]
+    for name in cand_names:
+        if not hasattr(model, name):
+            continue
+        pe = getattr(model, name)
+        # Case 1: direct Tensor
+        if torch.is_tensor(pe):
+            return ensure_numpy(pe).astype(np.float32)
+        # Case 2: nn.Embedding or anything with a .weight Tensor
+        if isinstance(pe, nn.Module) and hasattr(pe, "weight") and torch.is_tensor(pe.weight):
+            return ensure_numpy(pe.weight).astype(np.float32)
+    # Nothing found
+    return np.zeros((0,), dtype=np.float32)
+
 
 def _load_yaml(yaml_path: Path) -> Mapping[str, object]:
     if not yaml_path.exists():
@@ -48,22 +95,26 @@ def _load_yaml(yaml_path: Path) -> Mapping[str, object]:
         raise ValueError(f"Config at {yaml_path} is not a mapping")
     return cfg
 
+def _find_checkpoint(check_dir: Path, run_id: Optional[str] = None) -> Path:
+    """
+    Look for best.pt/last.pt in either:
+    - check_dir (flat layout), or
+    - check_dir/<run_id>/ (per-run layout)
+    """
+    search_roots = [check_dir]
+    if run_id:
+        run_sub = check_dir / run_id
+        if run_sub.exists():
+            search_roots.insert(0, run_sub)  # prefer per-run if present
 
-def _resolve_path(base: Path, maybe_path: Optional[str]) -> Optional[Path]:
-    if not maybe_path:
-        return None
-    candidate = Path(maybe_path)
-    if not candidate.is_absolute():
-        candidate = (base / candidate).resolve()
-    return candidate
+    for root in search_roots:
+        for name in ("best.pt", "last.pt"):
+            cand = root / name
+            if cand.exists():
+                return cand.resolve()
 
-
-def _find_checkpoint(out_dir: Path) -> Path:
-    for name in ("best.pt", "last.pt"):
-        candidate = out_dir / name
-        if candidate.exists():
-            return candidate.resolve()
-    raise FileNotFoundError(f"No checkpoint found in {out_dir} (expected best.pt or last.pt)")
+    places = ", ".join(str(r) for r in search_roots)
+    raise FileNotFoundError(f"No checkpoint found (looked for best.pt/last.pt) under: {places}")
 
 
 def _maybe_copy(src: Path, dst: Path) -> None:
@@ -71,20 +122,16 @@ def _maybe_copy(src: Path, dst: Path) -> None:
         shutil.copy2(src, dst)
 
 
-def _find_token_file(out_dir: Path, yaml_dir: Path, cfg: Mapping[str, object]) -> Optional[Path]:
-    candidate_keys = [
-        "itos_path",
-        "tokenizer_path",
-        "token_map",
-        "token_file",
-    ]
+def _find_token_file(out_dir: Path, repo_root: Path, cfg: Mapping[str, object]) -> Optional[Path]:
+    candidate_keys = ["itos_path", "tokenizer_path", "token_map", "token_file"]
     for key in candidate_keys:
         val = cfg.get(key)
         if isinstance(val, str):
-            path = _resolve_path(yaml_dir, val)
+            path = _resolve_from(repo_root, val)
             if path and path.exists():
                 return path
-    for parent in {out_dir, yaml_dir}:
+    # common fallbacks
+    for parent in {out_dir, repo_root}:
         if parent is None:
             continue
         cand = parent / "itos.txt"
@@ -93,18 +140,18 @@ def _find_token_file(out_dir: Path, yaml_dir: Path, cfg: Mapping[str, object]) -
     return None
 
 
-def _load_val_npz(cfg: Mapping[str, object], yaml_dir: Path) -> Optional[Path]:
+def _load_val_npz(cfg: Mapping[str, object], repo_root: Path) -> Optional[Path]:
     keys = ["val_npz", "val_path", "validation_npz", "val_dataset"]
     for key in keys:
         if key in cfg and isinstance(cfg[key], str):
-            path = _resolve_path(yaml_dir, str(cfg[key]))
+            path = _resolve_from(repo_root, str(cfg[key]))
             if path and path.exists():
                 return path
     block_size = cfg.get("block_size")
     if block_size is None:
         return None
     data_dir = cfg.get("data_dir", "data/processed")
-    data_path = _resolve_path(yaml_dir, str(data_dir))
+    data_path = _resolve_from(repo_root, str(data_dir))
     if data_path is None:
         return None
     candidate = data_path / f"val_bs{block_size}.npz"
@@ -241,15 +288,14 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
     yaml_path = Path(args.config).resolve()
     cfg = _load_yaml(yaml_path)
     yaml_dir = yaml_path.parent
+    repo_root = _find_repo_root(yaml_dir)
 
-    out_dir = cfg.get("out_dir")
-    if not out_dir:
-        raise ValueError("Config must specify out_dir")
-    out_dir = _resolve_path(yaml_dir, str(out_dir))
+    out_dir_cfg = cfg.get("out_dir") or cfg.get("checkpoints_dir") or "outputs/checkpoints"
+    out_dir = _resolve_from(repo_root, str(out_dir_cfg))
     if out_dir is None or not out_dir.exists():
         raise FileNotFoundError(f"Output directory not found: {out_dir}")
 
-    checkpoint_path = _find_checkpoint(out_dir)
+    checkpoint_path = _find_checkpoint(out_dir, run_id=args.run_id)
 
     weights_dst = run_dir / "weights.pt"
     if weights_dst.exists() or weights_dst.is_symlink():
@@ -262,7 +308,7 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         if src.exists():
             shutil.copy2(src, dst)
 
-    token_path = _find_token_file(out_dir, yaml_dir, cfg)
+    token_path = _find_token_file(out_dir, repo_root, cfg)
     vocab_size = int(cfg.get("vocab_size", 0) or 0)
     if token_path and token_path.exists():
         tokens = [line.strip() for line in token_path.read_text().splitlines() if line.strip()]
@@ -285,7 +331,7 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
     model.load_state_dict(state_dict, strict=False)
     model.eval()
 
-    val_npz = _load_val_npz(merged_cfg, yaml_dir)
+    val_npz = _load_val_npz(merged_cfg, repo_root)
     arrays: Dict[str, np.ndarray] = {}
     token_counts = None
     first_token_counts = None
@@ -325,9 +371,7 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
     arrays.update(
         {
             "token_embeddings": ensure_numpy(model.tok_emb.weight).astype(np.float32),
-            "pos_embeddings": ensure_numpy(getattr(model, "pos_emb", torch.zeros(0))).astype(np.float32)
-            if hasattr(model, "pos_emb")
-            else np.zeros((0,), dtype=np.float32),
+            "pos_embeddings": _extract_positional_embeddings(model),
             "logits": logits_arr,
             "probs": probs_arr,
             "attn": attn_arr,

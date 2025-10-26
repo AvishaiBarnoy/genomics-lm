@@ -4,5 +4,6 @@ amp: true
 use_checkpoint: true
 plateau_patience: 2
 early_stop_patience: 5
-log_csv: "outputs/checkpoints_tiny/train_log.csv"
-
+out_dir: outputs/checkpoints
+scores_dir: outputs/scores
+log_csv: "curves.csv"

@@ -6,7 +6,8 @@ Output: TSV with per-position WT codon and 64 mutant log-probs
 Use: identify sensitive sites (proxy for conservation/importance).
 """
 
-import argparse, torch, math
+import argparse, torch, math, os
+from pathlib import Path
 import torch.nn.functional as F
 from .model_tiny_gpt import TinyGPT, Cfg
 
@@ -142,15 +143,23 @@ def main():
                 row.append(f"{float(logp_pred[pos-1, mid] - baseline):.4f}")
             print("\t".join(row))
 
-    if args.out is None:
-        import os, pathlib
-        stem = pathlib.Path(args.dna).stem
-        args.out = f"outputs/scores/{stem}__{pathlib.Path(args.ckpt).stem}.tsv"
+    output_path: Path
+    base_scores = Path("outputs/scores")
+    run_id = os.environ.get("RUN_ID", "").strip()
+    if run_id:
+        base_scores = base_scores / run_id
+    base_scores.mkdir(parents=True, exist_ok=True)
 
-    os.makedirs("outputs/scores", exist_ok=True)
+    if args.out is None:
+        stem = Path(args.dna).stem
+        ckpt_stem = Path(args.ckpt).stem
+        output_path = base_scores / f"{stem}__{ckpt_stem}.tsv"
+    else:
+        output_path = Path(args.out)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
     import csv
-    with open(args.out, "w", newline="") as f:
+    with output_path.open("w", newline="") as f:
         w = csv.writer(f, delimiter="\t")
         w.writerow(["pos","wt"] + CODONS)
         for pos in range(1, len(ids)-1):
@@ -158,8 +167,7 @@ def main():
             baseline = float(logp_pred[pos-1, wt_id])
             row = [pos, wt] + [f"{float(logp_pred[pos-1, stoi[c]] - baseline):.4f}" for c in CODONS]
             w.writerow(row)
-    print(f"[save] {args.out}")
+    print(f"[save] {output_path}")
 
 if __name__ == "__main__":
     main()
-

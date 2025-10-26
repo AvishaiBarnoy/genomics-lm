@@ -16,10 +16,11 @@ python -m src.codonlm.build_dataset_v2 \
   --block_size 256 --windows_per_seq 2
 
 # 4) Train with MPS autocast, checkpointing, Adafactor, early stopping
-python -m src.codonlm.train_codon_lm_v2 --config configs/tiny_mps.yaml
+RUN_ID=${RUN_ID:-tiny-demo-v2}
+CKPT_ROOT="outputs/checkpoints/${RUN_ID}"
+python -m src.codonlm.train_codon_lm_v2 --config configs/tiny_mps.yaml --run_id "${RUN_ID}"
 
 # 5) Evaluate on test set
 python -m src.codonlm.eval_perplexity \
-  --ckpt outputs/checkpoints_tiny/best.pt \
+  --ckpt "${CKPT_ROOT}/best.pt" \
   --val_npz data/processed/test_bs256.npz
-
