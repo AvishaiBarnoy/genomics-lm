@@ -29,3 +29,5 @@ scores_dir: outputs/scores
 log_csv: "curves.csv"
 seed: 1337
 itos_path: data/processed/itos_codon.txt
+saliency_window: 9
+saliency_top: 20

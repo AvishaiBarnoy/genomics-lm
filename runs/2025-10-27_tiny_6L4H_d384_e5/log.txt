@@ -43,3 +43,30 @@
 [build_v2] train: (6864, 256) → data/processed/train_bs256.npz
 [build_v2] val: (762, 256) → data/processed/val_bs256.npz
 [build_v2] test: (846, 256) → data/processed/test_bs256.npz
+[run] id=2025-10-27_tiny_6L4H_d384_e5
+[paths] ckpts=outputs/checkpoints/2025-10-27_tiny_6L4H_d384_e5 scores=outputs/scores/2025-10-27_tiny_6L4H_d384_e5 log_csv=/Users/User/github/genomics-lm/outputs/scores/2025-10-27_tiny_6L4H_d384_e5/curves.csv
+[epoch 1] train 64.013 | val 6.435 | ppl 623.53 | lr 2.15e-04
+[epoch 2] train 6.676 | val 4.143 | ppl 63.01 | lr 2.81e-04
+[epoch 3] train 6.383 | val 4.071 | ppl 58.59 | lr 1.82e-04
+[epoch 4] train 6.356 | val 4.059 | ppl 57.92 | lr 6.35e-05
+[epoch 5] train 6.341 | val 4.055 | ppl 57.66 | lr 1.00e-05
+[state] missing: []
+[state] unexpected: []
+[state] missing: []
+[state] unexpected: []
+[state] missing: []
+[state] unexpected: []
+[save] outputs/scores/2025-10-27_tiny_6L4H_d384_e5/one_cds__best.tsv
+
+[state] missing: []
+[state] unexpected: []
+Using TinyGPT from: /Users/User/github/genomics-lm/src/codonlm/model_tiny_gpt.py
+Model cfg: {'vocab_size': 69, 'block_size': 256, 'n_layer': 6, 'n_head': 4, 'n_embd': 384, 'dropout': 0.1, 'batch_size': 2, 'grad_accum_steps': 16, 'lr': 0.0003, 'weight_decay': 0.05, 'epochs': 5, 'optimizer': 'adamw', 'amp': True, 'use_checkpoint': True, 'scheduler': 'cosine', 'label_smoothing': 0.05, 'warmup_steps': 300, 'min_lr': '1e-5', 'plateau_patience': 2, 'early_stop_patience': 5, 'out_dir': 'outputs/checkpoints', 'scores_dir': 'outputs/scores', 'log_csv': 'curves.csv', 'seed': 1337, 'itos_path': 'data/processed/itos_codon.txt', 'run_id': '2025-10-27_tiny_6L4H_d384_e5'}
+Model device: mps:0
+MPS available: True
+[motifs] collected windows: 1702272
+[motifs] inertia: 424.33465576171875
+[motifs] saved outputs/motif_clusters.npz
+[collect] saved artifacts for 2025-10-27_tiny_6L4H_d384_e5 → runs/2025-10-27_tiny_6L4H_d384_e5
+[timing] training_sec=4054
+[timing] total_sec=4939

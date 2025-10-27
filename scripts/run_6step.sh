@@ -12,6 +12,8 @@ fi
 
 RUN_ID="$1"
 CONFIG="${2:-configs/tiny_mps_v2.yaml}"
+SAL_WINDOW=$(python -c "import yaml;cfg=yaml.safe_load(open('$CONFIG')) or {};print(int(cfg.get('saliency_window',9)))")
+SAL_TOP=$(python -c "import yaml;cfg=yaml.safe_load(open('$CONFIG')) or {};print(int(cfg.get('saliency_top',20)))")
 
 echo "[6step] run_id=${RUN_ID} config=${CONFIG}"
 
@@ -32,7 +34,7 @@ python -m scripts.probe_next_token      "${RUN_ID}"
 
 # 5) Saliency
 python -m scripts.analyze_saliency      "${RUN_ID}"
-python -m scripts.report_top_saliency   "${RUN_ID}" --window 9 --top 20
+python -m scripts.report_top_saliency   "${RUN_ID}" --window "${SAL_WINDOW}" --top "${SAL_TOP}"
 
 # 6) Biology-aware linear probes
 python -m scripts.generate_probe_labels "${RUN_ID}"

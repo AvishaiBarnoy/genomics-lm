@@ -8,6 +8,8 @@ if [ -z "$RUN_ID" ]; then
 fi
 
 CONF=${CONF:-configs/tiny_mps_v2.yaml}
+SAL_WINDOW=$(python -c "import yaml;cfg=yaml.safe_load(open('$CONF')) or {};print(int(cfg.get('saliency_window',9)))")
+SAL_TOP=$(python -c "import yaml;cfg=yaml.safe_load(open('$CONF')) or {};print(int(cfg.get('saliency_top',20)))")
 
 python -m scripts.collect_artifacts_yaml "$RUN_ID" "$CONF"
 python -m scripts.analyze_frequencies   "$RUN_ID"
@@ -15,7 +17,7 @@ python -m scripts.analyze_embeddings    "$RUN_ID"
 python -m scripts.analyze_attention     "$RUN_ID"
 python -m scripts.probe_next_token      "$RUN_ID"
 python -m scripts.analyze_saliency      "$RUN_ID"
-python -m scripts.report_top_saliency   "$RUN_ID" --window 9 --top 20
+python -m scripts.report_top_saliency   "$RUN_ID" --window "$SAL_WINDOW" --top "$SAL_TOP"
 
 # Ensure labels exist before probing
 python -m scripts.generate_probe_labels "$RUN_ID"

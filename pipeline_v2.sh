@@ -82,6 +82,9 @@ conda run -n codonlm python -m src.codonlm.score_mutations \
 python -m src.codonlm.mine_motifs \
   --ckpt "${CKPT_ROOT}/best.pt" \
   --npz data/processed/train_bs256.npz --k 9 --clusters 100 2>&1 | tee -a "$LOG" || true
+if [ -f outputs/motif_clusters.npz ]; then
+  cp outputs/motif_clusters.npz "$RUN_DIR/motif_clusters.npz" || true
+fi
 
 # 8) Collect artifacts and organize run outputs under runs/<RUN_ID>
 python -m scripts.collect_artifacts_yaml "${RUN_ID}" "$CONF" 2>&1 | tee -a "$LOG" || true
