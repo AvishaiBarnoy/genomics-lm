@@ -1,20 +1,29 @@
 vocab_size: 69
 block_size: 256
-n_layer: 2
+n_layer: 6
 n_head: 4
-n_embd: 128 
+n_embd: 384
 dropout: 0.1
+
+windows_per_seq: 2
+val_frac: 0.1
+test_frac: 0.1
+
+datasets:
+  - name: ecoli_k12
+    gbff: data/raw/GCF_000005845.2_ASM584v2_genomic.gbff
+    min_len: 90
 
 batch_size: 2
 grad_accum_steps: 16
 lr: 0.0003
 weight_decay: 0.05
-epochs: 5 
+epochs: 5
 
 optimizer: "adamw"
 amp: true
-use_checkpoint: true 
-scheduler: "cosine"   # cosine or plateau 
+use_checkpoint: true
+scheduler: "cosine"
 label_smoothing: 0.05
 warmup_steps: 300
 min_lr: 1e-5

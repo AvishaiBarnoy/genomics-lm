@@ -33,6 +33,17 @@ except Exception:
 RUN_ID_ENV = "RUN_ID"
 
 
+def _ensure_path_list(arg_value, cfg_value, key: str):
+    source = arg_value if arg_value is not None else cfg_value
+    if source is None:
+        raise ValueError(f"Missing {key} specification (provide in config or CLI)")
+    if isinstance(source, (str, os.PathLike)):
+        return [str(source)]
+    if isinstance(source, (list, tuple)):
+        return [str(p) for p in source]
+    raise TypeError(f"Unsupported {key} type: {type(source)}")
+
+
 def _normalize_run_id(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
@@ -70,12 +81,24 @@ def _prepare_output_dirs(base_ckpt_dir: str, base_scores_dir: str, run_id: Optio
 
 
 class PackedDataset(Dataset):
-    def __init__(self, npz_path):
-        d = np.load(npz_path)
-        self.X = torch.from_numpy(d["X"]).long()
-        self.Y = torch.from_numpy(d["Y"]).long()
-    def __len__(self): return self.X.shape[0]
-    def __getitem__(self, i): return self.X[i], self.Y[i]
+    def __init__(self, paths):
+        if isinstance(paths, (str, os.PathLike)):
+            paths = [paths]
+        else:
+            paths = list(paths)
+        xs, ys = [], []
+        for path in paths:
+            with np.load(path, allow_pickle=False) as data:
+                xs.append(np.asarray(data["X"], dtype=np.int64))
+                ys.append(np.asarray(data["Y"], dtype=np.int64))
+        self.X = torch.from_numpy(np.concatenate(xs, axis=0)).long()
+        self.Y = torch.from_numpy(np.concatenate(ys, axis=0)).long()
+
+    def __len__(self):
+        return self.X.shape[0]
+
+    def __getitem__(self, i):
+        return self.X[i], self.Y[i]
 
 def dev():
     return torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
@@ -85,6 +108,9 @@ def main():
     ap.add_argument("--config", required=True)
     ap.add_argument("--run_id", default=None, help=f"Unique run id; falls back to ${RUN_ID_ENV} or config.run_id")
     ap.add_argument("--resume", default=None, help="Path to checkpoint to resume training from")
+    ap.add_argument("--train_npz", action="append", default=None, help="Training NPZ file (repeatable)")
+    ap.add_argument("--val_npz", action="append", default=None, help="Validation NPZ file (repeatable)")
+    ap.add_argument("--test_npz", action="append", default=None, help="Test NPZ file (repeatable)")
     args = ap.parse_args()
     cfg = yaml.safe_load(open(args.config))
     resume_path = args.resume or cfg.pop("resume", None)
@@ -95,12 +121,25 @@ def main():
     torch.manual_seed(cfg.get("seed", 1337))
     amp = bool(cfg.get("amp", True)) and (device.type == "mps")
 
-    train_npz = f"data/processed/train_bs{cfg['block_size']}.npz"
-    val_npz   = f"data/processed/val_bs{cfg['block_size']}.npz"
-    train_ds, val_ds = PackedDataset(train_npz), PackedDataset(val_npz)
+    default_train = f"data/processed/train_bs{cfg['block_size']}.npz"
+    default_val = f"data/processed/val_bs{cfg['block_size']}.npz"
+    default_test = f"data/processed/test_bs{cfg['block_size']}.npz"
+    cfg.setdefault("train_npz", default_train)
+    cfg.setdefault("val_npz", default_val)
+    cfg.setdefault("test_npz", default_test)
+
+    train_paths = _ensure_path_list(args.train_npz, cfg.get("train_npz"), "train_npz")
+    val_paths = _ensure_path_list(args.val_npz, cfg.get("val_npz"), "val_npz")
+    test_paths = _ensure_path_list(args.test_npz, cfg.get("test_npz"), "test_npz")
+    cfg["train_npz"] = train_paths
+    cfg["val_npz"] = val_paths
+    cfg["test_npz"] = test_paths
 
     if resume_path and not os.path.isfile(resume_path):
         raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
+
+    train_ds = PackedDataset(train_paths)
+    val_ds = PackedDataset(val_paths)
     train_loader = DataLoader(train_ds, batch_size=cfg["batch_size"], shuffle=True)
     val_loader   = DataLoader(val_ds, batch_size=cfg["batch_size"])
 

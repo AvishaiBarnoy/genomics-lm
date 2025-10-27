@@ -1,6 +1,7 @@
 [info] run_id=2025-10-27_tiny_2L4H_d128_e5
 [info] config=configs/tiny_mps.yaml
-[hardware] date: 2025-10-27 19:22:50 UTC
+[info] resume=none
+[hardware] date: 2025-10-27 20:01:21 UTC
 [hardware] uname: Darwin Mac 25.0.0 Darwin Kernel Version 25.0.0: Wed Sep 17 21:38:03 PDT 2025; root:xnu-12377.1.9~141/RELEASE_ARM64_T8112 arm64
 [hardware] cpu: Apple M2
 [hardware] python: 3.11.13
@@ -47,24 +48,7 @@
 [run] id=2025-10-27_tiny_2L4H_d128_e5
 [paths] ckpts=outputs/checkpoints/2025-10-27_tiny_2L4H_d128_e5 scores=outputs/scores/2025-10-27_tiny_2L4H_d128_e5 log_csv=/Users/User/github/genomics-lm/outputs/scores/2025-10-27_tiny_2L4H_d128_e5/curves.csv
 [epoch 1] train 44.534 | val 6.414 | ppl 610.16 | lr 2.15e-04
-[epoch 2] train 6.305 | val 4.189 | ppl 65.97 | lr 2.81e-04
-[epoch 3] train 5.824 | val 4.104 | ppl 60.57 | lr 1.82e-04
-[epoch 4] train 5.772 | val 4.087 | ppl 59.54 | lr 6.35e-05
-[epoch 5] train 5.757 | val 4.083 | ppl 59.30 | lr 1.00e-05
-[state] missing: []
-[state] unexpected: []
-[state] missing: []
-[state] unexpected: []
-[state] missing: []
-[state] unexpected: []
-[save] outputs/scores/2025-10-27_tiny_2L4H_d128_e5/one_cds__best.tsv
-
-[state] missing: []
-[state] unexpected: []
-Using TinyGPT from: /Users/User/github/genomics-lm/src/codonlm/model_tiny_gpt.py
-Model cfg: {'vocab_size': 69, 'block_size': 256, 'n_layer': 2, 'n_head': 4, 'n_embd': 128, 'dropout': 0.1, 'batch_size': 2, 'grad_accum_steps': 16, 'lr': 0.0003, 'weight_decay': 0.05, 'epochs': 5, 'optimizer': 'adamw', 'amp': True, 'use_checkpoint': True, 'scheduler': 'cosine', 'label_smoothing': 0.05, 'warmup_steps': 300, 'min_lr': '1e-5', 'plateau_patience': 2, 'early_stop_patience': 5, 'out_dir': 'outputs/checkpoints', 'scores_dir': 'outputs/scores', 'log_csv': 'curves.csv', 'seed': 1337, 'itos_path': 'data/processed/itos_codon.txt', 'saliency_window': 9, 'saliency_top': 20, 'run_id': '2025-10-27_tiny_2L4H_d128_e5'}
-Model device: mps:0
-MPS available: True
-[motifs] collected windows: 1702272
-[motifs] inertia: 1241.91552734375
-[motifs] saved outputs/motif_clusters.npz
+[epoch 2] train 6.305 | val 4.189 | ppl 65.98 | lr 2.81e-04
+[epoch 3] train 5.833 | val 4.108 | ppl 60.85 | lr 1.82e-04
+[epoch 4] train 5.785 | val 4.089 | ppl 59.69 | lr 6.35e-05
+[epoch 5] train 5.770 | val 4.084 | ppl 59.40 | lr 1.00e-05

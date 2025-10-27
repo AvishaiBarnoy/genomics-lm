@@ -141,7 +141,7 @@ def _maybe_copy(src: Path, dst: Path) -> None:
         shutil.copy2(src, dst)
 
 
-def _find_token_file(out_dir: Path, repo_root: Path, cfg: Mapping[str, object]) -> Optional[Path]:
+def _find_token_file(out_dir: Path, repo_root: Path, cfg: Mapping[str, object], run_dir: Optional[Path] = None) -> Optional[Path]:
     candidate_keys = ["itos_path", "tokenizer_path", "token_map", "token_file"]
     for key in candidate_keys:
         val = cfg.get(key)
@@ -156,14 +156,37 @@ def _find_token_file(out_dir: Path, repo_root: Path, cfg: Mapping[str, object]) 
         cand = parent / "itos.txt"
         if cand.exists():
             return cand
+    if run_dir:
+        manifest_path = run_dir / "combined_manifest.json"
+        if manifest_path.exists():
+            try:
+                combined = json.loads(manifest_path.read_text())
+                for ds in combined.get("datasets", []):
+                    itos_path = ds.get("itos")
+                    if isinstance(itos_path, str):
+                        itos = Path(itos_path)
+                        if not itos.is_absolute():
+                            itos = (repo_root / itos).resolve()
+                        if itos.exists():
+                            return itos
+            except Exception as exc:  # pragma: no cover - defensive
+                print(f"[warn] failed to parse {manifest_path}: {exc}")
     return None
 
 
 def _load_val_npz(cfg: Mapping[str, object], repo_root: Path) -> Optional[Path]:
     keys = ["val_npz", "val_path", "validation_npz", "val_dataset"]
     for key in keys:
-        if key in cfg and isinstance(cfg[key], str):
-            path = _resolve_from(repo_root, str(cfg[key]))
+        if key not in cfg:
+            continue
+        value = cfg[key]
+        paths: Iterable[str]
+        if isinstance(value, (list, tuple)):
+            paths = [str(p) for p in value]
+        else:
+            paths = [str(value)]
+        for item in paths:
+            path = _resolve_from(repo_root, item)
             if path and path.exists():
                 return path
     block_size = cfg.get("block_size")
@@ -326,7 +349,7 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         if src.exists():
             shutil.copy2(src, dst)
 
-    token_path = _find_token_file(out_dir, repo_root, cfg)
+    token_path = _find_token_file(out_dir, repo_root, cfg, run_dir)
     vocab_size = int(cfg.get("vocab_size", 0) or 0)
     if token_path and token_path.exists():
         tokens = [line.strip() for line in token_path.read_text().splitlines() if line.strip()]

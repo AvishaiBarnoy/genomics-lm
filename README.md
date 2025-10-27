@@ -39,9 +39,37 @@ Checkpoints land in `outputs/checkpoints/<RUN_ID>/` (`best.pt`, `last.pt`) and m
 ```bash
 chmod +x pipeline.sh
 ./pipeline.sh            # uses configs/tiny_mps.yaml by default
-./pipeline.sh -c path/to/other.yaml  # supply your own config
-./pipeline.sh -r outputs/checkpoints/<RUN_ID>/best.pt  # resume from a checkpoint
-./pipeline.sh -c my.yaml -r outputs/checkpoints/<RUN_ID>/best.pt  # resume with custom cfg
+./pipeline.sh -c path/to/other.yaml              # supply your own config
+./pipeline.sh --dataset ecoli2,data/raw/GCF_xx.gbff  # add an extra genome ad-hoc
+./pipeline.sh --force                              # rebuild cached processed data
+./pipeline.sh -r outputs/checkpoints/<RUN_ID>/best.pt        # resume training
+./pipeline.sh -c my.yaml -r outputs/checkpoints/<RUN_ID>/best.pt
+```
+
+### Dataset configuration
+
+Multi-genome training is driven by the YAML config. A minimal example:
+
+```yaml
+datasets:
+  - name: ecoli_k12
+    gbff: data/raw/GCF_000005845.2_ASM584v2_genomic.gbff
+    min_len: 90
+
+block_size: 256
+windows_per_seq: 2
+val_frac: 0.1
+test_frac: 0.1
+```
+
+Each dataset is cached under `data/processed/<name>/` (with DNA, metadata, token IDs, and NPZ splits). The pipeline automatically skips extraction/tokenization/build steps when the outputs already exist; use `--force` to rebuild. All datasets are concatenated into `data/processed/combined/<RUN_ID>/train|val|test_bs*.npz` before training so the trainer only needs one combined manifest.
+
+Each run also records the dataset lineage in `runs/<RUN_ID>/combined_manifest.json`, which lists the per-genome token files (`itos.txt`) so downstream scripts can recover the vocabulary even when multiple genomes are mixed.
+
+You can append extra datasets from the CLI without touching the config:
+
+```bash
+./pipeline.sh --dataset ecoli_o157,data/raw/GCF_000008865.2_ASM886v2_genomic.gbff,120
 ```
 
 ## How to run the 6-step pipeline
@@ -65,6 +93,12 @@ Default trainer (AMP + cosine schedule + optional label smoothing):
 python -m src.codonlm.train_codon_lm --config configs/tiny_mps.yaml --run_id "$RUN_ID"
 # resume from a checkpoint
 python -m src.codonlm.train_codon_lm --config configs/tiny_mps.yaml --resume outputs/checkpoints/$RUN_ID/best.pt --run_id "$RUN_ID"
+# override datasets manually (comma-separated lists)
+python -m src.codonlm.train_codon_lm --config configs/tiny_mps.yaml \
+  --train_npz data/processed/combined/${RUN_ID}/train_bs256.npz \
+  --val_npz data/processed/combined/${RUN_ID}/val_bs256.npz \
+  --test_npz data/processed/combined/${RUN_ID}/test_bs256.npz \
+  --run_id "$RUN_ID"
 ```
 
 Note: cosine+warmup is enabled by default and you can set `label_smoothing: 0.05` in the YAML to improve probability calibration (reduces overconfident spikes in next-token predictions).
