@@ -6,8 +6,37 @@ conda activate codonlm
 
 set -euo pipefail
 
+usage() {
+  echo "Usage: $0 [-c|--config PATH]" >&2
+  exit 1
+}
+
+DEFAULT_CONF="configs/tiny_mps.yaml"
+CONF="$DEFAULT_CONF"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--config)
+      [[ $# -lt 2 ]] && { echo "[error] --config requires a path" >&2; usage; }
+      CONF="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      ;;
+    *)
+      echo "[error] Unknown argument: $1" >&2
+      usage
+      ;;
+  esac
+done
+
+if [[ ! -f "$CONF" ]]; then
+  echo "[error] Config file not found: $CONF" >&2
+  usage
+fi
+
 # 0) Setup run id, log, and hardware info
-CONF=${CONF:-configs/tiny_mps.yaml}
 # Auto-generate RUN_ID from config if not provided
 RUN_ID=${RUN_ID:-$(python -m scripts.make_run_id "$CONF")}
 RUN_DIR="runs/${RUN_ID}"

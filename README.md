@@ -38,7 +38,8 @@ Checkpoints land in `outputs/checkpoints/<RUN_ID>/` (`best.pt`, `last.pt`) and m
 
 ```bash
 chmod +x pipeline.sh
-./pipeline.sh
+./pipeline.sh            # uses configs/tiny_mps.yaml by default
+./pipeline.sh -c path/to/other.yaml  # supply your own config
 ```
 
 ## How to run the 6-step pipeline
