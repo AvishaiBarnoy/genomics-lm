@@ -14,8 +14,9 @@ import csv
 from typing import Iterable, Optional
 
 import numpy as np
+import torch
 
-from ._shared import ensure_run_layout, load_artifacts, load_token_list
+from ._shared import ensure_run_layout, load_artifacts, load_token_list, load_model, stoi
 
 
 def main(argv: Optional[Iterable[str]] = None) -> None:
@@ -74,6 +75,23 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
 
     # Prepare rows
     rows = []
+    # Optional motif cluster cross-reference
+    cluster_path = run_dir / "motif_clusters.npz"
+    centers = None
+    if cluster_path.exists():
+        with np.load(cluster_path, allow_pickle=False) as data:
+            centers = data.get("centers")
+    model = None
+    stoi_map = None
+    device = torch.device("cpu")
+    if centers is not None:
+        try:
+            model, _spec = load_model(run_dir, device)
+            model.eval()
+            stoi_map = stoi(load_token_list(run_dir))
+        except Exception as exc:
+            print(f"[top-saliency] motif cross-ref disabled: {exc}")
+            centers = None
     for i in order.tolist():
         tok_span = tok_list[i : i + w]
         score = float(sums[i])
@@ -81,12 +99,46 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         if attn_score is not None and attn_score.shape[0] >= i + w:
             block = attn_score[i : i + w, i : i + w]
             att_score = f"{float(block.mean()):.6f}"
-        rows.append((i, "-".join(tok_span), f"{score:.6f}", att_score))
+        cluster_id = ""
+        cluster_dist = ""
+        if centers is not None and stoi_map is not None:
+            try:
+                unk_idx = stoi_map.get("<unk>", 0)
+                ids = [stoi_map.get(tok, unk_idx) for tok in tok_span]
+                x = torch.tensor([ids], dtype=torch.long, device=device)
+                feats: list[torch.Tensor] = []
+
+                def hook(_module, _inp, out):
+                    feats.append(out.detach())
+
+                handle = model.ln_f.register_forward_hook(hook)
+                try:
+                    with torch.no_grad():
+                        model(x)
+                finally:
+                    handle.remove()
+                if feats:
+                    hidden = feats[-1][0]  # (T, d)
+                    embed = hidden.mean(dim=0).cpu().numpy()
+                    dists = np.linalg.norm(centers - embed, axis=1)
+                    nearest = int(np.argmin(dists))
+                    cluster_id = str(nearest)
+                    cluster_dist = f"{float(dists[nearest]):.6f}"
+            except Exception as exc:
+                print(f"[top-saliency] failed cluster match: {exc}")
+        rows.append((i, "-".join(tok_span), f"{score:.6f}", att_score, cluster_id, cluster_dist))
 
     out_path = tables_dir / "top_saliency_segments.csv"
     with out_path.open("w", newline="") as fh:
         wtr = csv.writer(fh)
-        wtr.writerow(["start_pos", "tokens", "saliency_sum", "mean_attn_in_window"])
+        wtr.writerow([
+            "start_pos",
+            "tokens",
+            "saliency_sum",
+            "mean_attn_in_window",
+            "nearest_cluster",
+            "cluster_distance",
+        ])
         for r in rows:
             wtr.writerow(r)
 
@@ -95,4 +147,3 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
 
 if __name__ == "__main__":
     main()
-

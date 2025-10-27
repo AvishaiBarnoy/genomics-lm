@@ -1,25 +1,22 @@
-## Legacy alias of tiny_mps_v2.yaml to keep older commands working.
-## Prefer using configs/tiny_mps_v2.yaml directly.
-
 vocab_size: 69
 block_size: 256
-n_layer: 2
+n_layer: 6
 n_head: 4
-n_embd: 128
+n_embd: 256 
 dropout: 0.1
 
 batch_size: 2
 grad_accum_steps: 16
 lr: 0.0003
 weight_decay: 0.05
-epochs: 5
+epochs: 10
 
 optimizer: "adamw"
 amp: true
-use_checkpoint: false
-scheduler: "cosine"
+use_checkpoint: true 
+scheduler: "plateau"
 label_smoothing: 0.05
-warmup_steps: 200
+warmup_steps: 300   # cosine or plateau
 min_lr: 1e-5
 plateau_patience: 2
 early_stop_patience: 5

@@ -17,7 +17,7 @@ import yaml
 
 
 def infer_model_tag(config_path: Path) -> str:
-    stem = config_path.stem  # e.g., tiny_mps_v2 -> 'tiny_mps_v2'
+    stem = config_path.stem
     # take the first segment before an underscore as the short model tag
     if "_" in stem:
         return stem.split("_", 1)[0]
@@ -45,4 +45,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

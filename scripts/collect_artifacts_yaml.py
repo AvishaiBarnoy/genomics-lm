@@ -31,7 +31,6 @@ from ._shared import (
     RUNS_DIR,
     build_model,
     compute_bincount,
-    detect_model_type,
     ensure_run_layout,
     ensure_numpy,
     write_meta,
@@ -108,7 +107,7 @@ def _find_checkpoint(check_dir: Path, run_id: Optional[str] = None) -> Path:
             search_roots.append(run_sub)
     search_roots.append(check_dir)
 
-    # fallback: allow common alternate directory names (e.g., v1 vs v2 out_dir)
+    # fallback: allow common alternate directory names (legacy layouts)
     alt_dirs = []
     # Variants with provided run_id
     if run_id:
@@ -187,9 +186,7 @@ def _load_npz_dataset(npz_path: Path) -> Dict[str, np.ndarray]:
 
 
 def _infer_spec_from_state(cfg: Mapping[str, object], state_dict: Mapping[str, torch.Tensor]) -> ModelSpec:
-    model_type = cfg.get("model_type")
-    if not model_type:
-        model_type = detect_model_type(state_dict)
+    model_type = cfg.get("model_type", "tiny_gpt")
     required_keys = ["vocab_size", "block_size", "n_layer", "n_head", "n_embd"]
     missing = [k for k in required_keys if k not in cfg]
     if missing:
@@ -203,6 +200,7 @@ def _infer_spec_from_state(cfg: Mapping[str, object], state_dict: Mapping[str, t
         n_embd=int(cfg["n_embd"]),
         dropout=float(cfg.get("dropout", 0.0)),
         use_checkpoint=bool(cfg.get("use_checkpoint", False)),
+        label_smoothing=float(cfg.get("label_smoothing", 0.0)),
     )
     return spec
 

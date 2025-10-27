@@ -37,6 +37,7 @@ class ModelSpec:
     n_embd: int
     dropout: float = 0.0
     use_checkpoint: bool = False
+    label_smoothing: float = 0.0
 
     @classmethod
     def from_dict(cls, data: Mapping[str, object]) -> "ModelSpec":
@@ -52,7 +53,7 @@ class ModelSpec:
         if missing:
             raise ArtifactError(f"model specification missing keys: {missing}")
         return cls(
-            model_type=str(data["model_type"]),
+            model_type=str(data.get("model_type", "tiny_gpt")),
             vocab_size=int(data["vocab_size"]),
             block_size=int(data["block_size"]),
             n_layer=int(data["n_layer"]),
@@ -60,6 +61,7 @@ class ModelSpec:
             n_embd=int(data["n_embd"]),
             dropout=float(data.get("dropout", 0.0)),
             use_checkpoint=bool(data.get("use_checkpoint", False)),
+            label_smoothing=float(data.get("label_smoothing", 0.0)),
         )
 
     def to_dict(self) -> Dict[str, object]:
@@ -72,6 +74,7 @@ class ModelSpec:
             "n_embd": self.n_embd,
             "dropout": self.dropout,
             "use_checkpoint": self.use_checkpoint,
+            "label_smoothing": self.label_smoothing,
         }
 
 
@@ -124,42 +127,19 @@ def stoi(tokens: Sequence[str]) -> Dict[str, int]:
 
 # ----- model reconstruction ------------------------------------------------
 
-def detect_model_type(state_dict: Mapping[str, torch.Tensor]) -> str:
-    keys = list(state_dict.keys())
-    if any("qkv" in k for k in keys):
-        return "tiny_gpt"
-    if any("key.weight" in k for k in keys):
-        return "tiny_gpt_v2"
-    raise ArtifactError("Unable to infer model type from checkpoint keys")
-
-
 def build_model(spec: ModelSpec) -> torch.nn.Module:
-    if spec.model_type == "tiny_gpt":
-        from src.codonlm.model_tiny_gpt import Cfg, TinyGPT
+    from src.codonlm.model_tiny_gpt import TinyGPT
 
-        cfg = Cfg(
-            vocab_size=spec.vocab_size,
-            n_layer=spec.n_layer,
-            n_head=spec.n_head,
-            n_embd=spec.n_embd,
-            block_size=spec.block_size,
-            dropout=spec.dropout,
-        )
-        model = TinyGPT(cfg)
-    elif spec.model_type == "tiny_gpt_v2":
-        from src.codonlm.model_tiny_gpt_v2 import TinyGPTv2
-
-        model = TinyGPTv2(
-            vocab_size=spec.vocab_size,
-            block_size=spec.block_size,
-            n_layer=spec.n_layer,
-            n_head=spec.n_head,
-            n_embd=spec.n_embd,
-            dropout=spec.dropout,
-            use_checkpoint=spec.use_checkpoint,
-        )
-    else:
-        raise ArtifactError(f"Unsupported model_type {spec.model_type}")
+    model = TinyGPT(
+        vocab_size=spec.vocab_size,
+        block_size=spec.block_size,
+        n_layer=spec.n_layer,
+        n_head=spec.n_head,
+        n_embd=spec.n_embd,
+        dropout=spec.dropout,
+        use_checkpoint=spec.use_checkpoint,
+        label_smoothing=spec.label_smoothing,
+    )
     model.eval()
     return model
 
@@ -195,5 +175,3 @@ def ensure_numpy(x: torch.Tensor | np.ndarray) -> np.ndarray:
     if isinstance(x, np.ndarray):
         return x
     return x.detach().cpu().numpy()
-
-

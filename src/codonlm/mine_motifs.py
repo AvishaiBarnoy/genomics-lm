@@ -12,7 +12,7 @@ import argparse
 import torch
 import numpy as np
 from sklearn.cluster import KMeans
-from .model_tiny_gpt import TinyGPT, Cfg
+from .model_tiny_gpt import TinyGPT
 import inspect  # <-- import here, NOT inside main()
 
 def dev():
@@ -48,32 +48,26 @@ def main():
     sd = state.get("model", state)
     cfg_saved = state.get("cfg", None)
 
-    def detect(sd: dict) -> str:
-        ks = list(sd.keys())
-        if any(".attn.qkv.weight" in k or ".attn.attn_mask" in k for k in ks):
-            return "tiny_gpt"
-        if any(".attn.key.weight" in k or ".attn.mask" in k for k in ks):
-            return "tiny_gpt_v2"
-        return "tiny_gpt"
-
-    model_type = detect(sd)
-    if model_type == "tiny_gpt_v2":
-        from .model_tiny_gpt_v2 import TinyGPTv2
-        cfg_src = cfg_saved or {"vocab_size":69,"block_size":256,"n_layer":2,"n_head":4,"n_embd":128,"dropout":0.0}
-        model = TinyGPTv2(cfg_src["vocab_size"], cfg_src["block_size"], n_layer=cfg_src["n_layer"], n_head=cfg_src["n_head"], n_embd=cfg_src["n_embd"], dropout=cfg_src.get("dropout",0.0))
-    else:
-        if cfg_saved is not None:
-            mconf = Cfg(
-                vocab_size = cfg_saved["vocab_size"],
-                n_layer    = cfg_saved["n_layer"],
-                n_head     = cfg_saved["n_head"],
-                n_embd     = cfg_saved["n_embd"],
-                block_size = cfg_saved["block_size"],
-                dropout    = cfg_saved.get("dropout", 0.0),
-            )
-        else:
-            mconf = Cfg(vocab_size=69, n_layer=2, n_head=4, n_embd=128, block_size=256, dropout=0.1)
-        model = TinyGPT(mconf)
+    cfg_src = cfg_saved or {
+        "vocab_size": 69,
+        "block_size": 256,
+        "n_layer": 2,
+        "n_head": 4,
+        "n_embd": 128,
+        "dropout": 0.0,
+        "use_checkpoint": False,
+        "label_smoothing": 0.0,
+    }
+    model = TinyGPT(
+        vocab_size=cfg_src["vocab_size"],
+        block_size=cfg_src["block_size"],
+        n_layer=cfg_src["n_layer"],
+        n_head=cfg_src["n_head"],
+        n_embd=cfg_src["n_embd"],
+        dropout=cfg_src.get("dropout", 0.0),
+        use_checkpoint=cfg_src.get("use_checkpoint", False),
+        label_smoothing=cfg_src.get("label_smoothing", 0.0),
+    )
     missing, unexpected = model.load_state_dict(sd, strict=False)
     print("[state] missing:", missing)
     print("[state] unexpected:", unexpected)
@@ -82,7 +76,7 @@ def main():
     model.to(device).eval()
 
     print("Using TinyGPT from:", inspect.getsourcefile(TinyGPT))
-    # derive a readable config summary regardless of v1/v2
+    # derive a readable config summary regardless of which fields were saved
     model_cfg = {}
     if cfg_saved:
         model_cfg = dict(cfg_saved)

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run the 6-step interpretability analysis for a given RUN_ID.
 # Usage: scripts/run_6step.sh RUN_ID [CONFIG]
-# Default CONFIG: configs/tiny_mps_v2.yaml
+# Default CONFIG: configs/tiny_mps.yaml
 
 set -euo pipefail
 
@@ -11,7 +11,7 @@ if [[ $# -lt 1 || $# -gt 2 ]]; then
 fi
 
 RUN_ID="$1"
-CONFIG="${2:-configs/tiny_mps_v2.yaml}"
+CONFIG="${2:-configs/tiny_mps.yaml}"
 SAL_WINDOW=$(python -c "import yaml;cfg=yaml.safe_load(open('$CONFIG')) or {};print(int(cfg.get('saliency_window',9)))")
 SAL_TOP=$(python -c "import yaml;cfg=yaml.safe_load(open('$CONFIG')) or {};print(int(cfg.get('saliency_top',20)))")
 

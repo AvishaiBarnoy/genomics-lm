@@ -1,58 +1,43 @@
 #!/usr/bin/env python3
 """
-Extract CDS nucleotide sequences from one or more GenBank .gbff files.
-Writes a FASTA-like plain text with one CDS per line (no headers) to data/processed/cds_dna.txt
-
-Why:
-- Keep only coding regions (frame is known).
-- Simplifies tokenization to in-frame codons later.
-
-Key parameters:
-- --min_len: discard very short CDS (noisy / fragments).
+Writes:
+- data/processed/cds_dna.txt   (one CDS per line)
+- data/processed/cds_meta.tsv  (parallel, cols: line_idx, genome_id)
 """
 
 from pathlib import Path
 import argparse
 from Bio import SeqIO
 
-def reverse_complement(s: str) -> str:
-    comp = str.maketrans("ACGTacgtnN", "TGCAtgcann")
+def reverse_complement(s):
+    comp = str.maketrans("ACGTacgtnN","TGCAtgcann")
     return s.translate(comp)[::-1]
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--gbff", nargs="+", required=True, help="GenBank files")
-    ap.add_argument("--out", default="data/processed/cds_dna.txt")
-    ap.add_argument("--min_len", type=int, default=90, help="min CDS length (bp)")
+    ap.add_argument("--gbff", nargs="+", required=True)
+    ap.add_argument("--out_txt", default="data/processed/cds_dna.txt")
+    ap.add_argument("--out_meta", default="data/processed/cds_meta.tsv")
+    ap.add_argument("--min_len", type=int, default=90)
     args = ap.parse_args()
 
-    out = Path(args.out)
-    out.parent.mkdir(parents=True, exist_ok=True)
-
-    kept, skipped = 0, 0
-    with out.open("w") as f:
+    Path(args.out_txt).parent.mkdir(parents=True, exist_ok=True)
+    idx = 0
+    with open(args.out_txt,"w") as ft, open(args.out_meta,"w") as fm:
+        fm.write("line_idx\tgenome\n")
         for gb in args.gbff:
+            genome_id = Path(gb).stem.split("_")[0]
             for rec in SeqIO.parse(gb, "genbank"):
-                genome = str(rec.seq).upper()
+                seq = str(rec.seq).upper()
                 for feat in rec.features:
-                    if feat.type != "CDS": 
-                        continue
-                    try:
-                        start = int(feat.location.start)
-                        end   = int(feat.location.end)
-                        strand = int(feat.location.strand or 1)
-                        seq = genome[start:end]
-                        if strand == -1:
-                            seq = reverse_complement(seq)
-                        if len(seq) >= args.min_len and set(seq) <= set("ACGTN"):
-                            f.write(seq + "\n")
-                            kept += 1
-                        else:
-                            skipped += 1
-                    except Exception:
-                        skipped += 1
-    print(f"[extract] wrote {kept} CDS; skipped {skipped}; → {out}")
-
-if __name__ == "__main__":
-    main()
-
+                    if feat.type!="CDS": continue
+                    s,e = int(feat.location.start), int(feat.location.end)
+                    strand = int(feat.location.strand or 1)
+                    cds = seq[s:e]
+                    if strand==-1: cds = reverse_complement(cds)
+                    if len(cds) >= args.min_len and set(cds) <= set("ACGTN"):
+                        ft.write(cds+"\n")
+                        fm.write(f"{idx}\t{genome_id}\n")
+                        idx+=1
+    print(f"[extract] wrote {idx} CDS with meta.")
+if __name__=="__main__": main()

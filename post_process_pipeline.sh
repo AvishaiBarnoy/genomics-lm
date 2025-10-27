@@ -7,7 +7,7 @@ if [ -z "$RUN_ID" ]; then
     exit 1
 fi
 
-CONF=${CONF:-configs/tiny_mps_v2.yaml}
+CONF=${CONF:-configs/tiny_mps.yaml}
 SAL_WINDOW=$(python -c "import yaml;cfg=yaml.safe_load(open('$CONF')) or {};print(int(cfg.get('saliency_window',9)))")
 SAL_TOP=$(python -c "import yaml;cfg=yaml.safe_load(open('$CONF')) or {};print(int(cfg.get('saliency_top',20)))")
 

@@ -1,57 +1,94 @@
 #!/usr/bin/env bash
-
-echo "[deprecated] pipeline.sh is deprecated; please use pipeline_v2.sh" >&2
-
-# activate environment
-#conda env update -n codonlm -f env/conda-environment.yml
-
-#conda run -n codonlm pip install --upgrade --force-reinstall "numpy<2"
-eval "$(conda shell.bash hook)"
-#conda install -c pytorch pytorch torchvision torchaudio numpy
-#conda init
-conda activate codonlm
-
-RUN_ID=${RUN_ID:-tiny-demo}
-CKPT_ROOT="outputs/checkpoints/${RUN_ID}"
-SCORES_ROOT="outputs/scores/${RUN_ID}"
-
 # place data .gbff files in data/raw/
 
-# extract CDS
+eval "$(conda shell.bash hook)"
+conda activate codonlm
+
+set -euo pipefail
+
+# 0) Setup run id, log, and hardware info
+CONF=${CONF:-configs/tiny_mps.yaml}
+# Auto-generate RUN_ID from config if not provided
+RUN_ID=${RUN_ID:-$(python -m scripts.make_run_id "$CONF")}
+RUN_DIR="runs/${RUN_ID}"
+mkdir -p "$RUN_DIR"
+LOG="$RUN_DIR/log.txt"
+
+echo "[info] run_id=${RUN_ID}" | tee "$LOG"
+echo "[info] config=${CONF}" | tee -a "$LOG"
+echo "[hardware] date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" | tee -a "$LOG"
+echo "[hardware] uname: $(uname -a)" | tee -a "$LOG"
+if command -v sysctl >/dev/null 2>&1; then
+  sysctl -n machdep.cpu.brand_string 2>/dev/null | sed 's/^/[hardware] cpu: /' | tee -a "$LOG" || true
+fi
+python - <<'PY' | tee -a "$LOG"
+import torch, platform, sys
+print(f"[hardware] python: {platform.python_version()}")
+print(f"[hardware] torch: {getattr(torch, '__version__', 'NA')}")
+print(f"[hardware] mps_available: {torch.backends.mps.is_available()}")
+print(f"[hardware] cuda_available: {torch.cuda.is_available()}")
+print(f"[hardware] cuda_device_count: {torch.cuda.device_count()}")
+if torch.cuda.is_available():
+    print("[hardware] cuda_device: ", torch.cuda.get_device_name(0))
+PY
+
+echo "[config] snapshot:" | tee -a "$LOG"
+sed 's/^/[config] /' "$CONF" | tee -a "$LOG"
+
+T0=$(date +%s)
+
+# 1) Extract with meta
 python -m src.codonlm.extract_cds_from_genbank \
   --gbff data/raw/GCF_000005845.2_ASM584v2_genomic.gbff \
-  --out  data/processed/cds_dna.txt --min_len 90
+  --out_txt  data/processed/cds_dna.txt \
+  --out_meta data/processed/cds_meta.tsv 2>&1 | tee -a "$LOG"
 
-# Tokenize to codon IDs
+# 2) Tokenize to codon IDs (same as before)
 python -m src.codonlm.codon_tokenize \
   --inp data/processed/cds_dna.txt \
-  --out_ids data/processed/codon_ids.txt
+  --out_ids data/processed/codon_ids.txt 2>&1 | tee -a "$LOG"
 
-# Build dataset (M2 example)
+# 3) Build datasets with genome-aware train/val/test
 python -m src.codonlm.build_dataset \
   --ids data/processed/codon_ids.txt \
-  --block_size 256 --windows_per_seq 2
+  --group_meta data/processed/cds_meta.tsv \
+  --block_size 256 --windows_per_seq 2 2>&1 | tee -a "$LOG"
 
-# Train (deprecated path) — prefer pipeline_v2.sh which uses the v2 trainer
-python -m src.codonlm.train_codon_lm --config configs/tiny_mps.yaml --run_id "${RUN_ID}"
+# 4) Train with MPS autocast, optional checkpointing, cosine LR
+CKPT_ROOT="outputs/checkpoints/${RUN_ID}"
+SCORES_ROOT="outputs/scores/${RUN_ID}"
+Ttrain0=$(date +%s)
+python -m src.codonlm.train_codon_lm --config "$CONF" --run_id "${RUN_ID}" 2>&1 | tee -a "$LOG"
+Ttrain1=$(date +%s)
 
-# Evalutate
+
+# 5) Evaluate on val and test sets
 python -m src.codonlm.eval_perplexity \
   --ckpt "${CKPT_ROOT}/best.pt" \
-  --val_npz data/processed/val_bs256.npz
+  --val_npz data/processed/val_bs256.npz 2>&1 | tee -a "$LOG" || true
+python -m src.codonlm.eval_perplexity \
+  --ckpt "${CKPT_ROOT}/best.pt" \
+  --val_npz data/processed/test_bs256.npz 2>&1 | tee -a "$LOG" || true
 
-# Score mutations for one CDS
-#python -m src.codonlm.score_mutations \
-#  --ckpt "${CKPT_ROOT}/best.pt" \
-#  --dna data/processed/cds_dna.txt 
+# 6) Score mutations for one CDS (write to scores dir)
 head -n1 data/processed/cds_dna.txt > data/processed/one_cds.txt
 mkdir -p "${SCORES_ROOT}"
 conda run -n codonlm python -m src.codonlm.score_mutations \
   --ckpt "${CKPT_ROOT}/best.pt" \
   --dna data/processed/one_cds.txt \
-  --out "${SCORES_ROOT}/one_cds.tsv"
+  --out "${SCORES_ROOT}/one_cds__best.tsv" 2>&1 | tee -a "$LOG" || true
 
-# Mine motifs (quick & dirty)
+# 7) Mine motifs (quick & dirty)
 python -m src.codonlm.mine_motifs \
   --ckpt "${CKPT_ROOT}/best.pt" \
-  --npz data/processed/train_bs256.npz --k 9 --clusters 100
+  --npz data/processed/train_bs256.npz --k 9 --clusters 100 2>&1 | tee -a "$LOG" || true
+if [ -f outputs/motif_clusters.npz ]; then
+  cp outputs/motif_clusters.npz "$RUN_DIR/motif_clusters.npz" || true
+fi
+
+# 8) Collect artifacts and organize run outputs under runs/<RUN_ID>
+python -m scripts.collect_artifacts_yaml "${RUN_ID}" "$CONF" 2>&1 | tee -a "$LOG" || true
+
+T1=$(date +%s)
+echo "[timing] training_sec=$((Ttrain1-Ttrain0))" | tee -a "$LOG"
+echo "[timing] total_sec=$((T1-T0))" | tee -a "$LOG"
