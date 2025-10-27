@@ -34,16 +34,16 @@ RUN_ID=$(date +"%Y%m%d-%H%M%S")  # or any unique label
 python -m src.codonlm.train_codon_lm --config configs/tiny_mps.yaml --run_id "$RUN_ID"
 ```
 
-Checkpoints land in `outputs/checkpoints/<RUN_ID>/` (`best.pt`, `last.pt`) and metrics live in `outputs/scores/<RUN_ID>/` (`metrics.json`, `curves.csv`). The shell pipeline (`pipeline.sh`) sets a sensible default `RUN_ID` automatically, so you can still run:
+Checkpoints land in `outputs/checkpoints/<RUN_ID>/` (`best.pt`, `last.pt`) and metrics live in `outputs/scores/<RUN_ID>/` (`metrics.json`, `curves.csv`). The shell pipeline (`main.sh`) sets a sensible default `RUN_ID` automatically, so you can still run:
 
 ```bash
-chmod +x pipeline.sh
-./pipeline.sh            # uses configs/tiny_mps.yaml by default
-./pipeline.sh -c path/to/other.yaml              # supply your own config
-./pipeline.sh --dataset ecoli2,data/raw/GCF_xx.gbff  # add an extra genome ad-hoc
-./pipeline.sh --force                              # rebuild cached processed data
-./pipeline.sh -r outputs/checkpoints/<RUN_ID>/best.pt        # resume training
-./pipeline.sh -c my.yaml -r outputs/checkpoints/<RUN_ID>/best.pt
+chmod +x main.sh analysis.sh post_process.sh
+./main.sh            # uses configs/tiny_mps.yaml by default
+./main.sh -c path/to/other.yaml                     # supply your own config
+./main.sh --dataset ecoli2,data/raw/GCF_xx.gbff     # add an extra genome ad-hoc
+./main.sh --force                                   # rebuild cached processed data
+./main.sh -r outputs/checkpoints/<RUN_ID>/best.pt   # resume training
+./main.sh -c my.yaml -r outputs/checkpoints/<RUN_ID>/best.pt
 ```
 
 ### Dataset configuration
@@ -104,6 +104,16 @@ python -m src.codonlm.train_codon_lm --config configs/tiny_mps.yaml \
 Note: cosine+warmup is enabled by default and you can set `label_smoothing: 0.05` in the YAML to improve probability calibration (reduces overconfident spikes in next-token predictions).
 
 Deprecated v1 scripts have been removed; `src/codonlm/train_codon_lm.py` is now the canonical trainer. Use `configs/tiny_mps.yaml` (or your own YAML) for reproducible runs.
+
+Convenience wrappers:
+
+```bash
+# artifacts only (organize weights, sample logits, etc.)
+./post_process.sh <RUN_ID> [CONFIG]
+
+# full 6-step analysis
+./analysis.sh <RUN_ID> [CONFIG]
+```
 
 For Step 6 linear probes:
 

@@ -1,24 +1,41 @@
 genomics-lm/
 ├─ README.md
-├─ env/                      # environment & reproducibility
+├─ ROADMAP.md
+├─ main.sh                     # end-to-end data prep + training + quick eval
+├─ analysis.sh                 # 6-step interpretability analysis for a run
+├─ post_process.sh             # artifacts-only organizer for a run
+├─ pipeline.sh                 # DEPRECATED shim → main.sh
+├─ post_process_pipeline.sh    # DEPRECATED shim → analysis.sh
+├─ env/
 │  ├─ conda-environment.yml
 │  └─ requirements.txt
-├─ data/
-│  ├─ raw/                   # .gbff or .fna + .gff you download
-│  └─ processed/             # tokenized/packed arrays for training
 ├─ configs/
-│  ├─ tiny_mps.yaml          # fits M2 8GB
-│  └─ small_mps.yaml         # fits M4 16GB
-└─ src/
-   └─ codonlm/
-      ├─ __init__.py
-      ├─ utils_io.py                 # file helpers, RNG seeding
-      ├─ extract_cds_from_genbank.py # turn .gbff → CDS FASTA
-      ├─ codon_tokenize.py           # DNA→codon ids (+vocab)
-      ├─ build_dataset.py            # pack codon ids → train/val npz
-      ├─ model_tiny_gpt.py           # ~nanoGPT in ~100 lines
-      ├─ train_codon_lm.py           # training loop (PyTorch, MPS)
-      ├─ eval_perplexity.py          # PPL on a FASTA or packed set
-      ├─ score_mutations.py          # ΔlogP mutation heatmap for one CDS
-      └─ mine_motifs.py              # crude motif mining from embeddings
-
+│  └─ tiny_mps.yaml            # default Apple-Silicon-friendly config
+├─ data/
+│  ├─ raw/                     # drop downloaded .gbff files here
+│  └─ processed/
+│     └─ combined/             # per-run concatenated NPZs
+├─ scripts/
+│  ├─ pipeline_prepare.py      # orchestrates dataset extraction/tokenization
+│  ├─ run_6step.sh             # runs the full interpretability suite
+│  ├─ analyze_*.py             # Step 1–5 analysis utilities
+│  ├─ collect_artifacts_yaml.py
+│  ├─ generate_probe_labels.py
+│  ├─ probe_linear.py
+│  ├─ report_top_saliency.py
+│  └─ summarize_one_cds.py
+├─ src/
+│  └─ codonlm/
+│     ├─ __init__.py
+│     ├─ build_dataset.py          # pack codon IDs into NPZ shards
+│     ├─ codon_tokenize.py         # DNA → codon ID sequences
+│     ├─ eval_perplexity.py
+│     ├─ extract_cds_from_genbank.py
+│     ├─ mine_motifs.py
+│     ├─ model_tiny_gpt.py
+│     ├─ score_mutations.py
+│     └─ train_codon_lm.py
+├─ tests/
+│  ├─ conftest.py
+│  └─ test_*.py
+└─ runs/                        # per-run artifacts, logs, tables, charts

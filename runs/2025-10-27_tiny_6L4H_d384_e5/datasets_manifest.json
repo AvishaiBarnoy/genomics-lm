@@ -1,0 +1,23 @@
+{
+  "datasets": [
+    {
+      "name": "ecoli_k12",
+      "gbff": "data/raw/GCF_000005845.2_ASM584v2_genomic.gbff",
+      "min_len": 90,
+      "out_dir": "data/processed/ecoli_k12",
+      "dna": "data/processed/ecoli_k12/cds_dna.txt",
+      "meta": "data/processed/ecoli_k12/cds_meta.tsv",
+      "ids": "data/processed/ecoli_k12/codon_ids.txt",
+      "vocab": "data/processed/ecoli_k12/vocab_codon.txt",
+      "itos": "data/processed/ecoli_k12/itos.txt",
+      "train": "data/processed/ecoli_k12/train_bs256.npz",
+      "val": "data/processed/ecoli_k12/val_bs256.npz",
+      "test": "data/processed/ecoli_k12/test_bs256.npz"
+    }
+  ],
+  "block_size": 256,
+  "windows_per_seq": 2,
+  "val_frac": 0.1,
+  "test_frac": 0.1,
+  "force": 0
+}

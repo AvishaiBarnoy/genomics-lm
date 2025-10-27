@@ -11,7 +11,7 @@ test_frac: 0.1
 
 datasets:
   - name: ecoli_k12
-    gbff: data/raw/GCF_000005845.2_ASM584v2_genomic.gbff
+    gbff: data/raw/Enterobacteriaceae/GCF_000005845.gbff
     min_len: 90
 
 batch_size: 2

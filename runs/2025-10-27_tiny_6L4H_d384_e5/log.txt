@@ -1,7 +1,8 @@
 [info] run_id=2025-10-27_tiny_6L4H_d384_e5
-[info] config=configs/tiny_mps_v2.yaml
-[hardware] date: 2025-10-27 15:08:12 UTC
-[hardware] uname: Darwin MacBook-Pro.local 25.0.0 Darwin Kernel Version 25.0.0: Wed Sep 17 21:38:03 PDT 2025; root:xnu-12377.1.9~141/RELEASE_ARM64_T8112 arm64
+[info] config=configs/tiny_mps.yaml
+[info] resume=none
+[hardware] date: 2025-10-27 21:00:40 UTC
+[hardware] uname: Darwin Mac 25.0.0 Darwin Kernel Version 25.0.0: Wed Sep 17 21:38:03 PDT 2025; root:xnu-12377.1.9~141/RELEASE_ARM64_T8112 arm64
 [hardware] cpu: Apple M2
 [hardware] python: 3.11.13
 [hardware] torch: 2.2.2
@@ -11,11 +12,19 @@
 [config] snapshot:
 [config] vocab_size: 69
 [config] block_size: 256
-[config] 
 [config] n_layer: 6
 [config] n_head: 4
-[config] n_embd: 384 
+[config] n_embd: 384
 [config] dropout: 0.1
+[config] 
+[config] windows_per_seq: 2
+[config] val_frac: 0.1
+[config] test_frac: 0.1
+[config] 
+[config] datasets:
+[config]   - name: ecoli_k12
+[config]     gbff: data/raw/GCF_000005845.2_ASM584v2_genomic.gbff
+[config]     min_len: 90
 [config] 
 [config] batch_size: 2
 [config] grad_accum_steps: 16
@@ -23,10 +32,10 @@
 [config] weight_decay: 0.05
 [config] epochs: 5
 [config] 
-[config] optimizer: "adamw"        # "adafactor" or "adamw" 
+[config] optimizer: "adamw"
 [config] amp: true
-[config] use_checkpoint: true 
-[config] scheduler: "cosine"       # cosine or plateau
+[config] use_checkpoint: true
+[config] scheduler: "cosine"
 [config] label_smoothing: 0.05
 [config] warmup_steps: 300
 [config] min_lr: 1e-5
@@ -38,11 +47,21 @@
 [config] log_csv: "curves.csv"
 [config] seed: 1337
 [config] itos_path: data/processed/itos_codon.txt
-[extract_v2] wrote 4236 CDS with meta.
-[tokenize] wrote 4236 sequences → data/processed/codon_ids.txt | vocab size 69 | itos data/processed/itos_codon.txt
-[build_v2] train: (6864, 256) → data/processed/train_bs256.npz
-[build_v2] val: (762, 256) → data/processed/val_bs256.npz
-[build_v2] test: (846, 256) → data/processed/test_bs256.npz
+[config] saliency_window: 9
+[config] saliency_top: 20
+[info] extra_datasets_cli=none
+[build] train: (6864, 256) → data/processed/ecoli_k12/train_bs256.npz
+[build] val: (762, 256) → data/processed/ecoli_k12/val_bs256.npz
+[build] test: (846, 256) → data/processed/ecoli_k12/test_bs256.npz
+[prepare] skip extract ecoli_k12
+[prepare] skip tokenize ecoli_k12
+[prepare] run python -m src.codonlm.build_dataset --ids data/processed/ecoli_k12/codon_ids.txt --group_meta data/processed/ecoli_k12/cds_meta.tsv --block_size 256 --windows_per_seq 2 --val_frac 0.1 --test_frac 0.1 --out_dir data/processed/ecoli_k12
+[prepare] wrote runs/2025-10-27_tiny_6L4H_d384_e5/pipeline_prepare.json
+[info] combined_manifest=data/processed/combined/2025-10-27_tiny_6L4H_d384_e5/manifest.json
+[info] train_npz=data/processed/combined/2025-10-27_tiny_6L4H_d384_e5/train_bs256.npz
+[info] val_npz=data/processed/combined/2025-10-27_tiny_6L4H_d384_e5/val_bs256.npz
+[info] test_npz=data/processed/combined/2025-10-27_tiny_6L4H_d384_e5/test_bs256.npz
+[info] primary_dna=data/processed/ecoli_k12/cds_dna.txt
 [run] id=2025-10-27_tiny_6L4H_d384_e5
 [paths] ckpts=outputs/checkpoints/2025-10-27_tiny_6L4H_d384_e5 scores=outputs/scores/2025-10-27_tiny_6L4H_d384_e5 log_csv=/Users/User/github/genomics-lm/outputs/scores/2025-10-27_tiny_6L4H_d384_e5/curves.csv
 [epoch 1] train 64.013 | val 6.435 | ppl 623.53 | lr 2.15e-04
@@ -61,12 +80,14 @@
 [state] missing: []
 [state] unexpected: []
 Using TinyGPT from: /Users/User/github/genomics-lm/src/codonlm/model_tiny_gpt.py
-Model cfg: {'vocab_size': 69, 'block_size': 256, 'n_layer': 6, 'n_head': 4, 'n_embd': 384, 'dropout': 0.1, 'batch_size': 2, 'grad_accum_steps': 16, 'lr': 0.0003, 'weight_decay': 0.05, 'epochs': 5, 'optimizer': 'adamw', 'amp': True, 'use_checkpoint': True, 'scheduler': 'cosine', 'label_smoothing': 0.05, 'warmup_steps': 300, 'min_lr': '1e-5', 'plateau_patience': 2, 'early_stop_patience': 5, 'out_dir': 'outputs/checkpoints', 'scores_dir': 'outputs/scores', 'log_csv': 'curves.csv', 'seed': 1337, 'itos_path': 'data/processed/itos_codon.txt', 'run_id': '2025-10-27_tiny_6L4H_d384_e5'}
+Model cfg: {'vocab_size': 69, 'block_size': 256, 'n_layer': 6, 'n_head': 4, 'n_embd': 384, 'dropout': 0.1, 'windows_per_seq': 2, 'val_frac': 0.1, 'test_frac': 0.1, 'datasets': [{'name': 'ecoli_k12', 'gbff': 'data/raw/GCF_000005845.2_ASM584v2_genomic.gbff', 'min_len': 90}], 'batch_size': 2, 'grad_accum_steps': 16, 'lr': 0.0003, 'weight_decay': 0.05, 'epochs': 5, 'optimizer': 'adamw', 'amp': True, 'use_checkpoint': True, 'scheduler': 'cosine', 'label_smoothing': 0.05, 'warmup_steps': 300, 'min_lr': '1e-5', 'plateau_patience': 2, 'early_stop_patience': 5, 'out_dir': 'outputs/checkpoints', 'scores_dir': 'outputs/scores', 'log_csv': 'curves.csv', 'seed': 1337, 'itos_path': 'data/processed/itos_codon.txt', 'saliency_window': 9, 'saliency_top': 20, 'train_npz': ['data/processed/combined/2025-10-27_tiny_6L4H_d384_e5/train_bs256.npz'], 'val_npz': ['data/processed/combined/2025-10-27_tiny_6L4H_d384_e5/val_bs256.npz'], 'test_npz': ['data/processed/combined/2025-10-27_tiny_6L4H_d384_e5/test_bs256.npz'], 'run_id': '2025-10-27_tiny_6L4H_d384_e5'}
 Model device: mps:0
 MPS available: True
 [motifs] collected windows: 1702272
-[motifs] inertia: 424.33465576171875
+[motifs] inertia: 423.4606628417969
 [motifs] saved outputs/motif_clusters.npz
 [collect] saved artifacts for 2025-10-27_tiny_6L4H_d384_e5 → runs/2025-10-27_tiny_6L4H_d384_e5
-[timing] training_sec=4054
-[timing] total_sec=4939
+[timing] training_sec=734
+[timing] training_time=0 hours, 12 minutes, 14 seconds
+[timing] total_sec=1121
+[timing] total_time=0 hours, 18 minutes, 41 seconds
