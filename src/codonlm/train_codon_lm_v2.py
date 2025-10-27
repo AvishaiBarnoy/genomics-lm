@@ -40,6 +40,22 @@ def _normalize_run_id(value: Optional[str]) -> Optional[str]:
     return run_id or None
 
 
+def _auto_run_id(cfg: dict, config_path: Optional[str]) -> str:
+    try:
+        from . import __package__  # noqa: F401
+    except Exception:
+        pass
+    # Build RUN_ID like YYYY-MM-DD_<model>_<nL><nH>_d<n_embd>_e<epochs>
+    from datetime import date
+    from pathlib import Path
+    today = date.today().strftime("%Y-%m-%d")
+    tag = "run"
+    if config_path:
+        stem = Path(config_path).stem
+        tag = stem.split("_", 1)[0] if "_" in stem else stem
+    return f"{today}_{tag}_{int(cfg.get('n_layer',0))}L{int(cfg.get('n_head',0))}H_d{int(cfg.get('n_embd',0))}_e{int(cfg.get('epochs',0))}"
+
+
 def _prepare_output_dirs(base_ckpt_dir: str, base_scores_dir: str, run_id: Optional[str]) -> Tuple[Path, Path]:
     ckpt_root = Path(base_ckpt_dir)
     if run_id:
@@ -81,9 +97,16 @@ def main():
     train_loader = DataLoader(train_ds, batch_size=cfg["batch_size"], shuffle=True)
     val_loader   = DataLoader(val_ds, batch_size=cfg["batch_size"])
 
-    model = TinyGPTv2(cfg["vocab_size"], cfg["block_size"],
-                      n_layer=cfg["n_layer"], n_head=cfg["n_head"], n_embd=cfg["n_embd"],
-                      dropout=cfg["dropout"], use_checkpoint=bool(cfg.get("use_checkpoint", False))).to(device)
+    model = TinyGPTv2(
+        cfg["vocab_size"],
+        cfg["block_size"],
+        n_layer=cfg["n_layer"],
+        n_head=cfg["n_head"],
+        n_embd=cfg["n_embd"],
+        dropout=cfg["dropout"],
+        use_checkpoint=bool(cfg.get("use_checkpoint", False)),
+        label_smoothing=float(cfg.get("label_smoothing", 0.0)),
+    ).to(device)
 
     # Optimizer selection
     if cfg.get("optimizer", "adamw").lower() == "adafactor":
@@ -130,6 +153,8 @@ def main():
         )
 
     run_id = _normalize_run_id(args.run_id or cfg.get("run_id") or os.environ.get(RUN_ID_ENV))
+    if not run_id:
+        run_id = _auto_run_id(cfg, args.config)
     if run_id:
         cfg["run_id"] = run_id
     outdir = cfg["out_dir"]

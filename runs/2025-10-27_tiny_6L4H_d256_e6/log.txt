@@ -1,0 +1,51 @@
+[info] run_id=2025-10-27_tiny_6L4H_d256_e6
+[info] config=configs/tiny_mps_v2.yaml
+[hardware] date: 2025-10-27 06:36:17 UTC
+[hardware] uname: Darwin MacBook-Pro.local 25.0.0 Darwin Kernel Version 25.0.0: Wed Sep 17 21:38:03 PDT 2025; root:xnu-12377.1.9~141/RELEASE_ARM64_T8112 arm64
+[hardware] cpu: Apple M2
+[hardware] python: 3.11.13
+[hardware] torch: 2.2.2
+[hardware] mps_available: True
+[hardware] cuda_available: False
+[hardware] cuda_device_count: 0
+[config] snapshot:
+[config] vocab_size: 69
+[config] block_size: 256
+[config] n_layer: 6
+[config] n_head: 4
+[config] n_embd: 256 
+[config] dropout: 0.1
+[config] 
+[config] batch_size: 2
+[config] grad_accum_steps: 16
+[config] lr: 0.0003
+[config] weight_decay: 0.05
+[config] epochs: 6
+[config] 
+[config] optimizer: "adafactor"        # "adafactor" or "adamw" 
+[config] amp: true
+[config] use_checkpoint: true 
+[config] scheduler: "cosine"       # cosine or plateau
+[config] warmup_steps: 200
+[config] min_lr: 1e-5
+[config] plateau_patience: 2
+[config] early_stop_patience: 5
+[config] 
+[config] out_dir: outputs/checkpoints
+[config] scores_dir: outputs/scores
+[config] log_csv: "curves.csv"
+[config] seed: 1337
+[config] itos_path: data/processed/itos_codon.txt
+[extract_v2] wrote 4236 CDS with meta.
+[tokenize] wrote 4236 sequences → data/processed/codon_ids.txt | vocab size 69 | itos data/processed/itos_codon.txt
+[build_v2] train: (6864, 256) → data/processed/train_bs256.npz
+[build_v2] val: (762, 256) → data/processed/val_bs256.npz
+[build_v2] test: (846, 256) → data/processed/test_bs256.npz
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/User/github/genomics-lm/src/codonlm/train_codon_lm_v2.py", line 272, in <module>
+    main()
+  File "/Users/User/github/genomics-lm/src/codonlm/train_codon_lm_v2.py", line 107, in main
+    raise RuntimeError("transformers not installed; pip install transformers to use Adafactor")
+RuntimeError: transformers not installed; pip install transformers to use Adafactor

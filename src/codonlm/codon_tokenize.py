@@ -35,6 +35,7 @@ def main():
     ap.add_argument("--inp", default="data/processed/cds_dna.txt")
     ap.add_argument("--out_ids", default="data/processed/codon_ids.txt")
     ap.add_argument("--out_vocab", default="data/processed/vocab_codon.txt")
+    ap.add_argument("--out_itos", default="data/processed/itos_codon.txt")
     args = ap.parse_args()
 
     ids_path = Path(args.out_ids); ids_path.parent.mkdir(parents=True, exist_ok=True)
@@ -48,8 +49,10 @@ def main():
     with open(args.out_vocab, "w") as f:
         for i,tok in enumerate(VOCAB):
             f.write(f"{i}\t{tok}\n")
-    print(f"[tokenize] wrote {n} sequences → {ids_path} | vocab size {len(VOCAB)}")
+    with open(args.out_itos, "w") as f:
+        for tok in VOCAB:
+            f.write(f"{tok}\n")
+    print(f"[tokenize] wrote {n} sequences → {ids_path} | vocab size {len(VOCAB)} | itos {args.out_itos}")
 
 if __name__ == "__main__":
     main()
-

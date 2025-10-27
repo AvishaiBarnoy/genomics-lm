@@ -212,9 +212,19 @@ if __name__ == "__main__":
     total_steps     = steps_per_epoch * args.epochs
     warmup_steps    = max(1, int(args.warmup_frac * total_steps))
 
-    # cosine to eta_min = args.min_lr
-    base_lr = cfg["lr"]
-    eta_min = args.min_lr
+    # cosine to eta_min = args.min_lr (robust to YAML string values)
+    try:
+        base_lr = float(cfg["lr"])  # ensure numeric
+    except Exception:
+        base_lr = cfg["lr"]
+    try:
+        eta_min = float(args.min_lr)
+    except Exception:
+        # allow YAML string like "1e-5"
+        try:
+            eta_min = float(str(args.min_lr))
+        except Exception:
+            eta_min = 1e-5
 
     def lr_lambda(step):
         if step < warmup_steps:

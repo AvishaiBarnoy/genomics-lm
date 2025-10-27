@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
-import torch
-import torch.nn.functional as F
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import StratifiedKFold, train_test_split
 
 from ._shared import ensure_run_layout, load_artifacts, load_token_list, stoi
 
@@ -147,16 +147,11 @@ def _kfold_indices(n: int, k: int, seed: int = RNG_SEED):
         start = end
 
 
-def _train_probe(train_x: torch.Tensor, train_y: torch.Tensor, num_classes: int) -> torch.nn.Module:
-    model = torch.nn.Linear(train_x.shape[1], num_classes)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
-    for _ in range(EPOCHS):
-        optimizer.zero_grad(set_to_none=True)
-        logits = model(train_x)
-        loss = F.cross_entropy(logits, train_y)
-        loss.backward()
-        optimizer.step()
-    return model
+def _train_eval_probe_sklearn(train_x: np.ndarray, train_y: np.ndarray, val_x: np.ndarray, val_y: np.ndarray) -> float:
+    # Keep defaults; sklearn>=1.5 deprecates multi_class="auto", so omit it
+    clf = LogisticRegression(max_iter=200)
+    clf.fit(train_x, train_y)
+    return float(clf.score(val_x, val_y))
 
 
 def main(argv: Optional[Iterable[str]] = None) -> None:
@@ -180,11 +175,9 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         print(f"[probe-linear] probe_labels.csv missing or empty at {label_path}")
         return
 
-    torch.manual_seed(RNG_SEED)
-
     token_to_idx = stoi(tokens)
     indices = [token_to_idx[row["token"]] for row in rows if row.get("token") in token_to_idx]
-    X = torch.tensor(embeddings[indices], dtype=torch.float32)
+    X = embeddings[indices].astype(np.float32, copy=False)
 
     results = []
     for task, field in TASKS.items():
@@ -197,22 +190,41 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
             continue
         valid_idx = np.where(mask)[0]
         X_task = X[valid_idx]
-        y_task = torch.tensor(y[valid_idx], dtype=torch.long)
+        y_task = y[valid_idx].astype(np.int64, copy=False)
 
-        fold_acc = []
-        for train_idx, val_idx in _kfold_indices(X_task.shape[0], K_FOLDS):
-            train_x = X_task[train_idx]
-            val_x = X_task[val_idx]
-            train_y = y_task[train_idx]
-            val_y = y_task[val_idx]
-            if train_x.shape[0] == 0 or val_x.shape[0] == 0:
+        # Require at least 2 classes overall
+        classes, counts = np.unique(y_task, return_counts=True)
+        if classes.size < 2:
+            print(f"[probe-linear] skipping {task}; only one class present")
+            continue
+        min_per_class = int(counts.min())
+        # If extremely sparse, fall back to holdout split (stratified)
+        if min_per_class < 2 or len(y_task) < K_FOLDS:
+            test_size = 0.5 if min_per_class == 1 else 0.2
+            train_x, val_x, train_y, val_y = train_test_split(
+                X_task, y_task, test_size=test_size, stratify=y_task, random_state=RNG_SEED
+            )
+            if np.unique(train_y).size < 2 or np.unique(val_y).size < 2:
+                print(f"[probe-linear] skipping {task}; holdout had <2 classes")
                 continue
-            num_classes = int(y_task.max().item() + 1)
-            model = _train_probe(train_x, train_y, num_classes)
-            with torch.no_grad():
-                preds = model(val_x).argmax(dim=1)
-                acc = (preds == val_y).float().mean().item()
-            fold_acc.append(acc)
+            acc = _train_eval_probe_sklearn(train_x, train_y, val_x, val_y)
+            fold_acc = [acc]
+        else:
+            n_splits = max(2, min(K_FOLDS, min_per_class))
+            fold_acc = []
+            skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=RNG_SEED)
+            for train_idx, val_idx in skf.split(X_task, y_task):
+                train_x = X_task[train_idx]
+                val_x = X_task[val_idx]
+                train_y = y_task[train_idx]
+                val_y = y_task[val_idx]
+                # Ensure both splits have at least 2 classes
+                if train_x.shape[0] == 0 or val_x.shape[0] == 0:
+                    continue
+                if np.unique(train_y).size < 2 or np.unique(val_y).size < 2:
+                    continue
+                acc = _train_eval_probe_sklearn(train_x, train_y, val_x, val_y)
+                fold_acc.append(acc)
         if not fold_acc:
             continue
         results.append((task, float(np.mean(fold_acc)), float(np.std(fold_acc))))

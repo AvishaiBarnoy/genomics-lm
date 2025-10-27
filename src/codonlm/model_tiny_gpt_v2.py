@@ -51,10 +51,11 @@ class Block(nn.Module):
         return x
 
 class TinyGPTv2(nn.Module):
-    def __init__(self, vocab_size, block_size, n_layer=3, n_head=4, n_embd=256, dropout=0.1, use_checkpoint=False):
+    def __init__(self, vocab_size, block_size, n_layer=3, n_head=4, n_embd=256, dropout=0.1, use_checkpoint=False, label_smoothing: float = 0.0):
         super().__init__()
         self.block_size = block_size
         self.use_checkpoint = use_checkpoint
+        self.label_smoothing = float(label_smoothing)
         self.tok_emb = nn.Embedding(vocab_size, n_embd)
         self.pos_emb = nn.Embedding(block_size, n_embd)
         self.drop = nn.Dropout(dropout)
@@ -85,5 +86,10 @@ class TinyGPTv2(nn.Module):
         logits = self.head(x)
         loss = None
         if targets is not None:
-            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=0)
+            loss = F.cross_entropy(
+                logits.view(-1, logits.size(-1)),
+                targets.view(-1),
+                ignore_index=0,
+                label_smoothing=self.label_smoothing,
+            )
         return logits, loss

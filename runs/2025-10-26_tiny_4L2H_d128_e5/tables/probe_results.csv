@@ -1,0 +1,6 @@
+task,mean_accuracy,std_accuracy
+AA identity,0.0938,0.0000
+polarity class,0.2958,0.1120
+hydropathy class,0.4282,0.1028
+is_stop,0.9531,0.0010
+is_start,0.9531,0.0010

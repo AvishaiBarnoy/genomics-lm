@@ -18,6 +18,7 @@ optimizer: "adamw"
 amp: true
 use_checkpoint: false
 scheduler: "cosine"
+label_smoothing: 0.05
 warmup_steps: 200
 min_lr: 1e-5
 plateau_patience: 2
@@ -27,3 +28,4 @@ out_dir: outputs/checkpoints
 scores_dir: outputs/scores
 log_csv: "curves.csv"
 seed: 1337
+itos_path: data/processed/itos_codon.txt

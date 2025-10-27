@@ -62,6 +62,8 @@ Default trainer (v2 with AMP + cosine schedule):
 python -m src.codonlm.train_codon_lm_v2 --config configs/tiny_mps_v2.yaml --run_id "$RUN_ID"
 ```
 
+Note: v2 uses cosine+warmup by default and supports optional label smoothing to improve probability calibration (reduces overconfident spikes in next‑token probabilities). Enable it by adding `label_smoothing: 0.05` to your YAML.
+
 Deprecated: The v1 trainer (`src/codonlm/train_codon_lm.py`) and older config naming are kept only for legacy runs. New training should use the v2 trainer and `configs/tiny_mps_v2.yaml`. The file `configs/tiny_mps.yaml` is an alias to the v2 settings to avoid path mismatches.
 
 For Step 6 linear probes:
@@ -70,4 +72,10 @@ For Step 6 linear probes:
 python -m scripts.generate_probe_labels $RUN_ID
 python -m scripts.probe_linear $RUN_ID
 python -m scripts.export_run_summary $RUN_ID
+```
+
+Saliency/motif spotlight:
+
+```bash
+python -m scripts.report_top_saliency $RUN_ID --window 9 --top 20
 ```

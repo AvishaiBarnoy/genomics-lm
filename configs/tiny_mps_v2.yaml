@@ -1,8 +1,9 @@
 vocab_size: 69
 block_size: 256
+
 n_layer: 6
 n_head: 4
-n_embd: 256 
+n_embd: 384 
 dropout: 0.1
 
 batch_size: 2
@@ -11,11 +12,12 @@ lr: 0.0003
 weight_decay: 0.05
 epochs: 5
 
-optimizer: "adamw"        # or "adafactor"
+optimizer: "adamw"        # "adafactor" or "adamw" 
 amp: true
 use_checkpoint: true 
 scheduler: "cosine"       # cosine or plateau
-warmup_steps: 200
+label_smoothing: 0.05
+warmup_steps: 300
 min_lr: 1e-5
 plateau_patience: 2
 early_stop_patience: 5
@@ -24,3 +26,4 @@ out_dir: outputs/checkpoints
 scores_dir: outputs/scores
 log_csv: "curves.csv"
 seed: 1337
+itos_path: data/processed/itos_codon.txt

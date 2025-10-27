@@ -32,6 +32,7 @@ python -m scripts.probe_next_token      "${RUN_ID}"
 
 # 5) Saliency
 python -m scripts.analyze_saliency      "${RUN_ID}"
+python -m scripts.report_top_saliency   "${RUN_ID}" --window 9 --top 20
 
 # 6) Biology-aware linear probes
 python -m scripts.generate_probe_labels "${RUN_ID}"
@@ -42,4 +43,3 @@ python -m scripts.summarize_one_cds     "${RUN_ID}" || true
 python -m scripts.export_run_summary    "${RUN_ID}" || true
 
 echo "[6step] Done. See runs/${RUN_ID}/{charts,tables} and runs/${RUN_ID}/llm_summary.json"
-

@@ -1,0 +1,75 @@
+[info] run_id=2025-10-27_tiny_6L4H_d256_e10
+[info] config=configs/tiny_mps_v2.yaml
+[hardware] date: 2025-10-27 06:40:24 UTC
+[hardware] uname: Darwin MacBook-Pro.local 25.0.0 Darwin Kernel Version 25.0.0: Wed Sep 17 21:38:03 PDT 2025; root:xnu-12377.1.9~141/RELEASE_ARM64_T8112 arm64
+[hardware] cpu: Apple M2
+[hardware] python: 3.11.13
+[hardware] torch: 2.2.2
+[hardware] mps_available: True
+[hardware] cuda_available: False
+[hardware] cuda_device_count: 0
+[config] snapshot:
+[config] vocab_size: 69
+[config] block_size: 256
+[config] n_layer: 6
+[config] n_head: 4
+[config] n_embd: 256 
+[config] dropout: 0.1
+[config] 
+[config] batch_size: 2
+[config] grad_accum_steps: 16
+[config] lr: 0.0003
+[config] weight_decay: 0.05
+[config] epochs: 10
+[config] 
+[config] optimizer: "adamw"        # "adafactor" or "adamw" 
+[config] amp: true
+[config] use_checkpoint: true 
+[config] scheduler: "plateau"       # cosine or plateau
+[config] warmup_steps: 300
+[config] min_lr: 1e-5
+[config] plateau_patience: 2
+[config] early_stop_patience: 5
+[config] 
+[config] out_dir: outputs/checkpoints
+[config] scores_dir: outputs/scores
+[config] log_csv: "curves.csv"
+[config] seed: 1337
+[config] itos_path: data/processed/itos_codon.txt
+[extract_v2] wrote 4236 CDS with meta.
+[tokenize] wrote 4236 sequences → data/processed/codon_ids.txt | vocab size 69 | itos data/processed/itos_codon.txt
+[build_v2] train: (6864, 256) → data/processed/train_bs256.npz
+[build_v2] val: (762, 256) → data/processed/val_bs256.npz
+[build_v2] test: (846, 256) → data/processed/test_bs256.npz
+[run] id=2025-10-27_tiny_6L4H_d256_e10
+[paths] ckpts=outputs/checkpoints/2025-10-27_tiny_6L4H_d256_e10 scores=outputs/scores/2025-10-27_tiny_6L4H_d256_e10 log_csv=/Users/User/github/genomics-lm/outputs/scores/2025-10-27_tiny_6L4H_d256_e10/curves.csv
+[epoch 1] train 50.114 | val 5.825 | ppl 338.64 | lr 2.14e-04
+[epoch 2] train 5.759 | val 4.082 | ppl 59.24 | lr 3.00e-04
+[epoch 3] train 5.531 | val 4.026 | ppl 56.05 | lr 3.00e-04
+[epoch 4] train 5.501 | val 4.003 | ppl 54.76 | lr 3.00e-04
+[epoch 5] train 5.466 | val 3.994 | ppl 54.26 | lr 3.00e-04
+[epoch 6] train 5.421 | val 3.983 | ppl 53.66 | lr 3.00e-04
+[epoch 7] train 5.368 | val 3.985 | ppl 53.77 | lr 3.00e-04
+[epoch 8] train 5.310 | val 3.978 | ppl 53.41 | lr 3.00e-04
+[epoch 9] train 5.245 | val 3.976 | ppl 53.32 | lr 3.00e-04
+[epoch 10] train 5.171 | val 3.978 | ppl 53.40 | lr 3.00e-04
+[state] missing: []
+[state] unexpected: []
+[state] missing: []
+[state] unexpected: []
+[state] missing: []
+[state] unexpected: []
+[save] outputs/scores/2025-10-27_tiny_6L4H_d256_e10/one_cds__best.tsv
+
+[state] missing: []
+[state] unexpected: []
+Using TinyGPT from: /Users/User/github/genomics-lm/src/codonlm/model_tiny_gpt.py
+Model cfg: {'vocab_size': 69, 'block_size': 256, 'n_layer': 6, 'n_head': 4, 'n_embd': 256, 'dropout': 0.1, 'batch_size': 2, 'grad_accum_steps': 16, 'lr': 0.0003, 'weight_decay': 0.05, 'epochs': 10, 'optimizer': 'adamw', 'amp': True, 'use_checkpoint': True, 'scheduler': 'plateau', 'warmup_steps': 300, 'min_lr': '1e-5', 'plateau_patience': 2, 'early_stop_patience': 5, 'out_dir': 'outputs/checkpoints', 'scores_dir': 'outputs/scores', 'log_csv': 'curves.csv', 'seed': 1337, 'itos_path': 'data/processed/itos_codon.txt', 'run_id': '2025-10-27_tiny_6L4H_d256_e10'}
+Model device: mps:0
+MPS available: True
+[motifs] collected windows: 1702272
+[motifs] inertia: 14.594063758850098
+[motifs] saved outputs/motif_clusters.npz
+[collect] saved artifacts for 2025-10-27_tiny_6L4H_d256_e10 → runs/2025-10-27_tiny_6L4H_d256_e10
+[timing] training_sec=1002
+[timing] total_sec=25912
