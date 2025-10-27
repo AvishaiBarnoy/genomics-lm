@@ -84,8 +84,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
     ap.add_argument("--run_id", default=None, help=f"Unique run id; falls back to ${RUN_ID_ENV} or config.run_id")
+    ap.add_argument("--resume", default=None, help="Path to checkpoint to resume training from")
     args = ap.parse_args()
     cfg = yaml.safe_load(open(args.config))
+    resume_path = args.resume or cfg.pop("resume", None)
+    if resume_path is not None:
+        resume_path = str(resume_path)
 
     device = dev()
     torch.manual_seed(cfg.get("seed", 1337))
@@ -94,6 +98,9 @@ def main():
     train_npz = f"data/processed/train_bs{cfg['block_size']}.npz"
     val_npz   = f"data/processed/val_bs{cfg['block_size']}.npz"
     train_ds, val_ds = PackedDataset(train_npz), PackedDataset(val_npz)
+
+    if resume_path and not os.path.isfile(resume_path):
+        raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
     train_loader = DataLoader(train_ds, batch_size=cfg["batch_size"], shuffle=True)
     val_loader   = DataLoader(val_ds, batch_size=cfg["batch_size"])
 
@@ -170,8 +177,33 @@ def main():
     with log_csv.open("w", newline="") as f:
         writer = csv.writer(f); writer.writerow(["step","train_loss","val_loss","perplexity","lr"])
 
+    start_epoch = 0
     best = float("inf"); no_improve = 0
     step = 0
+    best_epoch = None
+
+    if resume_path:
+        print(f"[resume] loading {resume_path}")
+        ckpt_resume = torch.load(resume_path, map_location=device)
+        model.load_state_dict(ckpt_resume["model"])
+        if "optimizer" in ckpt_resume:
+            try:
+                optim.load_state_dict(ckpt_resume["optimizer"])
+            except Exception as exc:
+                print(f"[resume] optimizer state load failed: {exc}")
+        if "scheduler" in ckpt_resume and ckpt_resume["scheduler"] is not None:
+            try:
+                scheduler.load_state_dict(ckpt_resume["scheduler"])
+            except Exception as exc:
+                print(f"[resume] scheduler state load failed: {exc}")
+        start_epoch = int(ckpt_resume.get("epoch", 0))
+        step = int(ckpt_resume.get("step", step))
+        best = float(ckpt_resume.get("best_val", best))
+        best_epoch = ckpt_resume.get("best_epoch", best_epoch)
+        no_improve = int(ckpt_resume.get("no_improve", no_improve))
+
+    if start_epoch >= max_epochs:
+        print(f"[resume] start_epoch {start_epoch} >= configured epochs {max_epochs}; no new epochs will run unless you increase 'epochs'.")
 
     scaler = None  # GradScaler is CUDA-only; autocast on MPS may be unsupported in some torch versions
 
@@ -222,7 +254,7 @@ def main():
         print(f"[run] id={run_id}")
     print(f"[paths] ckpts={ckpt_dir} scores={scores_dir} log_csv={log_csv}")
 
-    for epoch in range(max_epochs):
+    for epoch in range(start_epoch, max_epochs):
         epoch_idx = epoch + 1
         train_loss = one_pass("train", train_loader)
         with torch.no_grad():
@@ -233,12 +265,26 @@ def main():
         lr_now = optim.param_groups[0]["lr"]
         print(f"[epoch {epoch_idx}] train {train_loss:.3f} | val {val_loss:.3f} | ppl {ppl:.2f} | lr {lr_now:.2e}")
 
+        improved = val_loss + 1e-6 < best
+        if improved:
+            best = val_loss
+            best_epoch = epoch_idx
+            no_improve = 0
+        else:
+            no_improve += 1
+
         ckpt_payload = {
             "model": model.state_dict(),
+            "optimizer": optim.state_dict(),
+            "scheduler": scheduler.state_dict() if scheduler is not None else None,
             "cfg": cfg,
             "epoch": epoch_idx,
             "val_loss": val_loss,
             "train_loss": train_loss,
+            "best_val": best,
+            "best_epoch": best_epoch,
+            "no_improve": no_improve,
+            "step": step,
         }
         torch.save(ckpt_payload, ckpt_dir / "last.pt")
         with log_csv.open("a", newline="") as f:
@@ -252,15 +298,11 @@ def main():
             "lr": lr_now,
         })
 
-        if val_loss + 1e-6 < best:
-            best = val_loss; no_improve = 0
-            best_epoch = epoch_idx
+        if improved:
             torch.save(ckpt_payload, ckpt_dir / "best.pt")
-        else:
-            no_improve += 1
-            if no_improve >= int(cfg.get("early_stop_patience", 5)):
-                print("[early-stopping] no improvement; stopping.")
-                break
+        elif no_improve >= int(cfg.get("early_stop_patience", 5)):
+            print("[early-stopping] no improvement; stopping.")
+            break
 
     if history:
         metrics = {

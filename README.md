@@ -40,6 +40,8 @@ Checkpoints land in `outputs/checkpoints/<RUN_ID>/` (`best.pt`, `last.pt`) and m
 chmod +x pipeline.sh
 ./pipeline.sh            # uses configs/tiny_mps.yaml by default
 ./pipeline.sh -c path/to/other.yaml  # supply your own config
+./pipeline.sh -r outputs/checkpoints/<RUN_ID>/best.pt  # resume from a checkpoint
+./pipeline.sh -c my.yaml -r outputs/checkpoints/<RUN_ID>/best.pt  # resume with custom cfg
 ```
 
 ## How to run the 6-step pipeline
@@ -61,6 +63,8 @@ Default trainer (AMP + cosine schedule + optional label smoothing):
 
 ```bash
 python -m src.codonlm.train_codon_lm --config configs/tiny_mps.yaml --run_id "$RUN_ID"
+# resume from a checkpoint
+python -m src.codonlm.train_codon_lm --config configs/tiny_mps.yaml --resume outputs/checkpoints/$RUN_ID/best.pt --run_id "$RUN_ID"
 ```
 
 Note: cosine+warmup is enabled by default and you can set `label_smoothing: 0.05` in the YAML to improve probability calibration (reduces overconfident spikes in next-token predictions).

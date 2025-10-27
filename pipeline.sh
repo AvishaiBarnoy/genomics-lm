@@ -7,18 +7,24 @@ conda activate codonlm
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 [-c|--config PATH]" >&2
+  echo "Usage: $0 [-c|--config PATH] [-r|--resume CHECKPOINT]" >&2
   exit 1
 }
 
 DEFAULT_CONF="configs/tiny_mps.yaml"
 CONF="$DEFAULT_CONF"
+RESUME=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -c|--config)
       [[ $# -lt 2 ]] && { echo "[error] --config requires a path" >&2; usage; }
       CONF="$2"
+      shift 2
+      ;;
+    -r|--resume)
+      [[ $# -lt 2 ]] && { echo "[error] --resume requires a path" >&2; usage; }
+      RESUME="$2"
       shift 2
       ;;
     -h|--help)
@@ -36,6 +42,17 @@ if [[ ! -f "$CONF" ]]; then
   usage
 fi
 
+if [[ -n "$RESUME" && ! -f "$RESUME" ]]; then
+  echo "[error] Resume checkpoint not found: $RESUME" >&2
+  usage
+fi
+
+if [[ -z "${RUN_ID:-}" && -n "$RESUME" ]]; then
+  if [[ "$RESUME" == */outputs/checkpoints/*/* ]]; then
+    RUN_ID=$(basename "$(dirname "$RESUME")")
+  fi
+fi
+
 # 0) Setup run id, log, and hardware info
 # Auto-generate RUN_ID from config if not provided
 RUN_ID=${RUN_ID:-$(python -m scripts.make_run_id "$CONF")}
@@ -45,6 +62,7 @@ LOG="$RUN_DIR/log.txt"
 
 echo "[info] run_id=${RUN_ID}" | tee "$LOG"
 echo "[info] config=${CONF}" | tee -a "$LOG"
+echo "[info] resume=${RESUME:-none}" | tee -a "$LOG"
 echo "[hardware] date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" | tee -a "$LOG"
 echo "[hardware] uname: $(uname -a)" | tee -a "$LOG"
 if command -v sysctl >/dev/null 2>&1; then
@@ -87,7 +105,11 @@ python -m src.codonlm.build_dataset \
 CKPT_ROOT="outputs/checkpoints/${RUN_ID}"
 SCORES_ROOT="outputs/scores/${RUN_ID}"
 Ttrain0=$(date +%s)
-python -m src.codonlm.train_codon_lm --config "$CONF" --run_id "${RUN_ID}" 2>&1 | tee -a "$LOG"
+TRAIN_ARGS=(--config "$CONF" --run_id "${RUN_ID}")
+if [[ -n "$RESUME" ]]; then
+  TRAIN_ARGS+=(--resume "$RESUME")
+fi
+python -m src.codonlm.train_codon_lm "${TRAIN_ARGS[@]}" 2>&1 | tee -a "$LOG"
 Ttrain1=$(date +%s)
 
 
