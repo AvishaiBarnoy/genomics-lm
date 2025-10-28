@@ -4,8 +4,6 @@ genomics-lm/
 ├─ main.sh                     # end-to-end data prep + training + quick eval
 ├─ analysis.sh                 # 6-step interpretability analysis for a run
 ├─ post_process.sh             # artifacts-only organizer for a run
-├─ pipeline.sh                 # DEPRECATED shim → main.sh
-├─ post_process_pipeline.sh    # DEPRECATED shim → analysis.sh
 ├─ env/
 │  ├─ conda-environment.yml
 │  └─ requirements.txt
@@ -18,6 +16,7 @@ genomics-lm/
 ├─ scripts/
 │  ├─ pipeline_prepare.py      # orchestrates dataset extraction/tokenization
 │  ├─ run_6step.sh             # runs the full interpretability suite
+│  ├─ run_eda.py               # optional exploratory summaries per run
 │  ├─ analyze_*.py             # Step 1–5 analysis utilities
 │  ├─ collect_artifacts_yaml.py
 │  ├─ generate_probe_labels.py

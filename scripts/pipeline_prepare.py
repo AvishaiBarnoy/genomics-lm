@@ -144,7 +144,7 @@ def _write_manifest(run_dir: Path, datasets: List[Dict[str, str]], block_size: i
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Prepare datasets for pipeline.sh")
+    ap = argparse.ArgumentParser(description="Prepare datasets for main.sh (data prep phase)")
     ap.add_argument("--config", required=True)
     ap.add_argument("--run-id", required=True)
     ap.add_argument("--run-dir", required=True)

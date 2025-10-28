@@ -69,22 +69,46 @@ Each run also records the dataset lineage in `runs/<RUN_ID>/combined_manifest.js
 You can append extra datasets from the CLI without touching the config:
 
 ```bash
-./pipeline.sh --dataset ecoli_o157,data/raw/GCF_000008865.2_ASM886v2_genomic.gbff,120
+./main.sh --dataset ecoli_o157,data/raw/GCF_000008865.2_ASM886v2_genomic.gbff,120
 ```
 
-## How to run the 6-step pipeline
+## Post-Training Analysis Suite
+
+The analysis suite includes:
+
+- Token frequencies and first-token distribution
+- Embedding PCA + nearest neighbors
+- Attention heatmaps
+- Next-token probes (basic predictive sanity checks)
+- Saliency maps (+ a short motif spotlight)
+- Linear probes with biology-aware labels (requires `probe_labels.csv`)
+
+Quick start (recommended):
+
+```bash
+# Run all analyses for a trained run
+./analysis.sh <RUN_ID> [configs/tiny_mps.yaml]
+```
+
+Or invoke individual steps:
 
 ```bash
 RUN_ID=2025-09-30_tiny_2L4H_d128_e5
-python -m scripts.collect_artifacts_yaml $RUN_ID path/to/tiny_mps.yaml
+python -m scripts.collect_artifacts_yaml $RUN_ID configs/tiny_mps.yaml
 python -m scripts.analyze_frequencies   $RUN_ID
 python -m scripts.analyze_embeddings    $RUN_ID
 python -m scripts.analyze_attention     $RUN_ID
 python -m scripts.probe_next_token      $RUN_ID
 python -m scripts.analyze_saliency      $RUN_ID
+python -m scripts.report_top_saliency   $RUN_ID --window 9 --top 20
+
+# Linear probes require token labels
+python -m scripts.generate_probe_labels $RUN_ID
 python -m scripts.probe_linear          $RUN_ID
-python -m scripts.summarize_one_cds     $RUN_ID  # optional
-python -m scripts.compare_runs $RUN_ID <other_run_ids...>
+
+# Optional: summarize and compare
+python -m scripts.summarize_one_cds     $RUN_ID
+python -m scripts.compare_runs          $RUN_ID <other_run_ids...>
 ```
 
 Default trainer (AMP + cosine schedule + optional label smoothing):
@@ -103,8 +127,6 @@ python -m src.codonlm.train_codon_lm --config configs/tiny_mps.yaml \
 
 Note: cosine+warmup is enabled by default and you can set `label_smoothing: 0.05` in the YAML to improve probability calibration (reduces overconfident spikes in next-token predictions).
 
-Deprecated v1 scripts have been removed; `src/codonlm/train_codon_lm.py` is now the canonical trainer. Use `configs/tiny_mps.yaml` (or your own YAML) for reproducible runs.
-
 Convenience wrappers:
 
 ```bash
@@ -113,7 +135,12 @@ Convenience wrappers:
 
 # full 6-step analysis
 ./analysis.sh <RUN_ID> [CONFIG]
+
+# optional exploratory EDA bundle
+python -m scripts.run_eda <RUN_ID>
 ```
+
+`analysis.sh` drives the maintained CLI modules under `scripts/`. The legacy `analysis/` folder holds optional exploratory helpers; the `scripts.run_eda` wrapper invokes them and saves outputs to `runs/<RUN_ID>/analysis/eda`.
 
 For Step 6 linear probes:
 
