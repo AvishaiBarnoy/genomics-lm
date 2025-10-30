@@ -29,6 +29,9 @@ warmup_steps: 300
 min_lr: 1e-5
 plateau_patience: 2
 early_stop_patience: 5
+compile: false         # enable torch.compile for training loop (PyTorch 2.x)
+compile_mode: reduce-overhead
+matmul_precision: high # torch.set_float32_matmul_precision value (high | medium | highest)
 
 out_dir: outputs/checkpoints
 scores_dir: outputs/scores

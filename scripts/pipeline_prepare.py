@@ -119,14 +119,46 @@ def _ensure_dataset(entry: Dict[str, str], windows_per_seq: int, val_frac: float
 
 
 def _stack_npz(paths: List[str], out_path: Path) -> None:
-    xs, ys = [], []
+    if not paths:
+        raise ValueError("No NPZ paths provided for stacking")
+
+    total = 0
+    x_tail = None
+    y_tail = None
+    x_dtype = None
+    y_dtype = None
+
+    # First pass: determine total rows and shapes without keeping arrays resident
     for path in paths:
         with np.load(path, allow_pickle=False) as blob:
-            xs.append(blob["X"])
-            ys.append(blob["Y"])
-    X = np.concatenate(xs, axis=0)
-    Y = np.concatenate(ys, axis=0)
-    np.savez_compressed(out_path, X=X, Y=Y)
+            X = np.asarray(blob["X"])
+            Y = np.asarray(blob["Y"])
+            if x_tail is None:
+                x_tail = X.shape[1:]
+                y_tail = Y.shape[1:]
+                x_dtype = X.dtype
+                y_dtype = Y.dtype
+            total += X.shape[0]
+
+    if total == 0:
+        np.savez_compressed(out_path, X=np.zeros((0,) + x_tail, dtype=x_dtype), Y=np.zeros((0,) + y_tail, dtype=y_dtype))
+        return
+
+    X_out = np.empty((total,) + x_tail, dtype=x_dtype)
+    Y_out = np.empty((total,) + y_tail, dtype=y_dtype)
+
+    # Second pass: copy chunk-by-chunk to limit peak memory usage
+    offset = 0
+    for path in paths:
+        with np.load(path, allow_pickle=False) as blob:
+            X = np.asarray(blob["X"])
+            Y = np.asarray(blob["Y"])
+            rows = X.shape[0]
+            X_out[offset:offset + rows] = X
+            Y_out[offset:offset + rows] = Y
+            offset += rows
+
+    np.savez_compressed(out_path, X=X_out, Y=Y_out)
 
 
 def _write_manifest(run_dir: Path, datasets: List[Dict[str, str]], block_size: int, windows_per_seq: int, val_frac: float, test_frac: float, force: bool) -> Path:

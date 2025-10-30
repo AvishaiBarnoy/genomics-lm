@@ -16,6 +16,7 @@ genomics-lm/
 ├─ scripts/
 │  ├─ pipeline_prepare.py      # orchestrates dataset extraction/tokenization
 │  ├─ run_6step.sh             # runs the full interpretability suite
+│  ├─ query_model.py           # interactive/query interface for inference
 │  ├─ run_eda.py               # optional exploratory summaries per run
 │  ├─ analyze_*.py             # Step 1–5 analysis utilities
 │  ├─ collect_artifacts_yaml.py

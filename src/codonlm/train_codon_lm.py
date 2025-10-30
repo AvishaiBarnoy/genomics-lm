@@ -86,13 +86,37 @@ class PackedDataset(Dataset):
             paths = [paths]
         else:
             paths = list(paths)
-        xs, ys = [], []
+        totals = []
+        tail_shape = None
+        y_tail_shape = None
         for path in paths:
             with np.load(path, allow_pickle=False) as data:
-                xs.append(np.asarray(data["X"], dtype=np.int64))
-                ys.append(np.asarray(data["Y"], dtype=np.int64))
-        self.X = torch.from_numpy(np.concatenate(xs, axis=0)).long()
-        self.Y = torch.from_numpy(np.concatenate(ys, axis=0)).long()
+                X = data["X"]
+                Y = data["Y"]
+                if tail_shape is None:
+                    tail_shape = X.shape[1:]
+                    y_tail_shape = Y.shape[1:]
+                totals.append(X.shape[0])
+        total_rows = sum(totals)
+        if total_rows == 0:
+            self.X = torch.empty((0,) + (tail_shape or (0,)), dtype=torch.long)
+            self.Y = torch.empty((0,) + (y_tail_shape or (0,)), dtype=torch.long)
+            return
+
+        X_agg = np.empty((total_rows,) + tail_shape, dtype=np.int64)
+        Y_agg = np.empty((total_rows,) + y_tail_shape, dtype=np.int64)
+
+        offset = 0
+        for path in paths:
+            with np.load(path, allow_pickle=False) as data:
+                X = np.asarray(data["X"], dtype=np.int64)
+                Y = np.asarray(data["Y"], dtype=np.int64)
+                rows = X.shape[0]
+                X_agg[offset:offset + rows] = X
+                Y_agg[offset:offset + rows] = Y
+                offset += rows
+        self.X = torch.from_numpy(X_agg)
+        self.Y = torch.from_numpy(Y_agg)
 
     def __len__(self):
         return self.X.shape[0]
@@ -138,6 +162,18 @@ def main():
     if resume_path and not os.path.isfile(resume_path):
         raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
 
+    matmul_precision = cfg.get("matmul_precision")
+    if matmul_precision:
+        setter = getattr(torch, "set_float32_matmul_precision", None)
+        if callable(setter):
+            try:
+                setter(str(matmul_precision))
+                print(f"[matmul] float32 precision set to {matmul_precision}")
+            except Exception as exc:
+                print(f"[matmul] failed to set precision '{matmul_precision}': {exc}")
+        else:
+            print("[matmul] torch.set_float32_matmul_precision unavailable in this build.")
+
     train_ds = PackedDataset(train_paths)
     val_ds = PackedDataset(val_paths)
     train_loader = DataLoader(train_ds, batch_size=cfg["batch_size"], shuffle=True)
@@ -153,6 +189,20 @@ def main():
         use_checkpoint=bool(cfg.get("use_checkpoint", False)),
         label_smoothing=float(cfg.get("label_smoothing", 0.0)),
     ).to(device)
+
+    compile_requested = bool(cfg.get("compile", False))
+    compile_mode = cfg.get("compile_mode", "default")
+
+    if compile_requested:
+        torch_compile = getattr(torch, "compile", None)
+        if torch_compile:
+            try:
+                model = torch_compile(model, mode=compile_mode)
+                print(f"[compile] torch.compile enabled (mode={compile_mode})")
+            except Exception as exc:
+                print(f"[compile] torch.compile failed ({exc}); continuing without compilation.")
+        else:
+            print("[compile] torch.compile not available in this PyTorch build.")
 
     # Optimizer selection
     if cfg.get("optimizer", "adamw").lower() == "adafactor":

@@ -127,6 +127,14 @@ python -m src.codonlm.train_codon_lm --config configs/tiny_mps.yaml \
 
 Note: cosine+warmup is enabled by default and you can set `label_smoothing: 0.05` in the YAML to improve probability calibration (reduces overconfident spikes in next-token predictions).
 
+### Performance tuning
+
+`configs/tiny_mps.yaml` exposes a few toggles for experimentation:
+
+- `compile: true` enables `torch.compile` (PyTorch ≥ 2.0) for potential speed-ups; adjust `compile_mode` (`reduce-overhead`, `default`, `max-autotune`) if desired.
+- `matmul_precision: high` calls `torch.set_float32_matmul_precision`, which can accelerate MPS matmuls; try `medium` or `highest` depending on accuracy/perf trade-offs.
+- `use_checkpoint: true` still forces gradient checkpointing; leave it `false` unless memory is tight. Automatic detection of OOM scenarios is not yet supported—consider enabling it manually if you encounter memory limits.
+
 Convenience wrappers:
 
 ```bash
@@ -155,3 +163,23 @@ Saliency/motif spotlight:
 ```bash
 python -m scripts.report_top_saliency $RUN_ID --window 9 --top 20
 ```
+
+## Inference and interactive queries
+
+You can query a trained model for next-codon predictions, generate continuations, or score the likelihood of a sequence:
+
+```bash
+# top‑k next-codon probabilities for a DNA prompt
+python -m scripts.query_model <RUN_ID> --mode next --dna ATGAAACCC --topk 5
+
+# sample a continuation (stops at <eog> or after max_new tokens)
+python -m scripts.query_model <RUN_ID> --mode generate --dna ATG --max_new 30 --temperature 0.8 --topk 5
+
+# score the negative log-likelihood and perplexity of a sequence
+python -m scripts.query_model <RUN_ID> --mode score --dna ATGAAATGA
+
+# interactive REPL (enter DNA prompts line-by-line)
+python -m scripts.query_model <RUN_ID> --interactive
+```
+
+The interface reads `runs/<RUN_ID>/weights.pt` and `runs/<RUN_ID>/itos.txt` created during post‑processing.
