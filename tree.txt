@@ -19,7 +19,9 @@ genomics-lm/
 │  ├─ query_model.py           # interactive/query interface for inference
 │  ├─ run_eda.py               # optional exploratory summaries per run
 │  ├─ analyze_*.py             # Step 1–5 analysis utilities
+│  ├─ evaluate_test.py         # test cross-entropy/perplexity and metrics merge
 │  ├─ collect_artifacts_yaml.py
+│  ├─ sanity_kpis.py           # quick KPIs on held-out subset
 │  ├─ generate_probe_labels.py
 │  ├─ probe_linear.py
 │  ├─ report_top_saliency.py

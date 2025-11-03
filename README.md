@@ -183,3 +183,23 @@ python -m scripts.query_model <RUN_ID> --interactive
 ```
 
 The interface reads `runs/<RUN_ID>/weights.pt` and `runs/<RUN_ID>/itos.txt` created during post‑processing.
+## Benchmarking & Evaluation
+
+Evaluate a trained run on the held‑out test split and compute sanity KPIs:
+
+```bash
+# Test cross‑entropy and perplexity; updates outputs/scores/<RUN_ID>/metrics.json
+python -m scripts.evaluate_test --run_dir outputs/checkpoints/<RUN_ID>
+
+# Sanity KPIs (codon_corr, frameshift_delta, start/stop deltas, syn_gap)
+python -m scripts.sanity_kpis --run_dir outputs/checkpoints/<RUN_ID>
+
+# Compare multiple runs and produce a table + plots
+python -m scripts.compare_runs
+# outputs:
+#   outputs/scores/compare/summary.csv
+#   outputs/scores/compare/ppl_vs_params.png
+#   outputs/scores/compare/val_vs_test_ppl.png
+```
+
+The benchmarking scripts merge results into each run’s `outputs/scores/<RUN_ID>/metrics.json` without overwriting unrelated fields.
