@@ -15,13 +15,22 @@ class CausalSelfAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.register_buffer("mask", torch.tril(torch.ones(block_size, block_size)).unsqueeze(0).unsqueeze(0))
 
-    def forward(self, x):
+    def forward(self, x, attn_mask=None):
         B, T, C = x.size()
         k = self.key(x).view(B, T, self.n_head, C//self.n_head).transpose(1,2)
         q = self.query(x).view(B, T, self.n_head, C//self.n_head).transpose(1,2)
         v = self.value(x).view(B, T, self.n_head, C//self.n_head).transpose(1,2)
         att = (q @ k.transpose(-2,-1)) / math.sqrt(k.size(-1))
-        att = att.masked_fill(self.mask[:,:,:T,:T]==0, float('-inf'))
+        base = self.mask[:,:,:T,:T]
+        if attn_mask is not None:
+            # attn_mask expected shape (B,1,T,T) boolean; combine with causal mask
+            if attn_mask.dtype != base.dtype:
+                attn_mask = attn_mask.to(base.dtype)
+            # broadcast batch over heads
+            combined = (base > 0) & (attn_mask > 0)
+            att = att.masked_fill(~combined, float('-inf'))
+        else:
+            att = att.masked_fill(base==0, float('-inf'))
         att = torch.softmax(att, dim=-1)
         y = att @ v
         y = y.transpose(1,2).contiguous().view(B, T, C)
@@ -40,17 +49,18 @@ class Block(nn.Module):
             nn.Dropout(dropout),
         )
 
-    def forward(self, x):
-        x = x + self.attn(self.ln1(x))
+    def forward(self, x, attn_mask=None):
+        x = x + self.attn(self.ln1(x), attn_mask=attn_mask)
         x = x + self.mlp(self.ln2(x))
         return x
 
 class TinyGPT(nn.Module):
-    def __init__(self, vocab_size, block_size, n_layer=3, n_head=4, n_embd=256, dropout=0.1, use_checkpoint=False, label_smoothing: float = 0.0):
+    def __init__(self, vocab_size, block_size, n_layer=3, n_head=4, n_embd=256, dropout=0.1, use_checkpoint=False, label_smoothing: float = 0.0, sep_id: int | None = 3):
         super().__init__()
         self.block_size = block_size
         self.use_checkpoint = use_checkpoint
         self.label_smoothing = float(label_smoothing)
+        self.sep_id = sep_id
         self.tok_emb = nn.Embedding(vocab_size, n_embd)
         self.pos_emb = nn.Embedding(block_size, n_embd)
         self.drop = nn.Dropout(dropout)
@@ -65,17 +75,27 @@ class TinyGPT(nn.Module):
         x = self.tok_emb(idx) + self.pos_emb(pos)
         x = self.drop(x)
 
+        attn_mask = None
+        if self.sep_id is not None:
+            # Build block-diagonal segment mask from <SEP> boundaries
+            sep = (idx == int(self.sep_id))
+            # cumulative segment id increments after SEP; ensure SEP belongs to previous segment
+            seg = torch.cumsum(sep, dim=1)
+            # allow attention only within equal seg ids
+            attn_mask = (seg.unsqueeze(-1) == seg.unsqueeze(-2))  # (B,T,T)
+            attn_mask = attn_mask.unsqueeze(1)  # (B,1,T,T)
+
         if self.use_checkpoint and self.training:
             for blk in self.blocks:
                 # Explicitly pass use_reentrant to silence future deprecation warnings.
                 # Fallback for older PyTorch that doesn't support the kwarg.
                 try:
-                    x = checkpoint(lambda _x: blk(_x), x, use_reentrant=False)
+                    x = checkpoint(lambda _x: blk(_x, attn_mask=attn_mask), x, use_reentrant=False)
                 except TypeError:
-                    x = checkpoint(lambda _x: blk(_x), x)
+                    x = checkpoint(lambda _x: blk(_x, attn_mask=attn_mask), x)
         else:
             for blk in self.blocks:
-                x = blk(x)
+                x = blk(x, attn_mask=attn_mask)
 
         x = self.ln_f(x)
         logits = self.head(x)

@@ -183,6 +183,32 @@ python -m scripts.query_model <RUN_ID> --interactive
 ```
 
 The interface reads `runs/<RUN_ID>/weights.pt` and `runs/<RUN_ID>/itos.txt` created during post‑processing.
+
+## CDS-only training and segment boundaries
+
+This repository uses codon tokens with explicit segment markers:
+
+- Specials: `<PAD>`, `<BOS_CDS>`, `<EOS_CDS>`, `<SEP>`
+- A single CDS encodes as: `[<BOS_CDS>, CODON..., STOP, <EOS_CDS>]`
+- When packing multiple CDS, we place `<SEP>` between them and include `<EOS_CDS>` before each `<SEP>`.
+
+The attention mask blocks cross‑CDS attention: tokens may attend only within their segment (between two `<SEP>`s). Generation can stop early when:
+
+- Hitting `<EOS_CDS>` (use `--stop_on_eos`), or
+- Hitting a biological stop codon (TAA/TAG/TGA) (use `--stop_on_bio_stop`).
+
+Examples:
+
+```bash
+# Predict next codon probabilities
+python -m scripts.infer_predict_next_codon --run_dir outputs/checkpoints/<RUN_ID> --prompt "ATG GCT GCT" --topk 10
+
+# Generate a CDS until a stop codon or EOS
+python -m scripts.infer_generate_cds --run_dir outputs/checkpoints/<RUN_ID> --stop_on_bio_stop --max_codons 300
+
+# Score per-position ΔlogP for a provided CDS and plot a heatmap
+python -m scripts.infer_score_mutations --run_dir outputs/checkpoints/<RUN_ID> --seq "ATG GCT ... TGA" --out_dir outputs/analysis/<RUN_ID>
+```
 ## Benchmarking & Evaluation
 
 Evaluate a trained run on the held‑out test split and compute sanity KPIs:

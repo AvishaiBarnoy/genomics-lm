@@ -82,19 +82,76 @@ def main():
 
     Path(args.out_dir).mkdir(parents=True, exist_ok=True)
     def pack(name, subset):
+        """
+        Pack multiple CDS into windows up to block_size with <SEP> separators to prevent cross-ORF leakage.
+
+        Policy:
+          - Each CDS already includes <BOS_CDS> and <EOS_CDS> from tokenization.
+          - Insert <SEP> (id=3) between CDS segments when space permits.
+          - If a CDS overflows the remaining space, truncate and carry remainder to the next window.
+        """
+        SEP_ID = 3  # matches codon_tokenize.py SPECIALS order
+        PAD_ID = 0
+
+        # Prepare per-sequence offsets to resume when truncated
+        seqs = [arr for arr in subset if len(arr) > 2]
+        if not seqs:
+            X = np.zeros((0, args.block_size), dtype=np.int32)
+            Y = np.zeros((0, args.block_size), dtype=np.int32)
+            out = Path(args.out_dir) / f"{name}_bs{args.block_size}.npz"
+            np.savez_compressed(out, X=X, Y=Y)
+            print(f"[build] {name}: {X.shape} → {out}")
+            return
+
+        # Number of windows: keep similar scale as before
+        windows_goal = max(1, args.windows_per_seq * len(seqs))
         Xs, Ys = [], []
-        for arr in subset:
-            if len(arr)<=2: continue
-            for _ in range(args.windows_per_seq):
-                if len(arr) <= args.block_size+1:
-                    x = arr[:-1]; y = arr[1:]
-                    pad = [0]*max(0, args.block_size-len(x))
-                    x=(x+pad)[:args.block_size]; y=(y+pad)[:args.block_size]
-                else:
-                    i = rng.randrange(0, len(arr)-args.block_size-1)
-                    x = arr[i:i+args.block_size]
-                    y = arr[i+1:i+1+args.block_size]
-                Xs.append(x); Ys.append(y)
+
+        # Create an index queue we can shuffle each pass
+        indices = list(range(len(seqs)))
+        offsets = [0] * len(seqs)
+        cur_ptr = 0
+
+        for _ in range(windows_goal):
+            rng.shuffle(indices)
+            buf: List[int] = []
+            # Fill window up to block_size
+            for idx in indices:
+                if len(buf) >= args.block_size:
+                    break
+                arr = seqs[idx]
+                off = offsets[idx]
+                if off >= len(arr):
+                    continue
+                # How many tokens can we copy from this CDS
+                room = args.block_size - len(buf)
+                take = min(room, len(arr) - off)
+                if take <= 0:
+                    continue
+                buf.extend(arr[off : off + take])
+                offsets[idx] += take
+                # If CDS ended and we still have room, place a SEP
+                if offsets[idx] >= len(arr) and len(buf) < args.block_size:
+                    buf.append(SEP_ID)
+            # Build x/y with padding
+            x = buf[:-1]
+            y = buf[1:]
+            # Ensure length
+            if len(x) < args.block_size:
+                pad_n = args.block_size - len(x)
+                x = x + [PAD_ID] * pad_n
+                y = y + [PAD_ID] * pad_n
+            else:
+                x = x[: args.block_size]
+                y = y[: args.block_size]
+            Xs.append(x)
+            Ys.append(y)
+
+        X = np.array(Xs, dtype=np.int32)
+        Y = np.array(Ys, dtype=np.int32)
+        out = Path(args.out_dir) / f"{name}_bs{args.block_size}.npz"
+        np.savez_compressed(out, X=X, Y=Y)
+        print(f"[build] {name}: {X.shape} → {out}")
         X = np.array(Xs, dtype=np.int32)
         Y = np.array(Ys, dtype=np.int32)
         out = Path(args.out_dir)/f"{name}_bs{args.block_size}.npz"
