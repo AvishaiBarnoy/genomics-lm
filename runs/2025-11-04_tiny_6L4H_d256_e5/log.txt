@@ -1,0 +1,94 @@
+[info] run_id=2025-11-04_tiny_6L4H_d256_e5
+[info] config=configs/tiny_mps.yaml
+[info] resume=none
+[hardware] date: 2025-11-04 21:45:51 UTC
+[hardware] uname: Darwin MacBook-Pro.local 25.0.0 Darwin Kernel Version 25.0.0: Wed Sep 17 21:38:03 PDT 2025; root:xnu-12377.1.9~141/RELEASE_ARM64_T8112 arm64
+[hardware] cpu: Apple M2
+[hardware] python: 3.11.13
+[hardware] torch: 2.2.2
+[hardware] mps_available: True
+[hardware] cuda_available: False
+[hardware] cuda_device_count: 0
+[config] snapshot:
+[config] vocab_size: 69
+[config] block_size: 256
+[config] n_layer: 6
+[config] n_head: 4
+[config] n_embd: 256 
+[config] dropout: 0.1
+[config] 
+[config] windows_per_seq: 2
+[config] val_frac: 0.1
+[config] test_frac: 0.1
+[config] 
+[config] datasets:
+[config]   - name: ecoli_k12
+[config]     gbff: data/raw/Enterobacteriaceae/GCF_000005845.gbff
+[config]     min_len: 90
+[config] 
+[config] batch_size: 2
+[config] grad_accum_steps: 16
+[config] lr: 0.0003
+[config] weight_decay: 0.05
+[config] epochs: 5
+[config] 
+[config] optimizer: "adamw"
+[config] amp: true
+[config] use_checkpoint: true
+[config] scheduler: "cosine"
+[config] label_smoothing: 0.05
+[config] warmup_steps: 300
+[config] min_lr: 1e-5
+[config] plateau_patience: 2
+[config] early_stop_patience: 5
+[config] compile: false         # enable torch.compile for training loop (PyTorch 2.x)
+[config] compile_mode: reduce-overhead
+[config] matmul_precision: high # torch.set_float32_matmul_precision value (high | medium | highest)
+[config] 
+[config] out_dir: outputs/checkpoints
+[config] scores_dir: outputs/scores
+[config] log_csv: "curves.csv"
+[config] seed: 1337
+[config] itos_path: data/processed/itos_codon.txt
+[config] saliency_window: 9
+[config] saliency_top: 20
+[info] extra_datasets_cli=none
+[prepare] skip extract ecoli_k12
+[prepare] skip tokenize ecoli_k12
+[prepare] skip build ecoli_k12
+[prepare] wrote runs/2025-11-04_tiny_6L4H_d256_e5/pipeline_prepare.json
+[info] combined_manifest=data/processed/combined/2025-11-04_tiny_6L4H_d256_e5/manifest.json
+[info] train_npz=data/processed/combined/2025-11-04_tiny_6L4H_d256_e5/train_bs256.npz
+[info] val_npz=data/processed/combined/2025-11-04_tiny_6L4H_d256_e5/val_bs256.npz
+[info] test_npz=data/processed/combined/2025-11-04_tiny_6L4H_d256_e5/test_bs256.npz
+[info] primary_dna=data/processed/ecoli_k12/cds_dna.txt
+[matmul] float32 precision set to high
+[run] id=2025-11-04_tiny_6L4H_d256_e5
+[paths] ckpts=outputs/checkpoints/2025-11-04_tiny_6L4H_d256_e5 scores=outputs/scores/2025-11-04_tiny_6L4H_d256_e5 log_csv=/Users/User/github/genomics-lm/outputs/scores/2025-11-04_tiny_6L4H_d256_e5/curves.csv
+[epoch 1] train 50.200 | val 5.842 | ppl 344.40 | lr 2.15e-04
+[epoch 2] train 5.827 | val 4.125 | ppl 61.85 | lr 2.81e-04
+[epoch 3] train 5.587 | val 4.098 | ppl 60.20 | lr 1.82e-04
+[epoch 4] train 5.593 | val 4.073 | ppl 58.74 | lr 6.35e-05
+[epoch 5] train 5.609 | val 4.099 | ppl 60.25 | lr 1.00e-05
+[state] missing: []
+[state] unexpected: []
+[state] missing: []
+[state] unexpected: []
+[state] missing: []
+[state] unexpected: []
+[save] outputs/scores/2025-11-04_tiny_6L4H_d256_e5/one_cds__best.tsv
+
+[state] missing: []
+[state] unexpected: []
+Using TinyGPT from: /Users/User/github/genomics-lm/src/codonlm/model_tiny_gpt.py
+Model cfg: {'vocab_size': 69, 'block_size': 256, 'n_layer': 6, 'n_head': 4, 'n_embd': 256, 'dropout': 0.1, 'windows_per_seq': 2, 'val_frac': 0.1, 'test_frac': 0.1, 'datasets': [{'name': 'ecoli_k12', 'gbff': 'data/raw/Enterobacteriaceae/GCF_000005845.gbff', 'min_len': 90}], 'batch_size': 2, 'grad_accum_steps': 16, 'lr': 0.0003, 'weight_decay': 0.05, 'epochs': 5, 'optimizer': 'adamw', 'amp': True, 'use_checkpoint': True, 'scheduler': 'cosine', 'label_smoothing': 0.05, 'warmup_steps': 300, 'min_lr': '1e-5', 'plateau_patience': 2, 'early_stop_patience': 5, 'compile': False, 'compile_mode': 'reduce-overhead', 'matmul_precision': 'high', 'out_dir': 'outputs/checkpoints', 'scores_dir': 'outputs/scores', 'log_csv': 'curves.csv', 'seed': 1337, 'itos_path': 'data/processed/itos_codon.txt', 'saliency_window': 9, 'saliency_top': 20, 'train_npz': ['data/processed/combined/2025-11-04_tiny_6L4H_d256_e5/train_bs256.npz'], 'val_npz': ['data/processed/combined/2025-11-04_tiny_6L4H_d256_e5/val_bs256.npz'], 'test_npz': ['data/processed/combined/2025-11-04_tiny_6L4H_d256_e5/test_bs256.npz'], 'run_id': '2025-11-04_tiny_6L4H_d256_e5'}
+Model device: mps:0
+MPS available: True
+[motifs] collected windows: 1702272
+[motifs] inertia: 880.5819091796875
+[motifs] saved outputs/motif_clusters.npz
+[collect] saved artifacts for 2025-11-04_tiny_6L4H_d256_e5 → runs/2025-11-04_tiny_6L4H_d256_e5
+[timing] training_sec=11076
+[timing] training_time=3 hours, 4 minutes, 36 seconds
+[timing] total_sec=12406
+[timing] total_time=3 hours, 26 minutes, 46 seconds

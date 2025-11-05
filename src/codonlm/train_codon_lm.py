@@ -174,11 +174,29 @@ def main():
         else:
             print("[matmul] torch.set_float32_matmul_precision unavailable in this build.")
 
+    # Optional: derive embedding size from per-head dimension
+    if "d_head" in cfg and cfg.get("n_head"):
+        try:
+            cfg["n_embd"] = int(cfg["d_head"]) * int(cfg["n_head"])
+            print(f"[dims] using d_head={cfg['d_head']} × n_head={cfg['n_head']} → n_embd={cfg['n_embd']}")
+        except Exception as exc:
+            print(f"[dims] failed to derive n_embd from d_head: {exc}")
+
     train_ds = PackedDataset(train_paths)
     val_ds = PackedDataset(val_paths)
-    train_loader = DataLoader(train_ds, batch_size=cfg["batch_size"], shuffle=True)
-    val_loader   = DataLoader(val_ds, batch_size=cfg["batch_size"])
+    num_workers = int(cfg.get("num_workers", 0))
+    pin_memory = bool(cfg.get("pin_memory", False))
+    prefetch_factor = int(cfg.get("prefetch_factor", 2)) if num_workers > 0 else None
+    persistent_workers = bool(cfg.get("persistent_workers", True)) if num_workers > 0 else False
+    dl_kwargs = dict(num_workers=num_workers, pin_memory=pin_memory)
+    if prefetch_factor is not None:
+        dl_kwargs["prefetch_factor"] = prefetch_factor
+    if persistent_workers:
+        dl_kwargs["persistent_workers"] = True
+    train_loader = DataLoader(train_ds, batch_size=cfg["batch_size"], shuffle=True, **dl_kwargs)
+    val_loader   = DataLoader(val_ds, batch_size=cfg["batch_size"], **dl_kwargs)
 
+    sep_mask_enabled = bool(cfg.get("sep_mask_enabled", True))
     model = TinyGPT(
         cfg["vocab_size"],
         cfg["block_size"],
@@ -188,6 +206,7 @@ def main():
         dropout=cfg["dropout"],
         use_checkpoint=bool(cfg.get("use_checkpoint", False)),
         label_smoothing=float(cfg.get("label_smoothing", 0.0)),
+        sep_id=(3 if sep_mask_enabled else None),
     ).to(device)
 
     compile_requested = bool(cfg.get("compile", False))
@@ -224,10 +243,10 @@ def main():
     base_lr = float(cfg["lr"])
 
     max_epochs = int(cfg.get("epochs", 5))
+    steps_per_epoch = math.ceil(len(train_loader) / max(1, gacc))
+    total_steps = max(1, steps_per_epoch * max_epochs)
     use_cosine = scheduler_name == "cosine"
     if use_cosine:
-        steps_per_epoch = math.ceil(len(train_loader) / max(1, gacc))
-        total_steps = max(1, steps_per_epoch * max_epochs)
         warmup_for_lambda = max(1, warmup_steps)
         min_lr_ratio = (min_lr / base_lr) if base_lr > 0 else 0.0
 
@@ -342,6 +361,13 @@ def main():
     if run_id:
         print(f"[run] id={run_id}")
     print(f"[paths] ckpts={ckpt_dir} scores={scores_dir} log_csv={log_csv}")
+    n_params = sum(p.numel() for p in model.parameters())
+    print(f"[model] params={n_params} sep_mask_enabled={sep_mask_enabled}")
+    print(f"[loader] num_workers={num_workers} pin_memory={pin_memory} prefetch_factor={prefetch_factor} persistent_workers={persistent_workers}")
+    print(
+        f"[train] starting: epochs={max_epochs}, steps_per_epoch={steps_per_epoch}, total_steps={total_steps}, "
+        f"batch_size={cfg['batch_size']}, grad_accum={gacc}, scheduler={scheduler_name}"
+    )
 
     for epoch in range(start_epoch, max_epochs):
         epoch_idx = epoch + 1

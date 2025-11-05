@@ -1,8 +1,9 @@
 vocab_size: 69
+
 block_size: 256
-n_layer: 6
-n_head: 4
-n_embd: 384
+n_layer: 12 
+n_head: 6
+n_embd: 384 
 dropout: 0.1
 
 windows_per_seq: 2
@@ -40,3 +41,9 @@ seed: 1337
 itos_path: data/processed/itos_codon.txt
 saliency_window: 9
 saliency_top: 20
+pack_mode: "multi"          # build_dataset: 'multi' packs multiple CDS per window; 'single' keeps one CDS per window
+sep_mask_enabled: true      # TinyGPT: block attention across <SEP> boundaries
+num_workers: 0              # DataLoader workers
+pin_memory: false
+prefetch_factor: 2
+persistent_workers: true

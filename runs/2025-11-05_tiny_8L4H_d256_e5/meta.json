@@ -1,0 +1,20 @@
+{
+  "checkpoint_path": "/Users/User/github/genomics-lm/outputs/checkpoints/2025-11-05_tiny_8L4H_d256_e5/best.pt",
+  "config_path": "/Users/User/github/genomics-lm/configs/tiny_mps.yaml",
+  "model_spec": {
+    "block_size": 256,
+    "dropout": 0.1,
+    "label_smoothing": 0.05,
+    "model_type": "tiny_gpt",
+    "n_embd": 256,
+    "n_head": 4,
+    "n_layer": 8,
+    "use_checkpoint": true,
+    "vocab_size": 69
+  },
+  "out_dir": "/Users/User/github/genomics-lm/outputs/checkpoints",
+  "run_id": "2025-11-05_tiny_8L4H_d256_e5",
+  "token_count": 69,
+  "val_npz": "/Users/User/github/genomics-lm/data/processed/combined/2025-11-05_tiny_8L4H_d256_e5/val_bs256.npz",
+  "val_ppl": 54.92165644138145
+}

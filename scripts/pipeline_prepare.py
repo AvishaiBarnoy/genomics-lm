@@ -100,7 +100,7 @@ def _ensure_dataset(entry: Dict[str, str], windows_per_seq: int, val_frac: float
         print(f"[prepare] skip tokenize {entry['name']}")
 
     if force or not (train.exists() and val.exists() and test.exists()):
-        cmds.append([
+        cmd = [
             "python", "-m", "src.codonlm.build_dataset",
             "--ids", str(ids),
             "--group_meta", str(meta),
@@ -109,7 +109,14 @@ def _ensure_dataset(entry: Dict[str, str], windows_per_seq: int, val_frac: float
             "--val_frac", str(val_frac),
             "--test_frac", str(test_frac),
             "--out_dir", str(train.parent),
-        ])
+        ]
+        # optional packing mode (single|multi)
+        try:
+            pm = pack_mode
+        except NameError:
+            pm = "multi"
+        cmd += ["--pack_mode", pm]
+        cmds.append(cmd)
     else:
         print(f"[prepare] skip build {entry['name']}")
 

@@ -9,7 +9,7 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<USAGE
-Usage: $0 [-c|--config PATH] [-r|--resume CHECKPOINT] [--dataset NAME,GBFF[,MIN_LEN]] [--force]
+Usage: $0 [-c|--config PATH] [-r|--resume CHECKPOINT] [--dataset NAME,GBFF[,MIN_LEN]] [--force] [--with-artifacts] [--with-motifs]
 USAGE
   exit 1
 }
@@ -27,6 +27,8 @@ CONF="$DEFAULT_CONF"
 RESUME=""
 FORCE=0
 EXTRA_DATASETS=()
+WITH_ARTIFACTS=0
+WITH_MOTIFS=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -41,6 +43,10 @@ while [[ $# -gt 0 ]]; do
       EXTRA_DATASETS+=("$2"); shift 2 ;;
     --force)
       FORCE=1; shift ;;
+    --with-artifacts)
+      WITH_ARTIFACTS=1; shift ;;
+    --with-motifs)
+      WITH_MOTIFS=1; shift ;;
     -h|--help)
       usage ;;
     *) echo "[error] Unknown argument: $1" >&2; usage ;;
@@ -92,6 +98,23 @@ echo "[config] snapshot:" | tee -a "$LOG"
 sed 's/^/[config] /' "$CONF" | tee -a "$LOG"
 echo "[info] extra_datasets_cli=${EXTRA_DATASETS[*]:-none}" | tee -a "$LOG"
 
+# Config fingerprint (sha256) and git commit
+python - <<'PY' "$CONF" | tee -a "$LOG"
+import hashlib, sys, pathlib, subprocess
+conf_path = pathlib.Path(sys.argv[1])
+try:
+    h = hashlib.sha256(conf_path.read_bytes()).hexdigest()
+    print(f"[cfg] sha256={h} file={conf_path}")
+except Exception as exc:
+    print(f"[cfg] sha256=<error> file={conf_path} err={exc}")
+try:
+    commit = subprocess.check_output(["git","rev-parse","--short","HEAD"], stderr=subprocess.DEVNULL).decode().strip()
+    dirty = subprocess.call(["git","diff","--quiet"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print(f"[git] commit={commit} dirty={(dirty!=0)}")
+except Exception:
+    print("[git] commit=<unknown> dirty=?")
+PY
+
 T0=$(date +%s)
 
 # Prepare datasets via Python helper
@@ -129,6 +152,17 @@ echo "[info] val_npz=${VAL_NPZ}" | tee -a "$LOG"
 echo "[info] test_npz=${TEST_NPZ}" | tee -a "$LOG"
 echo "[info] primary_dna=${PRIMARY_DNA}" | tee -a "$LOG"
 
+# Fingerprint combined manifest contents
+python - <<'PY' "$COMBINED_MANIFEST" | tee -a "$LOG"
+import hashlib, sys, pathlib
+p = pathlib.Path(sys.argv[1])
+try:
+    h = hashlib.sha256(p.read_bytes()).hexdigest()
+    print(f"[cfg] combined_manifest.sha256={h}")
+except Exception as exc:
+    print(f"[cfg] combined_manifest.sha256=<error> err={exc}")
+PY
+
 # Train
 CKPT_ROOT="outputs/checkpoints/${RUN_ID}"
 SCORES_ROOT="outputs/scores/${RUN_ID}"
@@ -147,14 +181,30 @@ head -n1 "$PRIMARY_DNA" > data/processed/one_cds.txt
 mkdir -p "${SCORES_ROOT}"
 conda run -n codonlm python -m src.codonlm.score_mutations --ckpt "${CKPT_ROOT}/best.pt" --dna data/processed/one_cds.txt --out "${SCORES_ROOT}/one_cds__best.tsv" 2>&1 | tee -a "$LOG" || true
 
-# Mine motifs (quick)
-python -m src.codonlm.mine_motifs --ckpt "${CKPT_ROOT}/best.pt" --npz "$TRAIN_NPZ" --k 9 --clusters 100 2>&1 | tee -a "$LOG" || true
-if [ -f outputs/motif_clusters.npz ]; then
-  cp outputs/motif_clusters.npz "$RUN_DIR/motif_clusters.npz" || true
+# Mine motifs (opt-in; skip if already present)
+if [[ $WITH_MOTIFS -eq 1 ]]; then
+  if [[ -f "$RUN_DIR/motif_clusters.npz" ]]; then
+    echo "[motifs] skip: already exists at $RUN_DIR/motif_clusters.npz" | tee -a "$LOG"
+  else
+    python -m src.codonlm.mine_motifs --ckpt "${CKPT_ROOT}/best.pt" --npz "$TRAIN_NPZ" --k 9 --clusters 100 2>&1 | tee -a "$LOG" || true
+    if [ -f outputs/motif_clusters.npz ]; then
+      cp outputs/motif_clusters.npz "$RUN_DIR/motif_clusters.npz" || true
+    fi
+  fi
+else
+  echo "[motifs] skipped (enable with --with-motifs or run analysis.sh)" | tee -a "$LOG"
 fi
 
-# Collect artifacts under runs/<RUN_ID>
-python -m scripts.collect_artifacts_yaml "${RUN_ID}" "$CONF" 2>&1 | tee -a "$LOG" || true
+# Collect artifacts (opt-in; skip if already present)
+if [[ $WITH_ARTIFACTS -eq 1 ]]; then
+  if [[ -f "$RUN_DIR/artifacts.npz" ]]; then
+    echo "[artifacts] skip: already exists at $RUN_DIR/artifacts.npz" | tee -a "$LOG"
+  else
+    python -m scripts.collect_artifacts_yaml "${RUN_ID}" "$CONF" 2>&1 | tee -a "$LOG" || true
+  fi
+else
+  echo "[artifacts] skipped (enable with --with-artifacts or run analysis.sh/post_process.sh)" | tee -a "$LOG"
+fi
 
 T1=$(date +%s)
 TRAIN_SEC=$((Ttrain1-Ttrain0))

@@ -11,6 +11,7 @@ Args:
 
 from pathlib import Path
 import argparse, numpy as np, random, collections
+from typing import List
 
 def load_lines(path):
     with open(path) as f:
@@ -25,6 +26,8 @@ def main():
     ap.add_argument("--val_frac", type=float, default=0.1)
     ap.add_argument("--test_frac", type=float, default=0.1)
     ap.add_argument("--out_dir", default="data/processed")
+    ap.add_argument("--pack_mode", choices=["multi", "single"], default="multi",
+                    help="'multi': pack multiple CDS per window with <SEP>; 'single': one CDS per window")
     ap.add_argument("--seed", type=int, default=1337)
     args = ap.parse_args()
     rng = random.Random(args.seed); np.random.seed(args.seed)
@@ -81,7 +84,7 @@ def main():
             buckets[key].append(arr)
 
     Path(args.out_dir).mkdir(parents=True, exist_ok=True)
-    def pack(name, subset):
+    def pack_multi(name, subset):
         """
         Pack multiple CDS into windows up to block_size with <SEP> separators to prevent cross-ORF leakage.
 
@@ -151,15 +154,44 @@ def main():
         Y = np.array(Ys, dtype=np.int32)
         out = Path(args.out_dir) / f"{name}_bs{args.block_size}.npz"
         np.savez_compressed(out, X=X, Y=Y)
+        # packing stats
+        total_tokens = int(X.size)
+        sep_pct = float((X == 3).sum()) / total_tokens if total_tokens else 0.0
+        pad_pct = float((X == 0).sum()) / total_tokens if total_tokens else 0.0
+        cds_per_win = (X == 3).sum(axis=1) + 1 if X.shape[0] else np.array([0])
+        avg_cds = float(np.mean(cds_per_win)) if X.shape[0] else 0.0
         print(f"[build] {name}: {X.shape} → {out}")
+        print(f"[pack-stats] {name}: avg_cds_per_window={avg_cds:.2f} sep_pct={sep_pct:.3f} pad_pct={pad_pct:.3f}")
+
+    def pack_single(name, subset):
+        Xs, Ys = [], []
+        for arr in subset:
+            if len(arr) <= 2:
+                continue
+            for _ in range(args.windows_per_seq):
+                if len(arr) <= args.block_size + 1:
+                    x = arr[:-1]
+                    y = arr[1:]
+                    pad = [0] * max(0, args.block_size - len(x))
+                    x = (x + pad)[: args.block_size]
+                    y = (y + pad)[: args.block_size]
+                else:
+                    i = rng.randrange(0, len(arr) - args.block_size - 1)
+                    x = arr[i : i + args.block_size]
+                    y = arr[i + 1 : i + 1 + args.block_size]
+                Xs.append(x)
+                Ys.append(y)
         X = np.array(Xs, dtype=np.int32)
         Y = np.array(Ys, dtype=np.int32)
-        out = Path(args.out_dir)/f"{name}_bs{args.block_size}.npz"
+        out = Path(args.out_dir) / f"{name}_bs{args.block_size}.npz"
         np.savez_compressed(out, X=X, Y=Y)
         print(f"[build] {name}: {X.shape} → {out}")
 
-    for name in ("train","val","test"):
-        pack(name, buckets[name])
+    for name in ("train", "val", "test"):
+        if args.pack_mode == "single":
+            pack_single(name, buckets[name])
+        else:
+            pack_multi(name, buckets[name])
 
 if __name__ == "__main__":
     main()
