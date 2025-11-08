@@ -34,6 +34,15 @@ Tips
 - If data integrity fails (pad‑only windows), re‑run with --force or reduce block_size/windows_per_seq; see MANUAL.md.
 - On Apple Silicon, AMP is enabled; CE is computed in float32 to avoid NaNs.
 
+Training toggles (advanced)
+
+- tie_embeddings (default true): share token and output head weights to save parameters.
+- n_kv_head (GQA): fewer K/V heads than query heads (requires n_head % n_kv_head == 0).
+- use_sdpa: use scaled_dot_product_attention when available (PyTorch 2.x+).
+- grad_checkpointing: enable gradient checkpointing (alias of use_checkpoint).
+- optimizer: adafactor or adamw. Adafactor reduces memory for large models.
+- pack_mode: multi|single; sep_mask_enabled: true|false for <SEP> boundary masking.
+
 Stage‑2 Classifiers
 
 - Goal: benchmark sequence‑level representations from the LM against classical baselines.

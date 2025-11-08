@@ -1,0 +1,40 @@
+vocab_size: 68
+
+# Model depth/width
+n_layer: 16
+n_head: 6
+n_kv_head: 2
+n_embd: 256
+dropout: 0.05
+
+# Context
+block_size: 320   # train_block_size
+
+# Training
+batch_size: 2
+grad_accum_steps: 16
+lr: 0.0003
+weight_decay: 0.05
+epochs: 5
+
+# Toggles
+tie_embeddings: true
+grad_checkpointing: true
+use_sdpa: true
+optimizer: adafactor
+sep_mask_enabled: true
+
+# Data
+windows_per_seq: 2
+val_frac: 0.1
+test_frac: 0.1
+datasets:
+  - name: ecoli_k12
+    gbff: data/raw/Enterobacteriaceae/GCF_000005845.gbff
+    min_len: 90
+
+out_dir: outputs/checkpoints
+scores_dir: outputs/scores
+log_csv: curves.csv
+seed: 1337
+

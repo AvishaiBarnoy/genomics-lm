@@ -125,6 +125,9 @@ def main() -> None:
     ap.add_argument("--max_aa_len", type=int, default=400)
     ap.add_argument("--require_terminal_stop", action="store_true", default=False)
     ap.add_argument("--special_margin", type=int, default=6)
+    # Normalization option for GQS
+    ap.add_argument("--gqs_normalize", choices=["none","len"], default="none",
+                    help="Normalize GQS by reference length (truth length if available, else gen length)")
     args = ap.parse_args()
 
     repo = Path(__file__).resolve().parents[1]
@@ -323,6 +326,18 @@ def main() -> None:
         median_len = float(stats.median([r.gen_len_codons for r in rks]))
         stop_rate = sum(1 for r in rks if r.had_terminal_stop) / len(rks)
         hard_cap_rate = sum(1 for r in rks if r.hit_hard_cap) / len(rks)
+        # Optional length-normalized GQS
+        mean_gqs_norm = None
+        median_gqs_norm = None
+        if args.gqs_normalize == "len":
+            # Use target_codons (proxy for truth length) when available; fallback to gen_len
+            norms = []
+            for r in rks:
+                denom = max(1, getattr(r, "target_codons", 0) or r.gen_len_codons)
+                norms.append(r.gqs / float(denom))
+            if norms:
+                mean_gqs_norm = float(sum(norms) / len(norms))
+                median_gqs_norm = float(stats.median(norms))
         summary.append({
             "k": k,
             "termination_rate": term_rate,
@@ -334,14 +349,17 @@ def main() -> None:
             "median_aa_len": median_len,
             "terminal_stop_rate": stop_rate,
             "hard_cap_rate": hard_cap_rate,
+            **({"mean_gqs_norm": mean_gqs_norm, "median_gqs_norm": median_gqs_norm} if args.gqs_normalize == "len" else {}),
             "n": len(rks),
         })
     summary_csv = out_dir / "summary.csv"
     with summary_csv.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=[
+        base_cols = [
             "k","termination_rate","early_stop_rate","median_gqs","mean_aa_identity","best_aa_identity",
             "mean_aa_len","median_aa_len","terminal_stop_rate","hard_cap_rate","n"
-        ])
+        ]
+        extra = ["mean_gqs_norm","median_gqs_norm"] if any("mean_gqs_norm" in s for s in summary) else []
+        writer = csv.DictWriter(f, fieldnames=base_cols + extra)
         writer.writeheader(); writer.writerows(summary)
     print(f"[gen-prefix] wrote {summary_csv}")
 
@@ -355,7 +373,15 @@ def main() -> None:
         plt.figure(); plt.plot(ks, gq, marker='o'); plt.xlabel('k'); plt.ylabel('median_gqs'); plt.title('GQS vs k'); plt.tight_layout(); plt.savefig(out_dir/"gqs_vs_k.png"); plt.close()
         plt.figure(); plt.plot(ks, aa, marker='o'); plt.xlabel('k'); plt.ylabel('mean_aa_identity'); plt.title('AA identity vs k'); plt.tight_layout(); plt.savefig(out_dir/"aa_vs_k.png"); plt.close()
         ml = [s["mean_aa_len"] for s in summary]
-        plt.figure(); plt.plot(ks, ml, marker='o'); plt.xlabel('k'); plt.ylabel('mean_aa_len'); plt.title('AA length vs k'); plt.tight_layout(); plt.savefig(out_dir/"aa_len_vs_k.png"); plt.close()
+        plt.figure(); plt.plot(ks, ml, marker='o'); plt.xlabel('k'); plt.ylabel('mean_aa_len'); plt.title('AA length vs k'); plt.tight_layout();
+        plt.savefig(out_dir/"aa_len_vs_k.png");
+        try:
+            figs_root = Path(__file__).resolve().parents[1] / "outputs" / "figs"
+            figs_root.mkdir(parents=True, exist_ok=True)
+            plt.savefig(figs_root/"aa_len_vs_k.png")
+        except Exception:
+            pass
+        plt.close()
     except Exception as exc:
         print(f"[gen-prefix] plotting failed: {exc}")
 

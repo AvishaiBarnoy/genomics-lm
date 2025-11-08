@@ -197,9 +197,12 @@ def main():
         n_head=cfg["n_head"],
         n_embd=cfg["n_embd"],
         dropout=cfg["dropout"],
-        use_checkpoint=bool(cfg.get("use_checkpoint", False)),
+        use_checkpoint=bool(cfg.get("use_checkpoint", cfg.get("grad_checkpointing", False))),
         label_smoothing=float(cfg.get("label_smoothing", 0.0)),
         sep_id=(3 if sep_mask_enabled else None),
+        tie_embeddings=bool(cfg.get("tie_embeddings", True)),
+        n_kv_head=int(cfg.get("n_kv_head")) if cfg.get("n_kv_head") is not None else None,
+        use_sdpa=bool(cfg.get("use_sdpa", False)),
     ).to(device)
 
     compile_requested = bool(cfg.get("compile", False))
