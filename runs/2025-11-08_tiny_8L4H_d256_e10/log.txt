@@ -86,3 +86,30 @@
 [info] test_npz=data/processed/combined/2025-11-08_tiny_8L4H_d256_e10/test_bs512.npz
 [info] primary_dna=data/processed/ecoli_k12/cds_dna.txt
 [cfg] combined_manifest.sha256=98d42ef635e7d646a5817c3f977b3f1f3766f5fd86c65f3c72eb08bbb42aa4ab
+[matmul] float32 precision set to high
+[run] id=2025-11-08_tiny_8L4H_d256_e10
+[paths] ckpts=outputs/checkpoints/2025-11-08_tiny_8L4H_d256_e10 scores=outputs/scores/2025-11-08_tiny_8L4H_d256_e10 log_csv=/Users/User/github/genomics-lm/outputs/scores/2025-11-08_tiny_8L4H_d256_e10/curves.csv
+[model] params=6467328 sep_mask_enabled=True
+[loader] num_workers=0 pin_memory=False prefetch_factor=None persistent_workers=False
+[train] starting: epochs=10, steps_per_epoch=223, total_steps=2230, batch_size=2, grad_accum=16, scheduler=cosine
+[epoch 1] train 45.442 | val 5.498 | ppl 244.21 | lr 2.23e-04
+[timing] epoch 1 wall_sec=339.09 cpu_sec=167.85
+[epoch 2] train 5.535 | val 4.060 | ppl 58.00 | lr 2.96e-04
+[timing] epoch 2 wall_sec=335.82 cpu_sec=157.64
+[epoch 3] train 5.284 | val 3.997 | ppl 54.45 | lr 2.75e-04
+[timing] epoch 3 wall_sec=339.43 cpu_sec=163.34
+[epoch 4] train 5.241 | val 3.989 | ppl 54.02 | lr 2.39e-04
+[timing] epoch 4 wall_sec=337.69 cpu_sec=163.03
+[epoch 5] train 5.219 | val 3.984 | ppl 53.73 | lr 1.91e-04
+[timing] epoch 5 wall_sec=342.66 cpu_sec=170.05
+[epoch 6] train 5.197 | val 3.987 | ppl 53.87 | lr 1.39e-04
+[timing] epoch 6 wall_sec=352.99 cpu_sec=169.29
+[epoch 7] train 5.175 | val 3.984 | ppl 53.74 | lr 8.93e-05
+[timing] epoch 7 wall_sec=352.82 cpu_sec=169.11
+[epoch 8] train 5.162 | val 3.983 | ppl 53.69 | lr 4.78e-05
+[timing] epoch 8 wall_sec=336.73 cpu_sec=158.50
+[epoch 9] train 5.152 | val 3.982 | ppl 53.62 | lr 2.02e-05
+[timing] epoch 9 wall_sec=341.29 cpu_sec=162.33
+[epoch 10] train 5.147 | val 3.983 | ppl 53.65 | lr 1.00e-05
+[timing] epoch 10 wall_sec=332.27 cpu_sec=152.24
+[timing] train_wall_sec=3413.82 train_cpu_sec=1635.37
