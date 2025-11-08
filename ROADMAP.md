@@ -29,46 +29,18 @@
 
 ---
 
-## The 6‑Step Interpretability Pipeline (run after **every** training)
+## The 6‑Step Interpretability Pipeline (summary)
 
-*Purpose: Watch the “language” your model learns evolve as capacity scales.*
+High‑level goals per step (full details in MANUAL.md):
 
-> All steps consume `runs/<run_id>/artifacts.npz` (plus optional labels) and write to `runs/<run_id>/{charts,tables}`.
+- Step 1 — Frequencies: codon usage, first‑position patterns, stops/starts as punctuation.
+- Step 2 — Embeddings: PCA/NN semantics; synonymous clusters; quality scores.
+- Step 3 — Attention: heads specializing to starts/stops, frames, motif boundaries.
+- Step 4 — Next‑token probes: conditional distributions after biological prefixes.
+- Step 5 — Saliency: which tokens/regions drive predictions; motif spikes.
+- Step 6 — Linear probes: decode AA identity/properties from embeddings.
 
-**Step 1 — Frequencies & Positional Punctuation**
-Script: `analyze_frequencies.py`
-Outputs: `tables/frequencies.csv`, `charts/top20_freq.png`, `charts/first_position_counts.png`
-Focus: ATG as “first word”, stop codons as “periods”, position‑wise enrichments.
-
-**Step 2 — Embedding Semantics**
-Script: `analyze_embeddings.py`
-Outputs: `charts/emb_pca.png`, `tables/nearest_neighbors.csv`, `tables/embed_quality.txt`
-Focus: clustering of synonymous codons; separation of stops/specials; cosine‑NN “thesaurus.”
-
-**Step 3 — Attention Specialization**
-Script: `analyze_attention.py`
-Outputs: `charts/attn_L{l}_H{h}_{t0}-{t1}.png`
-Focus: heads that track start/stop, frame maintenance, or motif boundaries.
-
-**Step 4 — Contextual Next‑Token Probes**
-Script: `probe_next_token.py`
-Outputs: `tables/next_token_tests.csv`
-Focus: conditional distributions after prefixes (`ATG`, `ATG‑AAA`, `TAA`, …) as grammar tests.
-
-**Step 5 — Saliency / Attribution**
-Script: `analyze_saliency.py`
-Outputs: `tables/saliency.csv`
-Focus: which tokens drive predictions; spikes at conserved motifs, `ATG`, in‑frame stops.
-
-**Step 6 — Biology‑Aware Linear Probes**
-Script: `probe_linear.py`
-Inputs: `probe_labels.csv` (token→AA, polarity, hydropathy, is\_stop, is\_start).
-Outputs: `tables/probe_results.csv`
-Focus: how well embeddings linearly decode AA identity/properties; improves with scale.
-
-**(Optional) TSV Summaries**
-Script: `summarize_one_cds.py`
-Outputs: `tables/one_cds__summary.csv` (+ per‑metric CSVs if present).
+All steps read `runs/<run_id>/artifacts.npz` (plus optional labels) and write charts/tables under `runs/<run_id>/`.
 
 ---
 
@@ -149,4 +121,3 @@ Output: `runs/_summary/summary.csv` with columns `[run_id, val_ppl, silhouette, 
 ## ✅ Summary
 
 On laptops you can **train toy codon LMs and run a principled 6‑step interpretability suite** after every run. The same pipeline scales to adapters and large models, giving you a consistent, biology‑aware view of how the model’s “language” grows with capacity.
-

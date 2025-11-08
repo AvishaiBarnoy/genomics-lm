@@ -1,203 +1,38 @@
-# Genomics-LM
+# Genomics‑LM
 
-A lightweight transformer language model for genomic sequences (codon-level).  
-The goal is to explore embeddings, motif discovery, and sequence prediction with a minimal yet extensible architecture.
+A compact codon‑level GPT‑style LM with a reproducible training + analysis pipeline.
 
----
+Quick Start
 
-## Features
-- ⚡ Tiny GPT-like model (configurable layers, heads, embedding size).
-- 🧬 Works with DNA/codon tokenization.
-- 🔍 Motif mining utilities.
-- 🧪 Reproducible training with configs in YAML.
-- ✅ Pytest test suite.
+- Setup: conda env create -f env/conda-environment.yml; conda activate codonlm
+- Train (default config + auto RUN_ID):
+  - ./main.sh
+  - Outputs: checkpoints → outputs/checkpoints/<RUN_ID>/, curves/metrics → outputs/scores/<RUN_ID>/, full log → runs/<RUN_ID>/log.txt
+- Analyze (one command):
+  - ./analysis.sh <RUN_ID> [configs/tiny_mps.yaml]
+- Query a trained model:
+  - python -m scripts.query_model <RUN_ID> --mode next --dna ATGAAACCC --topk 5
 
----
+What’s In Here
 
-## Installation
+- TinyGPT model (src/codonlm/model_tiny_gpt.py) with optional grad checkpointing and segment‑masked attention for <SEP>.
+- Trainer with AMP, cosine warmup, early stopping, CSV curves (src/codonlm/train_codon_lm.py).
+- Data prep that extracts CDS, tokenizes codons, builds NPZ datasets, and checks integrity (scripts/pipeline_prepare.py).
+- Analysis scripts for frequencies, embeddings, attention, next‑token probes, saliency, and linear probes (scripts/*; see MANUAL).
 
-Clone the repository and create a conda environment:
+Documentation
 
-```bash
-git clone https://github.com/AvishaiBarnoy/genomics-lm.git
-cd genomics-lm
-conda env create -f env/conda-environment.yml
-conda activate codonlm
-```
+- MANUAL.md — full configuration, integrity checks, training details, and the complete analysis suite.
+- ROADMAP.md — staged plan and progress notes.
 
-## Training
+Compare Runs
 
-Training runs now track outputs per run id. Pick a `RUN_ID` (or export `RUN_ID=...`) and pass it on the CLI:
+- Scan mode: python -m scripts.compare_runs  → outputs/scores/compare/summary.csv (ppl, params, and optional prefix‑generation metrics).
 
-```bash
-RUN_ID=$(date +"%Y%m%d-%H%M%S")  # or any unique label
-python -m src.codonlm.train_codon_lm --config configs/tiny_mps.yaml --run_id "$RUN_ID"
-```
+Tips
 
-Checkpoints land in `outputs/checkpoints/<RUN_ID>/` (`best.pt`, `last.pt`) and metrics live in `outputs/scores/<RUN_ID>/` (`metrics.json`, `curves.csv`). The shell pipeline (`main.sh`) sets a sensible default `RUN_ID` automatically, so you can still run:
-
-```bash
-chmod +x main.sh analysis.sh post_process.sh
-./main.sh            # uses configs/tiny_mps.yaml by default
-./main.sh -c path/to/other.yaml                     # supply your own config
-./main.sh --dataset ecoli2,data/raw/GCF_xx.gbff     # add an extra genome ad-hoc
-./main.sh --force                                   # rebuild cached processed data
-./main.sh -r outputs/checkpoints/<RUN_ID>/best.pt   # resume training
-./main.sh -c my.yaml -r outputs/checkpoints/<RUN_ID>/best.pt
-```
-
-### Dataset configuration
-
-Multi-genome training is driven by the YAML config. A minimal example:
-
-```yaml
-datasets:
-  - name: ecoli_k12
-    gbff: data/raw/GCF_000005845.2_ASM584v2_genomic.gbff
-    min_len: 90
-
-block_size: 256
-windows_per_seq: 2
-val_frac: 0.1
-test_frac: 0.1
-```
-
-Each dataset is cached under `data/processed/<name>/` (with DNA, metadata, token IDs, and NPZ splits). The pipeline automatically skips extraction/tokenization/build steps when the outputs already exist; use `--force` to rebuild. All datasets are concatenated into `data/processed/combined/<RUN_ID>/train|val|test_bs*.npz` before training so the trainer only needs one combined manifest.
-
-Each run also records the dataset lineage in `runs/<RUN_ID>/combined_manifest.json`, which lists the per-genome token files (`itos.txt`) so downstream scripts can recover the vocabulary even when multiple genomes are mixed.
-
-You can append extra datasets from the CLI without touching the config:
-
-```bash
-./main.sh --dataset ecoli_o157,data/raw/GCF_000008865.2_ASM886v2_genomic.gbff,120
-```
-
-## Post-Training Analysis Suite
-
-The analysis suite includes:
-
-- Token frequencies and first-token distribution
-- Embedding PCA + nearest neighbors
-- Attention heatmaps
-- Next-token probes (basic predictive sanity checks)
-- Saliency maps (+ a short motif spotlight)
-- Linear probes with biology-aware labels (requires `probe_labels.csv`)
-
-Quick start (recommended):
-
-```bash
-# Run all analyses for a trained run
-./analysis.sh <RUN_ID> [configs/tiny_mps.yaml]
-```
-
-Or invoke individual steps:
-
-```bash
-RUN_ID=2025-09-30_tiny_2L4H_d128_e5
-python -m scripts.collect_artifacts_yaml $RUN_ID configs/tiny_mps.yaml
-python -m scripts.analyze_frequencies   $RUN_ID
-python -m scripts.analyze_embeddings    $RUN_ID
-python -m scripts.analyze_attention     $RUN_ID
-python -m scripts.probe_next_token      $RUN_ID
-python -m scripts.analyze_saliency      $RUN_ID
-python -m scripts.report_top_saliency   $RUN_ID --window 9 --top 20
-
-# Linear probes require token labels
-python -m scripts.generate_probe_labels $RUN_ID
-python -m scripts.probe_linear          $RUN_ID
-
-# Optional: summarize and compare
-python -m scripts.summarize_one_cds     $RUN_ID
-python -m scripts.compare_runs          $RUN_ID <other_run_ids...>
-```
-
-Default trainer (AMP + cosine schedule + optional label smoothing):
-
-```bash
-python -m src.codonlm.train_codon_lm --config configs/tiny_mps.yaml --run_id "$RUN_ID"
-# resume from a checkpoint
-python -m src.codonlm.train_codon_lm --config configs/tiny_mps.yaml --resume outputs/checkpoints/$RUN_ID/best.pt --run_id "$RUN_ID"
-# override datasets manually (comma-separated lists)
-python -m src.codonlm.train_codon_lm --config configs/tiny_mps.yaml \
-  --train_npz data/processed/combined/${RUN_ID}/train_bs256.npz \
-  --val_npz data/processed/combined/${RUN_ID}/val_bs256.npz \
-  --test_npz data/processed/combined/${RUN_ID}/test_bs256.npz \
-  --run_id "$RUN_ID"
-```
-
-Note: cosine+warmup is enabled by default and you can set `label_smoothing: 0.05` in the YAML to improve probability calibration (reduces overconfident spikes in next-token predictions).
-
-### Performance tuning
-
-`configs/tiny_mps.yaml` exposes a few toggles for experimentation:
-
-- `compile: true` enables `torch.compile` (PyTorch ≥ 2.0) for potential speed-ups; adjust `compile_mode` (`reduce-overhead`, `default`, `max-autotune`) if desired.
-- `matmul_precision: high` calls `torch.set_float32_matmul_precision`, which can accelerate MPS matmuls; try `medium` or `highest` depending on accuracy/perf trade-offs.
-- `use_checkpoint: true` still forces gradient checkpointing; leave it `false` unless memory is tight. Automatic detection of OOM scenarios is not yet supported—consider enabling it manually if you encounter memory limits.
-
-Auto-epochs (optional): set `epochs: "auto"` to choose the number of epochs from the heuristic `T ≈ tokens_per_param × n_params` (default `tokens_per_param: 20.0`). The trainer estimates `tokens_per_epoch ≈ len(train_ds) × block_size` and sets `epochs = ceil(T / tokens_per_epoch)` (clamped by optional `epochs_min/epochs_max`). The computation is logged under `[epochs-auto]`.
-
-Convenience wrappers:
-
-```bash
-# artifacts only (organize weights, sample logits, etc.)
-./post_process.sh <RUN_ID> [CONFIG]
-
-# full 6-step analysis
-./analysis.sh <RUN_ID> [CONFIG]
-
-# optional exploratory EDA bundle
-python -m scripts.run_eda <RUN_ID>
-```
-
-`analysis.sh` drives the maintained CLI modules under `scripts/`. The legacy `analysis/` folder holds optional exploratory helpers; the `scripts.run_eda` wrapper invokes them and saves outputs to `runs/<RUN_ID>/analysis/eda`.
-
-For Step 6 linear probes:
-
-```bash
-python -m scripts.generate_probe_labels $RUN_ID
-python -m scripts.probe_linear $RUN_ID
-python -m scripts.export_run_summary $RUN_ID
-```
-
-Saliency/motif spotlight:
-
-```bash
-python -m scripts.report_top_saliency $RUN_ID --window 9 --top 20
-```
-
-## Inference and interactive queries
-
-You can query a trained model for next-codon predictions, generate continuations, or score the likelihood of a sequence:
-
-```bash
-# top‑k next-codon probabilities for a DNA prompt
-python -m scripts.query_model <RUN_ID> --mode next --dna ATGAAACCC --topk 5
-
-# sample a continuation (stops at <eog> or after max_new tokens)
-python -m scripts.query_model <RUN_ID> --mode generate --dna ATG --max_new 30 --temperature 0.8 --topk 5
-
-# score the negative log-likelihood and perplexity of a sequence
-python -m scripts.query_model <RUN_ID> --mode score --dna ATGAAATGA
-
-# interactive REPL (enter DNA prompts line-by-line)
-python -m scripts.query_model <RUN_ID> --interactive
-```
-
-The interface reads `runs/<RUN_ID>/weights.pt` and `runs/<RUN_ID>/itos.txt` created during post‑processing.
-
-## CDS-only training and segment boundaries
-
-This repository uses codon tokens with explicit segment markers:
-
-- Specials: `<PAD>`, `<BOS_CDS>`, `<EOS_CDS>`, `<SEP>`
-- A single CDS encodes as: `[<BOS_CDS>, CODON..., STOP, <EOS_CDS>]`
-- When packing multiple CDS, we place `<SEP>` between them and include `<EOS_CDS>` before each `<SEP>`.
-
-The attention mask blocks cross‑CDS attention: tokens may attend only within their segment (between two `<SEP>`s). Generation can stop early when:
-
-- Hitting `<EOS_CDS>` (use `--stop_on_eos`), or
-- Hitting a biological stop codon (TAA/TAG/TGA) (use `--stop_on_bio_stop`).
+- If data integrity fails (pad‑only windows), re‑run with --force or reduce block_size/windows_per_seq; see MANUAL.md.
+- On Apple Silicon, AMP is enabled; CE is computed in float32 to avoid NaNs.
 
 Examples:
 
