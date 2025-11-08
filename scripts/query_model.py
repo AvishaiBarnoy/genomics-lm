@@ -194,8 +194,8 @@ def _answer(dna: str, args, itos: List[str], stoi: Dict[str, int], model: TinyGP
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("run_id", nargs="?")
+    ap = argparse.ArgumentParser(description="Query a trained codon LM by run_id or run_dir.")
+    ap.add_argument("run_id", nargs="?", help="Run identifier under runs/<RUN_ID> (mutually exclusive with --run_dir)")
     ap.add_argument("--run_dir", help="Alternative to run_id; path to outputs/checkpoints/<RUN_ID> or runs/<RUN_ID>")
     ap.add_argument("--mode", choices=["next", "generate", "score"], default="next")
     ap.add_argument("--dna", help="DNA prompt (uppercase ACGT)")
@@ -205,6 +205,13 @@ def main() -> None:
     ap.add_argument("--interactive", action="store_true")
     ap.add_argument("--out", help="optional JSON output path")
     args = ap.parse_args()
+    # Argument validation: require either run_id or run_dir
+    if not args.run_id and not args.run_dir:
+        ap.error("provide either run_id or --run_dir")
+    if args.run_id and args.run_dir:
+        # Prefer run_dir but warn the user for clarity
+        print("[warn] both run_id and --run_dir provided; using --run_dir")
+        args.run_id = None
 
     result = run_once(args)
     if args.out:

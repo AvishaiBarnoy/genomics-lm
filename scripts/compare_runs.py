@@ -131,14 +131,47 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
                     row["n_params"] = None
             except Exception:
                 row["n_params"] = None
+            # Optionally ingest prefix-generation summary metrics if present
+            try:
+                gen_dir = run_dir / "gen_prefix"
+                summ = gen_dir / "summary.csv"
+                if summ.exists():
+                    # Parse and attach termination_rate@k and median_gqs@k (k=1,3,5,10 when available)
+                    want_ks = {1, 3, 5, 10}
+                    with summ.open("r", newline="") as f:
+                        reader = csv.DictReader(f)
+                        for row_s in reader:
+                            try:
+                                k = int(row_s.get("k", -1))
+                            except Exception:
+                                continue
+                            if k in want_ks:
+                                try:
+                                    row[f"term_rate@k={k}"] = float(row_s.get("termination_rate", "nan"))
+                                except Exception:
+                                    pass
+                                try:
+                                    row[f"median_gqs@k={k}"] = float(row_s.get("median_gqs", "nan"))
+                                except Exception:
+                                    pass
+            except Exception as exc:
+                print(f"[compare] skip gen_prefix ingest for {run_id}: {exc}")
             rows.append(row)
 
         # write CSV
-        cols = [
+        base_cols = [
             "run_id", "n_params", "n_layer", "n_head", "n_embd", "epochs",
             "val_ppl", "test_ppl", "codon_corr", "frameshift_delta",
             "startstop_delta.start", "startstop_delta.stop", "syn_gap", "timestamp",
         ]
+        # Extend with any gen-prefix columns encountered
+        extra_cols: List[str] = []
+        for r in rows:
+            for k in list(r.keys()):
+                if k.startswith("term_rate@k=") or k.startswith("median_gqs@k="):
+                    if k not in extra_cols:
+                        extra_cols.append(k)
+        cols = base_cols + sorted(extra_cols)
         out_csv = compare_dir / "summary.csv"
         with out_csv.open("w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=cols)

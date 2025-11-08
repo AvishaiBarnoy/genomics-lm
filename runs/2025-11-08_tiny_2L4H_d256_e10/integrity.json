@@ -1,0 +1,10 @@
+{
+  "train_npz": "data/processed/combined/2025-11-08_tiny_2L4H_d256_e10/train_bs512.npz",
+  "val_npz": "data/processed/combined/2025-11-08_tiny_2L4H_d256_e10/val_bs512.npz",
+  "test_npz": "data/processed/combined/2025-11-08_tiny_2L4H_d256_e10/test_bs512.npz",
+  "empty_windows": {
+    "train": 0,
+    "val": 0,
+    "test": 0
+  }
+}

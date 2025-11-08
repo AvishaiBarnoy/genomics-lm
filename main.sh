@@ -128,6 +128,7 @@ python -m scripts.pipeline_prepare "${PREP_ARGS[@]}" 2>&1 | tee -a "$LOG"
 PREP_JSON="${RUN_DIR}/pipeline_prepare.json"
 if [[ ! -f "$PREP_JSON" ]]; then
   echo "[error] pipeline_prepare did not produce ${PREP_JSON}" | tee -a "$LOG"
+  echo "[hint] If the integrity check failed, try: --force or tune block_size/windows_per_seq to avoid pad-only windows." | tee -a "$LOG"
   exit 1
 fi
 

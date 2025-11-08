@@ -303,6 +303,44 @@ def main() -> None:
 
     print(f"[prepare] wrote {result_path}")
 
+    # ---------- Data integrity check ----------
+    def _count_empty(npz_path: Path) -> int:
+        try:
+            with np.load(npz_path, allow_pickle=False) as data:
+                Y = np.asarray(data["Y"])  # (N, T)
+                valid = (Y != 0).sum(axis=1)
+                return int((valid == 0).sum())
+        except Exception:
+            return -1
+
+    empty_train = _count_empty(train_out)
+    empty_val = _count_empty(val_out)
+    empty_test = _count_empty(test_out)
+
+    integrity = {
+        "train_npz": str(train_out),
+        "val_npz": str(val_out),
+        "test_npz": str(test_out),
+        "empty_windows": {
+            "train": empty_train,
+            "val": empty_val,
+            "test": empty_test,
+        },
+    }
+    (run_dir / "integrity.json").write_text(json.dumps(integrity, indent=2))
+
+    if any(x is not None and x > 0 for x in (empty_train, empty_val, empty_test)):
+        print(
+            "[integrity] detected windows with zero valid targets (pad-only) — this will cause non-finite losses.\n"
+            f"[integrity] empty_windows train={empty_train} val={empty_val} test={empty_test}.\n"
+            "[integrity] Please re-run with --force or adjust block_size/windows_per_seq to avoid pad-only windows."
+        )
+        raise SystemExit(3)
+    else:
+        print(
+            f"[integrity] ok: empty_windows train={empty_train} val={empty_val} test={empty_test}"
+        )
+
 
 if __name__ == "__main__":
     main()

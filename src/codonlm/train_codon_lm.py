@@ -375,6 +375,7 @@ def main():
         model.train(split=="train")
         total, n = 0.0, 0
         optim.zero_grad(set_to_none=True)
+        skipped = 0
         for xb, yb in loader:
             xb, yb = xb.to(device), yb.to(device)
             def fwd():
@@ -397,7 +398,7 @@ def main():
                 logits, loss = fwd()
             # Guard against NaNs/infs (e.g., degenerate batches); skip update for this micro-step
             if not torch.isfinite(loss):
-                print("[warn] non-finite loss; skipping micro-step")
+                skipped += 1
                 continue
             if split=="train":
                 loss.backward()
@@ -412,7 +413,7 @@ def main():
                     if use_cosine:
                         scheduler.step()
             total += loss.item()*gacc; n += 1
-        return total / max(n,1)
+        return (total / max(n,1), skipped)
 
     history = []
     best_epoch = None
@@ -433,14 +434,17 @@ def main():
         ep_wall0 = time.perf_counter()
         ep_cpu0 = time.process_time()
         epoch_idx = epoch + 1
-        train_loss = one_pass("train", train_loader)
+        train_loss, train_skips = one_pass("train", train_loader)
         with torch.no_grad():
-            val_loss = one_pass("val", val_loader)
+            val_loss, val_skips = one_pass("val", val_loader)
         ppl = math.exp(min(20.0, val_loss))
         if not use_cosine:
             scheduler.step(val_loss)
         lr_now = optim.param_groups[0]["lr"]
-        print(f"[epoch {epoch_idx}] train {train_loss:.3f} | val {val_loss:.3f} | ppl {ppl:.2f} | lr {lr_now:.2e}")
+        msg = f"[epoch {epoch_idx}] train {train_loss:.3f} | val {val_loss:.3f} | ppl {ppl:.2f} | lr {lr_now:.2e}"
+        if train_skips or val_skips:
+            msg += f" | skips train={train_skips} val={val_skips}"
+        print(msg)
         ep_wall1 = time.perf_counter()
         ep_cpu1 = time.process_time()
         print(f"[timing] epoch {epoch_idx} wall_sec={ep_wall1-ep_wall0:.2f} cpu_sec={ep_cpu1-ep_cpu0:.2f}")

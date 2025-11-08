@@ -1,0 +1,128 @@
+[info] run_id=2025-11-08_tiny_2L4H_d256_e10
+[info] config=configs/tiny_mps.yaml
+[info] resume=none
+[hardware] date: 2025-11-08 17:17:35 UTC
+[hardware] uname: Darwin Mac 25.0.0 Darwin Kernel Version 25.0.0: Wed Sep 17 21:38:03 PDT 2025; root:xnu-12377.1.9~141/RELEASE_ARM64_T8112 arm64
+[hardware] cpu: Apple M2
+[hardware] python: 3.11.13
+[hardware] torch: 2.2.2
+[hardware] mps_available: True
+[hardware] cuda_available: False
+[hardware] cuda_device_count: 0
+[config] snapshot:
+[config] vocab_size: 69
+[config] 
+[config] block_size: 512 
+[config] n_layer: 2 
+[config] n_head: 4
+[config] n_embd: 256 
+[config] dropout: 0.1
+[config] 
+[config] windows_per_seq: 2
+[config] val_frac: 0.1
+[config] test_frac: 0.1
+[config] 
+[config] datasets:
+[config]   - name: ecoli_k12
+[config]     gbff: data/raw/Enterobacteriaceae/GCF_000005845.gbff
+[config]     min_len: 90
+[config]   - name: Klebsiella
+[config]     gbff: data/raw/Enterobacteriaceae/GCF_000240185.gbff
+[config]     min_len: 90
+[config]   - name: Salmonella
+[config]     gbff: data/raw/Enterobacteriaceae/GCF_000006945.gbff
+[config]     min_len: 90
+[config] 
+[config] batch_size: 2
+[config] grad_accum_steps: 16
+[config] lr: 0.0003
+[config] weight_decay: 0.05
+[config] epochs: 10  # set to an integer or "auto" to derive from tokens_per_param × n_params
+[config] 
+[config] optimizer: "adamw"
+[config] amp: true
+[config] use_checkpoint: true
+[config] scheduler: "cosine"
+[config] label_smoothing: 0.05
+[config] warmup_steps: 300 
+[config] min_lr: 1e-5
+[config] plateau_patience: 2
+[config] early_stop_patience: 5
+[config] compile: false # enable torch.compile for training loop (PyTorch 2.x)
+[config] compile_mode: reduce-overhead
+[config] matmul_precision: high # torch.set_float32_matmul_precision value (high | medium | highest)
+[config] tokens_per_param: 20.0  # heuristic for epochs=auto (T ≈ tokens_per_param × n_params)
+[config] 
+[config] out_dir: outputs/checkpoints
+[config] scores_dir: outputs/scores
+[config] log_csv: "curves.csv"
+[config] seed: 1337
+[config] itos_path: data/processed/itos_codon.txt
+[config] saliency_window: 9
+[config] saliency_top: 20
+[config] pack_mode: "multi"          # build_dataset: 'multi' packs multiple CDS per window; 'single' keeps one CDS per window
+[config] sep_mask_enabled: true      # TinyGPT: block attention across <SEP> boundaries
+[config] num_workers: 0              # DataLoader workers
+[config] pin_memory: false
+[config] prefetch_factor: 2
+[config] persistent_workers: true
+[info] extra_datasets_cli=none
+[cfg] sha256=583f02380d395b23685678887a9e9c602a24719dc14a6ca674a21abfd37b3fe1 file=configs/tiny_mps.yaml
+[git] commit=94d662d dirty=True
+[prepare] skip extract ecoli_k12
+[prepare] skip tokenize ecoli_k12
+[prepare] skip build ecoli_k12
+[prepare] skip extract Klebsiella
+[prepare] skip tokenize Klebsiella
+[prepare] skip build Klebsiella
+[prepare] skip extract Salmonella
+[prepare] skip tokenize Salmonella
+[prepare] skip build Salmonella
+[prepare] wrote runs/2025-11-08_tiny_2L4H_d256_e10/pipeline_prepare.json
+[integrity] ok: empty_windows train=0 val=0 test=0
+[info] combined_manifest=data/processed/combined/2025-11-08_tiny_2L4H_d256_e10/manifest.json
+[info] train_npz=data/processed/combined/2025-11-08_tiny_2L4H_d256_e10/train_bs512.npz
+[info] val_npz=data/processed/combined/2025-11-08_tiny_2L4H_d256_e10/val_bs512.npz
+[info] test_npz=data/processed/combined/2025-11-08_tiny_2L4H_d256_e10/test_bs512.npz
+[info] primary_dna=data/processed/ecoli_k12/cds_dna.txt
+[cfg] combined_manifest.sha256=350e1033a56e71a8730669c73b5c142913ec2ad4cac80d749cd34aaef166b501
+[matmul] float32 precision set to high
+[run] id=2025-11-08_tiny_2L4H_d256_e10
+[paths] ckpts=outputs/checkpoints/2025-11-08_tiny_2L4H_d256_e10 scores=outputs/scores/2025-11-08_tiny_2L4H_d256_e10 log_csv=/Users/User/github/genomics-lm/outputs/scores/2025-11-08_tiny_2L4H_d256_e10/curves.csv
+[model] params=1728768 sep_mask_enabled=True
+[loader] num_workers=0 pin_memory=False prefetch_factor=None persistent_workers=False
+[train] starting: epochs=10, steps_per_epoch=223, total_steps=2230, batch_size=2, grad_accum=16, scheduler=cosine
+[epoch 1] train 62.872 | val 5.943 | ppl 381.11 | lr 2.23e-04
+[timing] epoch 1 wall_sec=94.56 cpu_sec=51.11
+[epoch 2] train 7.790 | val 4.173 | ppl 64.93 | lr 2.96e-04
+[timing] epoch 2 wall_sec=93.57 cpu_sec=49.79
+[epoch 3] train 7.552 | val 4.109 | ppl 60.88 | lr 2.75e-04
+[timing] epoch 3 wall_sec=93.42 cpu_sec=50.55
+[epoch 4] train 7.627 | val 4.108 | ppl 60.82 | lr 2.39e-04
+[timing] epoch 4 wall_sec=93.34 cpu_sec=50.75
+[epoch 5] train 7.833 | val 4.114 | ppl 61.16 | lr 1.91e-04
+[timing] epoch 5 wall_sec=93.09 cpu_sec=50.84
+[epoch 6] train 7.972 | val 4.133 | ppl 62.36 | lr 1.39e-04
+[timing] epoch 6 wall_sec=93.08 cpu_sec=52.88
+[epoch 7] train 8.046 | val 4.132 | ppl 62.31 | lr 8.93e-05
+[timing] epoch 7 wall_sec=92.87 cpu_sec=52.69
+[epoch 8] train 8.052 | val 4.134 | ppl 62.42 | lr 4.78e-05
+[timing] epoch 8 wall_sec=93.19 cpu_sec=52.85
+[epoch 9] train 8.074 | val 4.131 | ppl 62.26 | lr 2.02e-05
+[timing] epoch 9 wall_sec=93.46 cpu_sec=53.30
+[early-stopping] no improvement; stopping.
+[timing] train_wall_sec=841.59 train_cpu_sec=465.43
+[state] missing: []
+[state] unexpected: []
+[state] missing: []
+[state] unexpected: []
+[state] missing: []
+[state] unexpected: []
+[save] outputs/scores/2025-11-08_tiny_2L4H_d256_e10/one_cds__best.tsv
+
+[motifs] skipped (enable with --with-motifs or run analysis.sh)
+[artifacts] skipped (enable with --with-artifacts or run analysis.sh/post_process.sh)
+[timing] training_sec=844
+[timing] training_time=0 hours, 14 minutes, 4 seconds
+[timing] total_sec=931
+[timing] total_time=0 hours, 15 minutes, 31 seconds

@@ -101,8 +101,9 @@ class TinyGPT(nn.Module):
         logits = self.head(x)
         loss = None
         if targets is not None:
+            # Compute loss in float32 to avoid potential NaNs under AMP on some backends
             loss = F.cross_entropy(
-                logits.view(-1, logits.size(-1)),
+                logits.float().view(-1, logits.size(-1)),
                 targets.view(-1),
                 ignore_index=0,
                 label_smoothing=self.label_smoothing,
