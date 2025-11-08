@@ -1,0 +1,56 @@
+vocab_size: 69
+
+block_size: 512 
+n_layer: 16 
+n_head: 4
+n_embd: 256 
+dropout: 0.1
+
+windows_per_seq: 2
+val_frac: 0.1
+test_frac: 0.1
+
+datasets:
+  - name: ecoli_k12
+    gbff: data/raw/Enterobacteriaceae/GCF_000005845.gbff
+    min_len: 90
+  - name: Klebsiella
+    gbff: data/raw/Enterobacteriaceae/GCF_000240185.gbff
+    min_len: 90
+  - name: Salmonella
+    gbff: data/raw/Enterobacteriaceae/GCF_000006945.gbff
+    min_len: 90
+
+batch_size: 2
+grad_accum_steps: 16
+lr: 0.0003
+weight_decay: 0.05
+epochs: 10  # set to an integer or "auto" to derive from tokens_per_param × n_params
+
+optimizer: "adamw"
+amp: true
+use_checkpoint: true
+scheduler: "cosine"
+label_smoothing: 0.05
+warmup_steps: 300 
+min_lr: 1e-5
+plateau_patience: 2
+early_stop_patience: 5
+compile: false # enable torch.compile for training loop (PyTorch 2.x)
+compile_mode: reduce-overhead
+matmul_precision: high # torch.set_float32_matmul_precision value (high | medium | highest)
+tokens_per_param: 20.0  # heuristic for epochs=auto (T ≈ tokens_per_param × n_params)
+
+out_dir: outputs/checkpoints
+scores_dir: outputs/scores
+log_csv: "curves.csv"
+seed: 1337
+itos_path: data/processed/itos_codon.txt
+saliency_window: 9
+saliency_top: 20
+pack_mode: "multi"          # build_dataset: 'multi' packs multiple CDS per window; 'single' keeps one CDS per window
+sep_mask_enabled: true      # TinyGPT: block attention across <SEP> boundaries
+num_workers: 0              # DataLoader workers
+pin_memory: false
+prefetch_factor: 2
+persistent_workers: true

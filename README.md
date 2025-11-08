@@ -59,6 +59,16 @@ python -m scripts.infer_generate_cds --run_dir outputs/checkpoints/<RUN_ID> --st
 # Score per-position ΔlogP for a provided CDS and plot a heatmap
 python -m scripts.infer_score_mutations --run_dir outputs/checkpoints/<RUN_ID> --seq "ATG GCT ... TGA" --out_dir outputs/analysis/<RUN_ID>
 ```
+
+Long Protein Generation (Prefix Benchmark)
+
+- Run the prefix‑generation benchmark with long CDS targets:
+  - python -m scripts.eval_generation_prefix --run_id <RUN_ID> --k_list 1,3,5,10 \
+    --samples 5 --max_genes 50 --max_new 500 --min_aa_len 300 --target_aa_len 360 \
+    --max_aa_len 400 --require_terminal_stop --special_margin 6
+- Constraint: k + target_aa_len + special_margin ≤ block_size (from the model config). Lower target_aa_len or increase block_size if violated.
+- Outputs add AA length stats (mean/median), terminal stop rate, hard‑cap rate, and an extra plot `aa_len_vs_k.png`.
+ - See MANUAL.md under “Long CDS generation (prefix benchmark)” for full details and caveats.
 ## Benchmarking & Evaluation
 
 Evaluate a trained run on the held‑out test split and compute sanity KPIs:

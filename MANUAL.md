@@ -40,6 +40,22 @@ Benchmarks & Inference
 - Prefix generation: scripts/eval_generation_prefix.py → outputs/scores/<RUN_ID>/gen_prefix/{samples.csv,summary.csv}
 - Interactive/query: python -m scripts.query_model <RUN_ID> --mode next|generate|score --dna ATG...
 
+Long CDS generation (prefix benchmark)
+
+- Goal: evaluate longer protein generation (300–400 aa) while respecting model block_size.
+- CLI flags in scripts/eval_generation_prefix.py:
+  - --min_aa_len (default 100), --target_aa_len (default 256), --max_aa_len (default 400)
+  - --require_terminal_stop (enforce canonical stop at the end)
+  - --special_margin (default 6) for specials like BOS/EOS/SEP
+- Constraint: k + target_aa_len + special_margin ≤ block_size. If violated, lower target_aa_len or increase block_size.
+- Generation logic (src/codonlm/generate.py):
+  - Generates up to a hard_cap = min(block_size − k − special_margin, max_aa_len, max_new).
+  - Stops when a canonical stop is reached at/after target length, or at target length if not requiring a terminal stop, or at hard_cap.
+  - Records had_terminal_stop, early_stop (internal stop before target), hit_hard_cap, and gen_len_codons.
+- Outputs:
+  - samples.csv includes gen_len_codons, had_terminal_stop, hit_hard_cap, target_codons.
+  - summary.csv adds mean_aa_len, median_aa_len, terminal_stop_rate, hard_cap_rate and aa_len_vs_k.png plot.
+
 Stage‑2 Classifiers (sequence‑level benchmarking)
 
 - Extract embeddings from a trained run:

@@ -27,6 +27,7 @@ import torch
 import matplotlib.pyplot as plt
 
 from . import query_model as Q
+from src.codonlm.generate import generate_cds_constrained
 
 
 # --- Biology helpers ---
@@ -102,6 +103,11 @@ class SampleResult:
     gen_len: int
     valid_end: bool
     early_stop: bool
+    # long-protein generation metadata
+    gen_len_codons: int
+    had_terminal_stop: bool
+    hit_hard_cap: bool
+    target_codons: int
 
 
 def main() -> None:
@@ -113,6 +119,12 @@ def main() -> None:
     ap.add_argument("--max_new", type=int, default=300)
     ap.add_argument("--temperature", type=float, default=0.8)
     ap.add_argument("--topk", type=int, default=5)
+    # Long-protein controls
+    ap.add_argument("--min_aa_len", type=int, default=100)
+    ap.add_argument("--target_aa_len", type=int, default=256)
+    ap.add_argument("--max_aa_len", type=int, default=400)
+    ap.add_argument("--require_terminal_stop", action="store_true", default=False)
+    ap.add_argument("--special_margin", type=int, default=6)
     args = ap.parse_args()
 
     repo = Path(__file__).resolve().parents[1]
@@ -126,6 +138,9 @@ def main() -> None:
     model = Q.build_model_from_state(state_dict, cfg)
     device = Q.dev()
     model.to(device).eval()
+    # Validate AA length constraints
+    if not (0 < args.min_aa_len <= args.target_aa_len <= args.max_aa_len):
+        raise SystemExit("require 0 < min_aa_len ≤ target_aa_len ≤ max_aa_len")
 
     # Choose CDS corpus: from first dataset dna path in combined manifest
     dna_path = None
@@ -231,6 +246,7 @@ def main() -> None:
     rows: List[SampleResult] = []
     k_list = [int(x) for x in args.k_list.split(",") if x]
 
+    block_size = int(cfg.get("block_size", getattr(model, "block_size", 512)))
     for gene_idx, dna in enumerate(cds):
         truth_codons = [dna[i:i+3] for i in range(0, (len(dna)//3)*3, 3)]
         truth_aa = _aa_seq(truth_codons)
@@ -239,7 +255,26 @@ def main() -> None:
             # tokenize prefix
             ctx_ids = Q.dna_to_ids(prefix, stoi)
             for sidx in range(args.samples):
-                gen_ids = Q.generate(model, device, ctx_ids, max_new=args.max_new, temperature=args.temperature, topk=args.topk if args.topk>0 else 0, eos_idx=stoi.get("<EOS_CDS>"))
+                # Compute safe generation lengths (AA == codons)
+                max_window_codons = block_size - int(k) - int(args.special_margin)
+                if max_window_codons < args.min_aa_len:
+                    raise ValueError("block_size too small for requested lengths and k")
+                hard_cap = int(min(max_window_codons, args.max_aa_len, args.max_new))
+                target_codons = int(min(args.target_aa_len, hard_cap))
+                target_codons = int(max(target_codons, args.min_aa_len))
+                # Constrained generation
+                gen_ids, info = generate_cds_constrained(
+                    model=model,
+                    device=device,
+                    ctx_ids=ctx_ids,
+                    stoi=stoi,
+                    itos=itos,
+                    target_codons=target_codons,
+                    hard_cap=hard_cap,
+                    require_terminal_stop=bool(args.require_terminal_stop),
+                    temperature=float(args.temperature),
+                    topk=int(args.topk) if args.topk>0 else 0,
+                )
                 gen_toks = Q.ids_to_codons(gen_ids, itos)
                 # strip BOS and anything before first codon
                 codons = [t for t in gen_toks if len(t) == 3 and set(t) <= set("ACGT")]
@@ -257,7 +292,10 @@ def main() -> None:
                 frame = frame_integrity_ok(codons)
                 score = gqs(stop_score, aaid, syn, stab, norep, usage, frame)
                 rows.append(SampleResult(
-                    args.run_id, gene_idx, k, sidx, aaid, syn, stop_score, frame, stab, norep, usage, score, len(codons), valid_end, early
+                    args.run_id, gene_idx, k, sidx, aaid, syn, stop_score, frame, stab, norep, usage, score,
+                    len(codons), valid_end, early,
+                    gen_len_codons=len(codons), had_terminal_stop=bool(info.get("had_terminal_stop", False)),
+                    hit_hard_cap=bool(info.get("hit_hard_cap", False)), target_codons=int(target_codons)
                 ))
 
     # write samples.csv
@@ -281,6 +319,10 @@ def main() -> None:
         median_gqs = float(stats.median([r.gqs for r in rks]))
         mean_aa = float(sum(r.aa_identity for r in rks) / len(rks))
         best_aa = float(max(r.aa_identity for r in rks))
+        mean_len = float(sum(r.gen_len_codons for r in rks) / len(rks))
+        median_len = float(stats.median([r.gen_len_codons for r in rks]))
+        stop_rate = sum(1 for r in rks if r.had_terminal_stop) / len(rks)
+        hard_cap_rate = sum(1 for r in rks if r.hit_hard_cap) / len(rks)
         summary.append({
             "k": k,
             "termination_rate": term_rate,
@@ -288,11 +330,18 @@ def main() -> None:
             "median_gqs": median_gqs,
             "mean_aa_identity": mean_aa,
             "best_aa_identity": best_aa,
+            "mean_aa_len": mean_len,
+            "median_aa_len": median_len,
+            "terminal_stop_rate": stop_rate,
+            "hard_cap_rate": hard_cap_rate,
             "n": len(rks),
         })
     summary_csv = out_dir / "summary.csv"
     with summary_csv.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["k","termination_rate","early_stop_rate","median_gqs","mean_aa_identity","best_aa_identity","n"])
+        writer = csv.DictWriter(f, fieldnames=[
+            "k","termination_rate","early_stop_rate","median_gqs","mean_aa_identity","best_aa_identity",
+            "mean_aa_len","median_aa_len","terminal_stop_rate","hard_cap_rate","n"
+        ])
         writer.writeheader(); writer.writerows(summary)
     print(f"[gen-prefix] wrote {summary_csv}")
 
@@ -305,6 +354,8 @@ def main() -> None:
         plt.figure(); plt.plot(ks, tr, marker='o'); plt.xlabel('k'); plt.ylabel('termination_rate'); plt.title('Termination vs k'); plt.tight_layout(); plt.savefig(out_dir/"termination_vs_k.png"); plt.close()
         plt.figure(); plt.plot(ks, gq, marker='o'); plt.xlabel('k'); plt.ylabel('median_gqs'); plt.title('GQS vs k'); plt.tight_layout(); plt.savefig(out_dir/"gqs_vs_k.png"); plt.close()
         plt.figure(); plt.plot(ks, aa, marker='o'); plt.xlabel('k'); plt.ylabel('mean_aa_identity'); plt.title('AA identity vs k'); plt.tight_layout(); plt.savefig(out_dir/"aa_vs_k.png"); plt.close()
+        ml = [s["mean_aa_len"] for s in summary]
+        plt.figure(); plt.plot(ks, ml, marker='o'); plt.xlabel('k'); plt.ylabel('mean_aa_len'); plt.title('AA length vs k'); plt.tight_layout(); plt.savefig(out_dir/"aa_len_vs_k.png"); plt.close()
     except Exception as exc:
         print(f"[gen-prefix] plotting failed: {exc}")
 
