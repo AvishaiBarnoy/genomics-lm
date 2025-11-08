@@ -9,18 +9,20 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from ._shared import ensure_run_layout, load_artifacts, load_model, load_token_list
+from ._shared import ensure_run_layout, load_artifacts, load_model, load_token_list, resolve_run
 
 
 def main(argv: Optional[Iterable[str]] = None) -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("run_id")
+    ap.add_argument("run_id", nargs="?")
+    ap.add_argument("--run_dir", help="Alternative to run_id; path to runs/<RUN_ID>")
     args = ap.parse_args(argv)
 
-    paths = ensure_run_layout(args.run_id)
+    run_id, run_dir = resolve_run(args.run_id, args.run_dir)
+    paths = ensure_run_layout(run_id)
     run_dir, tables_dir = paths["run"], paths["tables"]
 
-    artifacts = load_artifacts(args.run_id)
+    artifacts = load_artifacts(run_id)
     val_inputs = artifacts.get("val_inputs")
     val_targets = artifacts.get("val_targets")
     if val_inputs is None or val_inputs.size == 0:
@@ -89,4 +91,3 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
 
 if __name__ == "__main__":
     main()
-

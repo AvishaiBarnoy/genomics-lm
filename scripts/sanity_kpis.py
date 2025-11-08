@@ -25,6 +25,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from src.codonlm.model_tiny_gpt import TinyGPT
 from src.codonlm.metrics_io import write_merge_metrics
+from scripts._shared import resolve_run
 
 
 def dev() -> torch.device:
@@ -235,13 +236,15 @@ def compute_kpis(model: TinyGPT, device: torch.device, test_npz: Path, itos: Lis
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run_dir", required=True, help="outputs/checkpoints/<RUN_ID>")
+    ap.add_argument("--run_dir", help="outputs/checkpoints/<RUN_ID>")
+    ap.add_argument("--run_id", help="Run id (alternative to --run_dir)")
     ap.add_argument("--max_windows", type=int, default=200)
     args = ap.parse_args()
 
-    run_dir = Path(args.run_dir)
     repo = Path(__file__).resolve().parents[1]
-    run_id = run_dir.name
+    # accept run_id or run_dir
+    run_id, _ = resolve_run(args.run_id, args.run_dir)
+    run_dir = Path(args.run_dir) if args.run_dir else (repo / "outputs" / "checkpoints" / run_id)
 
     state_dict, cfg = _load_checkpoint(run_dir)
     model = _build_model_from_cfg(cfg)
@@ -266,4 +269,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -8,7 +8,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from ._shared import ArtifactError, ensure_run_layout, load_artifacts, load_token_list
+from ._shared import ArtifactError, ensure_run_layout, load_artifacts, load_token_list, resolve_run
 
 
 def _plot_attention(attn: np.ndarray, tokens: list[str], out_path) -> None:
@@ -25,14 +25,16 @@ def _plot_attention(attn: np.ndarray, tokens: list[str], out_path) -> None:
 
 def main(argv: Optional[Iterable[str]] = None) -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("run_id")
+    ap.add_argument("run_id", nargs="?")
+    ap.add_argument("--run_dir", help="Alternative to run_id; path to runs/<RUN_ID>")
     args = ap.parse_args(argv)
 
-    paths = ensure_run_layout(args.run_id)
+    run_id, run_dir = resolve_run(args.run_id, args.run_dir)
+    paths = ensure_run_layout(run_id)
     run_dir, charts_dir = paths["run"], paths["charts"]
 
     try:
-        artifacts = load_artifacts(args.run_id)
+        artifacts = load_artifacts(run_id)
     except ArtifactError as exc:
         print(f"[attn] {exc}")
         return
@@ -60,4 +62,3 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
 
 if __name__ == "__main__":
     main()
-

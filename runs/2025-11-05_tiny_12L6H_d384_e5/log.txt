@@ -72,3 +72,28 @@
 [info] test_npz=data/processed/combined/2025-11-05_tiny_12L6H_d384_e5/test_bs256.npz
 [info] primary_dna=data/processed/ecoli_k12/cds_dna.txt
 [cfg] combined_manifest.sha256=6640e4ba9ec15fb2b0a0e06b67d9e1f0f6c7d9aa7a2bef1cb8fd820600bea064
+[matmul] float32 precision set to high
+[run] id=2025-11-05_tiny_12L6H_d384_e5
+[paths] ckpts=outputs/checkpoints/2025-11-05_tiny_12L6H_d384_e5 scores=outputs/scores/2025-11-05_tiny_12L6H_d384_e5 log_csv=/Users/User/github/genomics-lm/outputs/scores/2025-11-05_tiny_12L6H_d384_e5/curves.csv
+[model] params=21419136 sep_mask_enabled=True
+[loader] num_workers=0 pin_memory=False prefetch_factor=None persistent_workers=False
+[train] starting: epochs=5, steps_per_epoch=215, total_steps=1075, batch_size=2, grad_accum=16, scheduler=cosine
+[epoch 1] train 53.456 | val 5.822 | ppl 337.69 | lr 2.15e-04
+[epoch 2] train 5.753 | val 4.116 | ppl 61.31 | lr 2.81e-04
+[epoch 3] train 5.521 | val 4.035 | ppl 56.55 | lr 1.82e-04
+[epoch 4] train 5.521 | val 4.020 | ppl 55.69 | lr 6.35e-05
+[epoch 5] train 5.525 | val 4.019 | ppl 55.64 | lr 1.00e-05
+[state] missing: []
+[state] unexpected: []
+[state] missing: []
+[state] unexpected: []
+[state] missing: []
+[state] unexpected: []
+[save] outputs/scores/2025-11-05_tiny_12L6H_d384_e5/one_cds__best.tsv
+
+[motifs] skipped (enable with --with-motifs or run analysis.sh)
+[artifacts] skipped (enable with --with-artifacts or run analysis.sh/post_process.sh)
+[timing] training_sec=9490
+[timing] training_time=2 hours, 38 minutes, 10 seconds
+[timing] total_sec=10426
+[timing] total_time=2 hours, 53 minutes, 46 seconds

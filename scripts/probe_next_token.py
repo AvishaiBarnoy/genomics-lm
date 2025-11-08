@@ -7,7 +7,7 @@ from typing import Iterable, Optional
 
 import torch
 
-from ._shared import ensure_run_layout, load_model, load_token_list, stoi, softmax
+from ._shared import ensure_run_layout, load_model, load_token_list, stoi, softmax, resolve_run
 
 PREFIXES = ["ATG", "ATG-AAA", "ATG-GAA", "TAA"]
 TOP_K = 5
@@ -15,10 +15,12 @@ TOP_K = 5
 
 def main(argv: Optional[Iterable[str]] = None) -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("run_id")
+    ap.add_argument("run_id", nargs="?")
+    ap.add_argument("--run_dir", help="Alternative to run_id; path to runs/<RUN_ID>")
     args = ap.parse_args(argv)
 
-    paths = ensure_run_layout(args.run_id)
+    run_id, run_dir = resolve_run(args.run_id, args.run_dir)
+    paths = ensure_run_layout(run_id)
     run_dir, tables_dir = paths["run"], paths["tables"]
 
     tokens = load_token_list(run_dir)
@@ -75,4 +77,3 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
 
 if __name__ == "__main__":
     main()
-

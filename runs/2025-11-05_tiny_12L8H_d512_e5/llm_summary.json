@@ -1,0 +1,621 @@
+{
+  "charts_available": [
+    "attn_L0_H0_0-256.png",
+    "attn_L0_H1_0-256.png",
+    "attn_L0_H2_0-256.png",
+    "attn_L0_H3_0-256.png",
+    "attn_L0_H4_0-256.png",
+    "attn_L0_H5_0-256.png",
+    "attn_L0_H6_0-256.png",
+    "attn_L0_H7_0-256.png",
+    "attn_L10_H0_0-256.png",
+    "attn_L10_H1_0-256.png",
+    "attn_L10_H2_0-256.png",
+    "attn_L10_H3_0-256.png",
+    "attn_L10_H4_0-256.png",
+    "attn_L10_H5_0-256.png",
+    "attn_L10_H6_0-256.png",
+    "attn_L10_H7_0-256.png",
+    "attn_L11_H0_0-256.png",
+    "attn_L11_H1_0-256.png",
+    "attn_L11_H2_0-256.png",
+    "attn_L11_H3_0-256.png",
+    "attn_L11_H4_0-256.png",
+    "attn_L11_H5_0-256.png",
+    "attn_L11_H6_0-256.png",
+    "attn_L11_H7_0-256.png",
+    "attn_L1_H0_0-256.png",
+    "attn_L1_H1_0-256.png",
+    "attn_L1_H2_0-256.png",
+    "attn_L1_H3_0-256.png",
+    "attn_L1_H4_0-256.png",
+    "attn_L1_H5_0-256.png",
+    "attn_L1_H6_0-256.png",
+    "attn_L1_H7_0-256.png",
+    "attn_L2_H0_0-256.png",
+    "attn_L2_H1_0-256.png",
+    "attn_L2_H2_0-256.png",
+    "attn_L2_H3_0-256.png",
+    "attn_L2_H4_0-256.png",
+    "attn_L2_H5_0-256.png",
+    "attn_L2_H6_0-256.png",
+    "attn_L2_H7_0-256.png",
+    "attn_L3_H0_0-256.png",
+    "attn_L3_H1_0-256.png",
+    "attn_L3_H2_0-256.png",
+    "attn_L3_H3_0-256.png",
+    "attn_L3_H4_0-256.png",
+    "attn_L3_H5_0-256.png",
+    "attn_L3_H6_0-256.png",
+    "attn_L3_H7_0-256.png",
+    "attn_L4_H0_0-256.png",
+    "attn_L4_H1_0-256.png",
+    "attn_L4_H2_0-256.png",
+    "attn_L4_H3_0-256.png",
+    "attn_L4_H4_0-256.png",
+    "attn_L4_H5_0-256.png",
+    "attn_L4_H6_0-256.png",
+    "attn_L4_H7_0-256.png",
+    "attn_L5_H0_0-256.png",
+    "attn_L5_H1_0-256.png",
+    "attn_L5_H2_0-256.png",
+    "attn_L5_H3_0-256.png",
+    "attn_L5_H4_0-256.png",
+    "attn_L5_H5_0-256.png",
+    "attn_L5_H6_0-256.png",
+    "attn_L5_H7_0-256.png",
+    "attn_L6_H0_0-256.png",
+    "attn_L6_H1_0-256.png",
+    "attn_L6_H2_0-256.png",
+    "attn_L6_H3_0-256.png",
+    "attn_L6_H4_0-256.png",
+    "attn_L6_H5_0-256.png",
+    "attn_L6_H6_0-256.png",
+    "attn_L6_H7_0-256.png",
+    "attn_L7_H0_0-256.png",
+    "attn_L7_H1_0-256.png",
+    "attn_L7_H2_0-256.png",
+    "attn_L7_H3_0-256.png",
+    "attn_L7_H4_0-256.png",
+    "attn_L7_H5_0-256.png",
+    "attn_L7_H6_0-256.png",
+    "attn_L7_H7_0-256.png",
+    "attn_L8_H0_0-256.png",
+    "attn_L8_H1_0-256.png",
+    "attn_L8_H2_0-256.png",
+    "attn_L8_H3_0-256.png",
+    "attn_L8_H4_0-256.png",
+    "attn_L8_H5_0-256.png",
+    "attn_L8_H6_0-256.png",
+    "attn_L8_H7_0-256.png",
+    "attn_L9_H0_0-256.png",
+    "attn_L9_H1_0-256.png",
+    "attn_L9_H2_0-256.png",
+    "attn_L9_H3_0-256.png",
+    "attn_L9_H4_0-256.png",
+    "attn_L9_H5_0-256.png",
+    "attn_L9_H6_0-256.png",
+    "attn_L9_H7_0-256.png",
+    "emb_pca.png",
+    "first_position_counts.png",
+    "top20_freq.png"
+  ],
+  "embedding_neighbors": [
+    {
+      "neighbors": [
+        {
+          "similarity": 0.1098,
+          "token": "ATT"
+        },
+        {
+          "similarity": 0.0958,
+          "token": "GAT"
+        },
+        {
+          "similarity": 0.0928,
+          "token": "CCA"
+        },
+        {
+          "similarity": 0.0541,
+          "token": "GTG"
+        },
+        {
+          "similarity": 0.0434,
+          "token": "TCA"
+        }
+      ],
+      "token": "<pad>"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.099,
+          "token": "ACA"
+        },
+        {
+          "similarity": 0.0935,
+          "token": "ATA"
+        },
+        {
+          "similarity": 0.083,
+          "token": "GCC"
+        },
+        {
+          "similarity": 0.0823,
+          "token": "CGC"
+        },
+        {
+          "similarity": 0.063,
+          "token": "ACC"
+        }
+      ],
+      "token": "<bos>"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.0964,
+          "token": "AAC"
+        },
+        {
+          "similarity": 0.0935,
+          "token": "CCT"
+        },
+        {
+          "similarity": 0.0612,
+          "token": "TAT"
+        },
+        {
+          "similarity": 0.0591,
+          "token": "GGG"
+        },
+        {
+          "similarity": 0.0568,
+          "token": "AAA"
+        }
+      ],
+      "token": "<eos>"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.0867,
+          "token": "ATC"
+        },
+        {
+          "similarity": 0.0762,
+          "token": "GCG"
+        },
+        {
+          "similarity": 0.0701,
+          "token": "TGG"
+        },
+        {
+          "similarity": 0.0682,
+          "token": "CAA"
+        },
+        {
+          "similarity": 0.0629,
+          "token": "TCA"
+        }
+      ],
+      "token": "<eog>"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.0727,
+          "token": "AGA"
+        },
+        {
+          "similarity": 0.0722,
+          "token": "GTC"
+        },
+        {
+          "similarity": 0.0693,
+          "token": "CAG"
+        },
+        {
+          "similarity": 0.0665,
+          "token": "TCA"
+        },
+        {
+          "similarity": 0.06,
+          "token": "GTT"
+        }
+      ],
+      "token": "<unk>"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.097,
+          "token": "ACG"
+        },
+        {
+          "similarity": 0.093,
+          "token": "ACT"
+        },
+        {
+          "similarity": 0.083,
+          "token": "CGG"
+        },
+        {
+          "similarity": 0.0647,
+          "token": "GTT"
+        },
+        {
+          "similarity": 0.0592,
+          "token": "AGC"
+        }
+      ],
+      "token": "AAA"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.1025,
+          "token": "ATA"
+        },
+        {
+          "similarity": 0.0964,
+          "token": "<eos>"
+        },
+        {
+          "similarity": 0.0802,
+          "token": "CAT"
+        },
+        {
+          "similarity": 0.0738,
+          "token": "AAG"
+        },
+        {
+          "similarity": 0.0712,
+          "token": "CCT"
+        }
+      ],
+      "token": "AAC"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.1017,
+          "token": "CGT"
+        },
+        {
+          "similarity": 0.079,
+          "token": "TAG"
+        },
+        {
+          "similarity": 0.0781,
+          "token": "CTA"
+        },
+        {
+          "similarity": 0.0739,
+          "token": "TGA"
+        },
+        {
+          "similarity": 0.0738,
+          "token": "AAC"
+        }
+      ],
+      "token": "AAG"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.125,
+          "token": "ATG"
+        },
+        {
+          "similarity": 0.0975,
+          "token": "CTC"
+        },
+        {
+          "similarity": 0.0906,
+          "token": "CTT"
+        },
+        {
+          "similarity": 0.0808,
+          "token": "CGT"
+        },
+        {
+          "similarity": 0.0794,
+          "token": "GGG"
+        }
+      ],
+      "token": "AAT"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.099,
+          "token": "<bos>"
+        },
+        {
+          "similarity": 0.0802,
+          "token": "GCA"
+        },
+        {
+          "similarity": 0.0797,
+          "token": "CAA"
+        },
+        {
+          "similarity": 0.0717,
+          "token": "GTC"
+        },
+        {
+          "similarity": 0.0609,
+          "token": "ACC"
+        }
+      ],
+      "token": "ACA"
+    }
+  ],
+  "embedding_quality": {
+    "pca explained variance (pc1, pc2)": [
+      0.0261,
+      0.0259
+    ],
+    "silhouette score": -0.0022
+  },
+  "frequency_top_tokens": [
+    {
+      "count": 35286,
+      "frequency": 0.18088705708661418,
+      "token": "<pad>"
+    },
+    {
+      "count": 8453,
+      "frequency": 0.04333271817585302,
+      "token": "CTG"
+    },
+    {
+      "count": 6292,
+      "frequency": 0.03225475721784777,
+      "token": "GAA"
+    },
+    {
+      "count": 5431,
+      "frequency": 0.027841002296587928,
+      "token": "GCG"
+    },
+    {
+      "count": 5301,
+      "frequency": 0.027174581692913386,
+      "token": "AAA"
+    },
+    {
+      "count": 5185,
+      "frequency": 0.026579929461942257,
+      "token": "GAT"
+    },
+    {
+      "count": 4996,
+      "frequency": 0.025611056430446193,
+      "token": "ATT"
+    },
+    {
+      "count": 4759,
+      "frequency": 0.024396120406824148,
+      "token": "GGC"
+    },
+    {
+      "count": 4651,
+      "frequency": 0.023842478674540684,
+      "token": "CAG"
+    },
+    {
+      "count": 4480,
+      "frequency": 0.022965879265091863,
+      "token": "ATG"
+    }
+  ],
+  "meta": {
+    "checkpoint_path": "/Users/User/github/genomics-lm/outputs/checkpoints/2025-11-05_tiny_12L8H_d512_e5/best.pt",
+    "config_path": "/Users/User/github/genomics-lm/configs/tiny_mps.yaml",
+    "model_spec": {
+      "block_size": 256,
+      "dropout": 0.1,
+      "label_smoothing": 0.05,
+      "model_type": "tiny_gpt",
+      "n_embd": 512,
+      "n_head": 8,
+      "n_layer": 12,
+      "use_checkpoint": true,
+      "vocab_size": 69
+    },
+    "token_count": 69,
+    "val_ppl": 55.74692362245326
+  },
+  "next_token_tests": [
+    {
+      "predictions": [
+        {
+          "prob": 0.0923,
+          "token": "ATG"
+        },
+        {
+          "prob": 0.054,
+          "token": "CTG"
+        },
+        {
+          "prob": 0.0518,
+          "token": "GAA"
+        },
+        {
+          "prob": 0.0513,
+          "token": "GCG"
+        },
+        {
+          "prob": 0.0341,
+          "token": "CAG"
+        }
+      ],
+      "prefix": "ATG"
+    },
+    {
+      "predictions": [
+        {
+          "prob": 0.0988,
+          "token": "AAA"
+        },
+        {
+          "prob": 0.059,
+          "token": "CTG"
+        },
+        {
+          "prob": 0.0512,
+          "token": "GAA"
+        },
+        {
+          "prob": 0.0427,
+          "token": "GCG"
+        },
+        {
+          "prob": 0.0326,
+          "token": "CAG"
+        }
+      ],
+      "prefix": "ATG-AAA"
+    },
+    {
+      "predictions": [
+        {
+          "prob": 0.1197,
+          "token": "GAA"
+        },
+        {
+          "prob": 0.061,
+          "token": "CTG"
+        },
+        {
+          "prob": 0.0465,
+          "token": "GCG"
+        },
+        {
+          "prob": 0.0356,
+          "token": "AAA"
+        },
+        {
+          "prob": 0.035,
+          "token": "ATG"
+        }
+      ],
+      "prefix": "ATG-GAA"
+    },
+    {
+      "predictions": [
+        {
+          "prob": 0.0699,
+          "token": "CTG"
+        },
+        {
+          "prob": 0.0546,
+          "token": "GCG"
+        },
+        {
+          "prob": 0.0524,
+          "token": "GAA"
+        },
+        {
+          "prob": 0.038,
+          "token": "ATG"
+        },
+        {
+          "prob": 0.0361,
+          "token": "CAG"
+        }
+      ],
+      "prefix": "TAA"
+    }
+  ],
+  "probe_results": [
+    {
+      "mean_accuracy": 0.1129,
+      "std_accuracy": 0.0161,
+      "task": "AA identity"
+    },
+    {
+      "mean_accuracy": 0.4271,
+      "std_accuracy": 0.078,
+      "task": "polarity class"
+    },
+    {
+      "mean_accuracy": 0.5077,
+      "std_accuracy": 0.1403,
+      "task": "hydropathy class"
+    },
+    {
+      "mean_accuracy": 0.9531,
+      "std_accuracy": 0.001,
+      "task": "is_stop"
+    },
+    {
+      "mean_accuracy": 0.9531,
+      "std_accuracy": 0.001,
+      "task": "is_start"
+    }
+  ],
+  "run_id": "2025-11-05_tiny_12L8H_d512_e5",
+  "saliency_top_positions": [
+    {
+      "position": 217,
+      "saliency": -0.00368,
+      "token": "ATT"
+    },
+    {
+      "position": 164,
+      "saliency": -0.003665,
+      "token": "GTG"
+    },
+    {
+      "position": 242,
+      "saliency": -0.003602,
+      "token": "TCC"
+    },
+    {
+      "position": 158,
+      "saliency": -0.003514,
+      "token": "GCA"
+    },
+    {
+      "position": 16,
+      "saliency": -0.003331,
+      "token": "ACC"
+    },
+    {
+      "position": 201,
+      "saliency": -0.003293,
+      "token": "ATC"
+    },
+    {
+      "position": 148,
+      "saliency": -0.003283,
+      "token": "ATC"
+    },
+    {
+      "position": 30,
+      "saliency": -0.00309,
+      "token": "CAG"
+    },
+    {
+      "position": 47,
+      "saliency": 0.001114,
+      "token": "CTG"
+    },
+    {
+      "position": 141,
+      "saliency": 0.001092,
+      "token": "CTG"
+    }
+  ],
+  "tables_used": [
+    "tables/frequencies.csv",
+    "tables/nearest_neighbors.csv",
+    "tables/embed_quality.txt",
+    "tables/saliency.csv",
+    "tables/next_token_tests.csv",
+    "tables/probe_results.csv"
+  ]
+}

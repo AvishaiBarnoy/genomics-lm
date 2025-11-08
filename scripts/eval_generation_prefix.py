@@ -239,7 +239,7 @@ def main() -> None:
             # tokenize prefix
             ctx_ids = Q.dna_to_ids(prefix, stoi)
             for sidx in range(args.samples):
-                gen_ids = Q.generate(model, device, ctx_ids, max_new=args.max_new, temperature=args.temperature, topk=args.topk if args.topk>0 else 0, eos_idx=stoi.get("<eog>"))
+                gen_ids = Q.generate(model, device, ctx_ids, max_new=args.max_new, temperature=args.temperature, topk=args.topk if args.topk>0 else 0, eos_idx=stoi.get("<EOS_CDS>"))
                 gen_toks = Q.ids_to_codons(gen_ids, itos)
                 # strip BOS and anything before first codon
                 codons = [t for t in gen_toks if len(t) == 3 and set(t) <= set("ACGT")]
@@ -311,4 +311,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

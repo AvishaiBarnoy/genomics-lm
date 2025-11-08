@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
-from ._shared import ensure_run_layout, read_meta
+from ._shared import ensure_run_layout, read_meta, resolve_run
 
 
 @dataclass
@@ -211,13 +211,16 @@ def run_export(config: RunSummaryConfig) -> Path:
 
 def parse_args() -> RunSummaryConfig:
     parser = argparse.ArgumentParser(description="Export run artifacts into a compact JSON summary.")
-    parser.add_argument("run_id", help="Run identifier under runs/")
+    parser.add_argument("run_id", nargs="?", help="Run identifier under runs/")
+    parser.add_argument("--run_dir", help="Alternative to run_id; path to runs/<RUN_ID>")
     parser.add_argument("--top", type=int, default=10, help="Top-N items to keep from each table (default: 10)")
     parser.add_argument("--output", type=str, default=None, help="Optional custom output path")
     args = parser.parse_args()
 
+    # resolve run_id if run_dir provided
+    rid, _ = resolve_run(args.run_id, args.run_dir)
     output = Path(args.output) if args.output else None
-    return RunSummaryConfig(run_id=args.run_id, top_n=max(1, args.top), output=output)
+    return RunSummaryConfig(run_id=rid, top_n=max(1, args.top), output=output)
 
 
 def main() -> None:

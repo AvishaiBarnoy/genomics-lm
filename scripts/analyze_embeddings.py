@@ -12,7 +12,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ._shared import ArtifactError, ensure_run_layout, load_artifacts, load_token_list
+from ._shared import ArtifactError, ensure_run_layout, load_artifacts, load_token_list, resolve_run
 
 try:
     from sklearn.cluster import KMeans
@@ -65,14 +65,16 @@ def _load_motif_overlay(run_dir: Path) -> Optional[dict]:
 
 def main(argv: Optional[Iterable[str]] = None) -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("run_id")
+    ap.add_argument("run_id", nargs="?")
+    ap.add_argument("--run_dir", help="Alternative to run_id; path to runs/<RUN_ID>")
     args = ap.parse_args(argv)
 
-    paths = ensure_run_layout(args.run_id)
+    run_id, run_dir = resolve_run(args.run_id, args.run_dir)
+    paths = ensure_run_layout(run_id)
     run_dir, charts_dir, tables_dir = paths["run"], paths["charts"], paths["tables"]
 
     try:
-        artifacts = load_artifacts(args.run_id)
+        artifacts = load_artifacts(run_id)
     except ArtifactError as exc:
         print(f"[emb] {exc}")
         return
@@ -151,4 +153,3 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
 
 if __name__ == "__main__":
     main()
-

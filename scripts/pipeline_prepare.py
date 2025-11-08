@@ -228,8 +228,47 @@ def main() -> None:
 
     _write_manifest(run_dir, datasets, block_size, windows_per_seq, val_frac, test_frac, args.force)
 
+    # Consistency scan: if mixing tokenization states across datasets, or if any itos
+    # looks incompatible with the current tokenizer (expecting <PAD>, <BOS_CDS>, <EOS_CDS>, <SEP>),
+    # re-tokenize and rebuild all to avoid mismatches.
+    needs_ids = []
+    has_ids = []
+    itos_sets = []
+    expected_specials = ["<PAD>", "<BOS_CDS>", "<EOS_CDS>", "<SEP>"]
     for ds in datasets:
-        _ensure_dataset(ds, windows_per_seq, val_frac, test_frac, block_size, args.force)
+        ids_p = Path(ds["ids"])
+        itos_p = Path(ds["itos"])
+        (has_ids if ids_p.exists() else needs_ids).append(ds)
+        if itos_p.exists():
+            try:
+                toks = [t.strip() for t in itos_p.read_text().splitlines() if t.strip()]
+                itos_sets.append(toks[:8])
+            except Exception:
+                pass
+    mixed_state = bool(needs_ids) and bool(has_ids)
+    bad_specials = False
+    for toks in itos_sets:
+        if len(toks) < 4 or toks[:4] != expected_specials:
+            bad_specials = True
+            break
+    inconsistent_itos = False
+    if len(itos_sets) > 1:
+        first = itos_sets[0]
+        for other in itos_sets[1:]:
+            if other != first:
+                inconsistent_itos = True
+                break
+    force_retokenize = args.force or mixed_state or bad_specials or inconsistent_itos
+
+    if mixed_state:
+        print("[prepare] detected mixed tokenization state across datasets; re-tokenizing all")
+    if bad_specials:
+        print("[prepare] detected legacy or incompatible itos specials; re-tokenizing all")
+    if inconsistent_itos:
+        print("[prepare] detected inconsistent itos across datasets; re-tokenizing all")
+
+    for ds in datasets:
+        _ensure_dataset(ds, windows_per_seq, val_frac, test_frac, block_size, bool(args.force or force_retokenize))
 
     combined_dir = Path("data/processed/combined") / args.run_id
     combined_dir.mkdir(parents=True, exist_ok=True)

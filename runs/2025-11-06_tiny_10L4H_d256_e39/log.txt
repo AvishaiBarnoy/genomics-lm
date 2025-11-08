@@ -1,0 +1,161 @@
+[info] run_id=2025-11-06_tiny_10L4H_d256_e39
+[info] config=configs/tiny_mps.yaml
+[info] resume=none
+[hardware] date: 2025-11-06 20:58:07 UTC
+[hardware] uname: Darwin Mac 25.0.0 Darwin Kernel Version 25.0.0: Wed Sep 17 21:38:03 PDT 2025; root:xnu-12377.1.9~141/RELEASE_ARM64_T8112 arm64
+[hardware] cpu: Apple M2
+[hardware] python: 3.11.13
+[hardware] torch: 2.2.2
+[hardware] mps_available: True
+[hardware] cuda_available: False
+[hardware] cuda_device_count: 0
+[config] snapshot:
+[config] vocab_size: 69
+[config] 
+[config] block_size: 512 
+[config] n_layer: 10 
+[config] n_head: 4
+[config] n_embd: 256 
+[config] dropout: 0.05
+[config] 
+[config] windows_per_seq: 2
+[config] val_frac: 0.1
+[config] test_frac: 0.1
+[config] 
+[config] datasets:
+[config]   - name: ecoli_k12
+[config]     gbff: data/raw/Enterobacteriaceae/GCF_000005845.gbff
+[config]     min_len: 90
+[config]   - name: Klebsiella
+[config]     gbff: data/raw/Enterobacteriaceae/GCF_000240185.gbff
+[config]     min_len: 90
+[config]   - name: Salmonella
+[config]     gbff: data/raw/Enterobacteriaceae/GCF_000006945.gbff
+[config]     min_len: 90
+[config] 
+[config] batch_size: 2
+[config] grad_accum_steps: 16
+[config] lr: 0.0003
+[config] weight_decay: 0.05
+[config] epochs: 39 # set to an integer or "auto" to derive from tokens_per_param × n_params
+[config] 
+[config] optimizer: "adamw"
+[config] amp: true
+[config] use_checkpoint: true
+[config] scheduler: "cosine"
+[config] label_smoothing: 0.02
+[config] warmup_steps: 500
+[config] min_lr: 1e-5
+[config] plateau_patience: 2
+[config] early_stop_patience: 5
+[config] compile: false # enable torch.compile for training loop (PyTorch 2.x)
+[config] compile_mode: reduce-overhead
+[config] matmul_precision: medium  # torch.set_float32_matmul_precision value (high | medium | highest)
+[config] tokens_per_param: 20.0  # heuristic for epochs=auto (T ≈ tokens_per_param × n_params)
+[config] 
+[config] out_dir: outputs/checkpoints
+[config] scores_dir: outputs/scores
+[config] log_csv: "curves.csv"
+[config] seed: 1337
+[config] itos_path: data/processed/itos_codon.txt
+[config] saliency_window: 9
+[config] saliency_top: 20
+[config] pack_mode: "multi"          # build_dataset: 'multi' packs multiple CDS per window; 'single' keeps one CDS per window
+[config] sep_mask_enabled: true      # TinyGPT: block attention across <SEP> boundaries
+[config] num_workers: 0              # DataLoader workers
+[config] pin_memory: false
+[config] prefetch_factor: 2
+[config] persistent_workers: true
+[info] extra_datasets_cli=none
+[cfg] sha256=fdfc9867001d7d642757f0d694d082b50a2f2ecc62763b97afd4a6da2035a8c1 file=configs/tiny_mps.yaml
+[git] commit=653bd5e dirty=True
+[prepare] skip extract ecoli_k12
+[prepare] skip tokenize ecoli_k12
+[prepare] skip build ecoli_k12
+[prepare] skip extract Klebsiella
+[prepare] skip tokenize Klebsiella
+[prepare] skip build Klebsiella
+[prepare] skip extract Salmonella
+[prepare] skip tokenize Salmonella
+[prepare] skip build Salmonella
+[prepare] wrote runs/2025-11-06_tiny_10L4H_d256_e39/pipeline_prepare.json
+[info] combined_manifest=data/processed/combined/2025-11-06_tiny_10L4H_d256_e39/manifest.json
+[info] train_npz=data/processed/combined/2025-11-06_tiny_10L4H_d256_e39/train_bs512.npz
+[info] val_npz=data/processed/combined/2025-11-06_tiny_10L4H_d256_e39/val_bs512.npz
+[info] test_npz=data/processed/combined/2025-11-06_tiny_10L4H_d256_e39/test_bs512.npz
+[info] primary_dna=data/processed/ecoli_k12/cds_dna.txt
+[cfg] combined_manifest.sha256=e83d4d0050023f2a4f0987fcdfdbb0425cb79c865c78fe392562ce343781f558
+[matmul] float32 precision set to medium
+[run] id=2025-11-06_tiny_10L4H_d256_e39
+[paths] ckpts=outputs/checkpoints/2025-11-06_tiny_10L4H_d256_e39 scores=outputs/scores/2025-11-06_tiny_10L4H_d256_e39 log_csv=/Users/User/github/genomics-lm/outputs/scores/2025-11-06_tiny_10L4H_d256_e39/curves.csv
+[model] params=8046848 sep_mask_enabled=True
+[loader] num_workers=0 pin_memory=False prefetch_factor=None persistent_workers=False
+[train] starting: epochs=39, steps_per_epoch=738, total_steps=28782, batch_size=2, grad_accum=16, scheduler=cosine
+[epoch 1] train nan | val nan | ppl 485165195.41 | lr 3.00e-04
+[epoch 2] train nan | val nan | ppl 485165195.41 | lr 2.99e-04
+[epoch 3] train nan | val nan | ppl 485165195.41 | lr 2.97e-04
+[epoch 4] train nan | val nan | ppl 485165195.41 | lr 2.95e-04
+[epoch 5] train nan | val nan | ppl 485165195.41 | lr 2.91e-04
+[early-stopping] no improvement; stopping.
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/User/github/genomics-lm/src/codonlm/eval_perplexity.py", line 65, in <module>
+    main()
+  File "/Users/User/github/genomics-lm/src/codonlm/eval_perplexity.py", line 32, in main
+    state = torch.load(args.ckpt, map_location="cpu")
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/serialization.py", line 998, in load
+    with _open_file_like(f, 'rb') as opened_file:
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/serialization.py", line 445, in _open_file_like
+    return _open_file(name_or_buffer, mode)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/serialization.py", line 426, in __init__
+    super().__init__(open(name, mode))
+                     ^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'outputs/checkpoints/2025-11-06_tiny_10L4H_d256_e39/best.pt'
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/User/github/genomics-lm/src/codonlm/eval_perplexity.py", line 65, in <module>
+    main()
+  File "/Users/User/github/genomics-lm/src/codonlm/eval_perplexity.py", line 32, in main
+    state = torch.load(args.ckpt, map_location="cpu")
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/serialization.py", line 998, in load
+    with _open_file_like(f, 'rb') as opened_file:
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/serialization.py", line 445, in _open_file_like
+    return _open_file(name_or_buffer, mode)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/serialization.py", line 426, in __init__
+    super().__init__(open(name, mode))
+                     ^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'outputs/checkpoints/2025-11-06_tiny_10L4H_d256_e39/best.pt'
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/User/github/genomics-lm/src/codonlm/score_mutations.py", line 147, in <module>
+    main()
+  File "/Users/User/github/genomics-lm/src/codonlm/score_mutations.py", line 40, in main
+    state = torch.load(args.ckpt, map_location="cpu")
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/serialization.py", line 998, in load
+    with _open_file_like(f, 'rb') as opened_file:
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/serialization.py", line 445, in _open_file_like
+    return _open_file(name_or_buffer, mode)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/serialization.py", line 426, in __init__
+    super().__init__(open(name, mode))
+                     ^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'outputs/checkpoints/2025-11-06_tiny_10L4H_d256_e39/best.pt'
+
+ERROR conda.cli.main_run:execute(127): `conda run python -m src.codonlm.score_mutations --ckpt outputs/checkpoints/2025-11-06_tiny_10L4H_d256_e39/best.pt --dna data/processed/one_cds.txt --out outputs/scores/2025-11-06_tiny_10L4H_d256_e39/one_cds__best.tsv` failed. (See above for error)
+[motifs] skipped (enable with --with-motifs or run analysis.sh)
+[artifacts] skipped (enable with --with-artifacts or run analysis.sh/post_process.sh)
+[timing] training_sec=7770
+[timing] training_time=2 hours, 9 minutes, 30 seconds
+[timing] total_sec=7779
+[timing] total_time=2 hours, 9 minutes, 39 seconds

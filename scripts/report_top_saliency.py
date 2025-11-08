@@ -16,17 +16,19 @@ from typing import Iterable, Optional
 import numpy as np
 import torch
 
-from ._shared import ensure_run_layout, load_artifacts, load_token_list, load_model, stoi
+from ._shared import ensure_run_layout, load_artifacts, load_token_list, load_model, stoi, resolve_run
 
 
 def main(argv: Optional[Iterable[str]] = None) -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("run_id")
+    ap.add_argument("run_id", nargs="?")
+    ap.add_argument("--run_dir", help="Alternative to run_id; path to runs/<RUN_ID>")
     ap.add_argument("--window", type=int, default=9)
     ap.add_argument("--top", type=int, default=20)
     args = ap.parse_args(argv)
 
-    paths = ensure_run_layout(args.run_id)
+    run_id, run_dir = resolve_run(args.run_id, args.run_dir)
+    paths = ensure_run_layout(run_id)
     run_dir, tables_dir = paths["run"], paths["tables"]
 
     # Load saliency
@@ -65,7 +67,7 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
     order = np.argsort(-sums)[: int(args.top)]
 
     # Try to load attention
-    artifacts = load_artifacts(args.run_id)
+    artifacts = load_artifacts(run_id)
     attn = artifacts.get("attn")
     attn_score = None
     if attn is not None and attn.size > 0:

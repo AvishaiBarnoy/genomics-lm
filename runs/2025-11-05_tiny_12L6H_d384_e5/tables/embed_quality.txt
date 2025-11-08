@@ -1,0 +1,2 @@
+PCA explained variance (PC1, PC2): 0.0282, 0.0269
+Silhouette score: -0.0031

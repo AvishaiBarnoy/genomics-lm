@@ -135,6 +135,8 @@ Note: cosine+warmup is enabled by default and you can set `label_smoothing: 0.05
 - `matmul_precision: high` calls `torch.set_float32_matmul_precision`, which can accelerate MPS matmuls; try `medium` or `highest` depending on accuracy/perf trade-offs.
 - `use_checkpoint: true` still forces gradient checkpointing; leave it `false` unless memory is tight. Automatic detection of OOM scenarios is not yet supported—consider enabling it manually if you encounter memory limits.
 
+Auto-epochs (optional): set `epochs: "auto"` to choose the number of epochs from the heuristic `T ≈ tokens_per_param × n_params` (default `tokens_per_param: 20.0`). The trainer estimates `tokens_per_epoch ≈ len(train_ds) × block_size` and sets `epochs = ceil(T / tokens_per_epoch)` (clamped by optional `epochs_min/epochs_max`). The computation is logged under `[epochs-auto]`.
+
 Convenience wrappers:
 
 ```bash

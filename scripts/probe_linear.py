@@ -12,9 +12,10 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 from sklearn.linear_model import LogisticRegression
+import warnings
 from sklearn.model_selection import StratifiedKFold, train_test_split
 
-from ._shared import ensure_run_layout, load_artifacts, load_token_list, stoi
+from ._shared import ensure_run_layout, load_artifacts, load_token_list, stoi, resolve_run
 
 try:
     # Reuse mappings from the label generator when available
@@ -150,19 +151,33 @@ def _kfold_indices(n: int, k: int, seed: int = RNG_SEED):
 def _train_eval_probe_sklearn(train_x: np.ndarray, train_y: np.ndarray, val_x: np.ndarray, val_y: np.ndarray) -> float:
     # Keep defaults; sklearn>=1.5 deprecates multi_class="auto", so omit it
     clf = LogisticRegression(max_iter=200)
-    clf.fit(train_x, train_y)
-    return float(clf.score(val_x, val_y))
+    with warnings.catch_warnings():
+        # Suppress sklearn warnings when classes ~ samples (still a valid classification setup for us)
+        warnings.filterwarnings(
+            "ignore",
+            message="The number of unique classes is greater than 50% of the number of samples",
+            category=UserWarning,
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message=".*could represent a regression problem.*",
+            category=UserWarning,
+        )
+        clf.fit(train_x, train_y)
+        return float(clf.score(val_x, val_y))
 
 
 def main(argv: Optional[Iterable[str]] = None) -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("run_id")
+    ap.add_argument("run_id", nargs="?")
+    ap.add_argument("--run_dir", help="Alternative to run_id; path to runs/<RUN_ID>")
     args = ap.parse_args(argv)
 
-    paths = ensure_run_layout(args.run_id)
+    run_id, run_dir = resolve_run(args.run_id, args.run_dir)
+    paths = ensure_run_layout(run_id)
     run_dir, tables_dir = paths["run"], paths["tables"]
 
-    embeddings = load_artifacts(args.run_id).get("token_embeddings")
+    embeddings = load_artifacts(run_id).get("token_embeddings")
     if embeddings is None or embeddings.size == 0:
         print("[probe-linear] token embeddings missing; aborting")
         return
@@ -194,6 +209,15 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
 
         # Require at least 2 classes overall
         classes, counts = np.unique(y_task, return_counts=True)
+        # Special handling for AA identity: drop singleton classes (e.g., Met/ATG, Trp/TGG)
+        if field == "aa":
+            keep_classes = set(int(c) for c, cnt in zip(classes, counts) if cnt >= 2)
+            if keep_classes and len(keep_classes) < classes.size:
+                keep_mask = np.array([int(v) in keep_classes for v in y_task], dtype=bool)
+                X_task = X_task[keep_mask]
+                y_task = y_task[keep_mask]
+                classes, counts = np.unique(y_task, return_counts=True)
+                print(f"[probe-linear] AA identity: dropped singleton classes; kept {classes.size} classes")
         if classes.size < 2:
             print(f"[probe-linear] skipping {task}; only one class present")
             continue
@@ -201,9 +225,13 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         # If extremely sparse, fall back to holdout split (stratified)
         if min_per_class < 2 or len(y_task) < K_FOLDS:
             test_size = 0.5 if min_per_class == 1 else 0.2
-            train_x, val_x, train_y, val_y = train_test_split(
-                X_task, y_task, test_size=test_size, stratify=y_task, random_state=RNG_SEED
-            )
+            try:
+                train_x, val_x, train_y, val_y = train_test_split(
+                    X_task, y_task, test_size=test_size, stratify=y_task, random_state=RNG_SEED
+                )
+            except ValueError as exc:
+                print(f"[probe-linear] skipping {task}; holdout split failed ({exc})")
+                continue
             if np.unique(train_y).size < 2 or np.unique(val_y).size < 2:
                 print(f"[probe-linear] skipping {task}; holdout had <2 classes")
                 continue

@@ -17,18 +17,11 @@ Config highlights:
   log_csv: where to append training curves (relative to scores_dir by default)
 """
 
-import argparse, yaml, math, csv, time, torch, numpy as np, json, os
+import argparse, yaml, math, csv, time, torch, numpy as np, json, os, logging
 from pathlib import Path
 from typing import Optional, Tuple
 from torch.utils.data import DataLoader, Dataset
 from .model_tiny_gpt import TinyGPT
-
-# optional Adafactor
-try:
-    from transformers.optimization import Adafactor
-    HAS_ADAFACTOR = True
-except Exception:
-    HAS_ADAFACTOR = False
 
 RUN_ID_ENV = "RUN_ID"
 
@@ -213,22 +206,66 @@ def main():
     compile_mode = cfg.get("compile_mode", "default")
 
     if compile_requested:
+        # Be resilient: if Dynamo hits a backend quirk, fall back to eager without crashing
+        try:
+            import torch._dynamo as dynamo
+            dynamo.config.suppress_errors = True
+            try:
+                dynamo.config.log_level = logging.ERROR
+            except Exception:
+                pass
+        except Exception:
+            pass
+        # Compatibility shim for older transformers packages that break Dynamo's ModelOutput probe
+        try:
+            import importlib
+            fu = importlib.import_module("transformers.file_utils")
+            if not hasattr(fu, "ModelOutput"):
+                utils_mod = importlib.import_module("transformers.utils")
+                if hasattr(utils_mod, "ModelOutput"):
+                    setattr(fu, "ModelOutput", getattr(utils_mod, "ModelOutput"))
+        except Exception:
+            # transformers not installed or different layout; ignore
+            pass
         torch_compile = getattr(torch, "compile", None)
         if torch_compile:
             try:
                 model = torch_compile(model, mode=compile_mode)
                 print(f"[compile] torch.compile enabled (mode={compile_mode})")
+                # Probe whether a graph was actually captured; if not, we likely fell back to eager.
+                try:
+                    from torch._dynamo.utils import counters as _dynamo_counters  # type: ignore
+                    before_ok = int(_dynamo_counters["frames"].get("ok", 0)) if isinstance(_dynamo_counters, dict) else 0
+                    probe_T = max(1, min(8, int(cfg.get("block_size", 8))))
+                    with torch.no_grad():
+                        _ = model(torch.zeros((1, probe_T), dtype=torch.long, device=device))
+                    after_ok = int(_dynamo_counters["frames"].get("ok", 0)) if isinstance(_dynamo_counters, dict) else before_ok
+                    captured = max(0, after_ok - before_ok)
+                    if captured == 0:
+                        print("[compile] no graphs captured; running in eager (fallback).")
+                    else:
+                        print(f"[compile] graphs_captured={captured}")
+                except Exception:
+                    # If counters are unavailable or the probe fails, stay silent
+                    pass
             except Exception as exc:
                 print(f"[compile] torch.compile failed ({exc}); continuing without compilation.")
         else:
             print("[compile] torch.compile not available in this PyTorch build.")
 
-    # Optimizer selection
+    # Optimizer selection (lazy import to avoid importing transformers unless needed)
     if cfg.get("optimizer", "adamw").lower() == "adafactor":
-        if not HAS_ADAFACTOR:
+        try:
+            from transformers.optimization import Adafactor  # type: ignore
+        except Exception:
             raise RuntimeError("transformers not installed; pip install transformers to use Adafactor")
-        optim = Adafactor(model.parameters(), lr=cfg.get("lr", 3e-4),
-                          scale_parameter=False, relative_step=False, weight_decay=cfg.get("weight_decay", 0.05))
+        optim = Adafactor(
+            model.parameters(),
+            lr=cfg.get("lr", 3e-4),
+            scale_parameter=False,
+            relative_step=False,
+            weight_decay=cfg.get("weight_decay", 0.05),
+        )
     else:
         optim = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
 
@@ -242,7 +279,24 @@ def main():
     min_lr = float(cfg.get("min_lr", 1e-5))
     base_lr = float(cfg["lr"])
 
-    max_epochs = int(cfg.get("epochs", 5))
+    # Auto-epochs: target total tokens = tokens_per_param * n_params (heuristic T = 20 * N)
+    # tokens_per_epoch ≈ len(train_ds) * block_size
+    epochs_cfg = cfg.get("epochs", 5)
+    n_params = sum(p.numel() for p in model.parameters())
+    tokens_per_param = float(cfg.get("tokens_per_param", 20.0))
+    if isinstance(epochs_cfg, str) and epochs_cfg.strip().lower() == "auto":
+        tokens_target = max(1.0, tokens_per_param * float(n_params))
+        tokens_per_epoch = max(1.0, float(len(train_ds) * cfg["block_size"]))
+        est_epochs = int(math.ceil(tokens_target / tokens_per_epoch))
+        # clamp to reasonable bounds
+        est_epochs = max(int(cfg.get("epochs_min", 1)), min(est_epochs, int(cfg.get("epochs_max", max(1, est_epochs)))))
+        max_epochs = est_epochs
+        print(
+            f"[epochs-auto] tokens_per_param={tokens_per_param} n_params={n_params} → target_tokens={int(tokens_target)}; "
+            f"tokens_per_epoch≈{int(tokens_per_epoch)} → epochs={max_epochs}"
+        )
+    else:
+        max_epochs = int(epochs_cfg)
     steps_per_epoch = math.ceil(len(train_loader) / max(1, gacc))
     total_steps = max(1, steps_per_epoch * max_epochs)
     use_cosine = scheduler_name == "cosine"
@@ -341,6 +395,10 @@ def main():
                         raise
             else:
                 logits, loss = fwd()
+            # Guard against NaNs/infs (e.g., degenerate batches); skip update for this micro-step
+            if not torch.isfinite(loss):
+                print("[warn] non-finite loss; skipping micro-step")
+                continue
             if split=="train":
                 loss.backward()
                 if (n+1) % gacc == 0:
@@ -361,7 +419,6 @@ def main():
     if run_id:
         print(f"[run] id={run_id}")
     print(f"[paths] ckpts={ckpt_dir} scores={scores_dir} log_csv={log_csv}")
-    n_params = sum(p.numel() for p in model.parameters())
     print(f"[model] params={n_params} sep_mask_enabled={sep_mask_enabled}")
     print(f"[loader] num_workers={num_workers} pin_memory={pin_memory} prefetch_factor={prefetch_factor} persistent_workers={persistent_workers}")
     print(
@@ -369,7 +426,12 @@ def main():
         f"batch_size={cfg['batch_size']}, grad_accum={gacc}, scheduler={scheduler_name}"
     )
 
+    train_wall0 = time.perf_counter()
+    train_cpu0 = time.process_time()
+
     for epoch in range(start_epoch, max_epochs):
+        ep_wall0 = time.perf_counter()
+        ep_cpu0 = time.process_time()
         epoch_idx = epoch + 1
         train_loss = one_pass("train", train_loader)
         with torch.no_grad():
@@ -379,6 +441,9 @@ def main():
             scheduler.step(val_loss)
         lr_now = optim.param_groups[0]["lr"]
         print(f"[epoch {epoch_idx}] train {train_loss:.3f} | val {val_loss:.3f} | ppl {ppl:.2f} | lr {lr_now:.2e}")
+        ep_wall1 = time.perf_counter()
+        ep_cpu1 = time.process_time()
+        print(f"[timing] epoch {epoch_idx} wall_sec={ep_wall1-ep_wall0:.2f} cpu_sec={ep_cpu1-ep_cpu0:.2f}")
 
         improved = val_loss + 1e-6 < best
         if improved:
@@ -431,6 +496,11 @@ def main():
         }
         metrics_path = scores_dir / "metrics.json"
         metrics_path.write_text(json.dumps(metrics, indent=2) + "\n")
+
+    # Overall training timing (wall vs CPU time)
+    train_wall1 = time.perf_counter()
+    train_cpu1 = time.process_time()
+    print(f"[timing] train_wall_sec={train_wall1-train_wall0:.2f} train_cpu_sec={train_cpu1-train_cpu0:.2f}")
 
 if __name__ == "__main__":
     main()

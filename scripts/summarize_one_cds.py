@@ -7,15 +7,17 @@ from typing import Iterable, Optional
 
 import numpy as np
 
-from ._shared import ensure_run_layout
+from ._shared import ensure_run_layout, resolve_run
 
 
 def main(argv: Optional[Iterable[str]] = None) -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("run_id")
+    ap.add_argument("run_id", nargs="?")
+    ap.add_argument("--run_dir", help="Alternative to run_id; path to runs/<RUN_ID>")
     args = ap.parse_args(argv)
 
-    paths = ensure_run_layout(args.run_id)
+    run_id, run_dir = resolve_run(args.run_id, args.run_dir)
+    paths = ensure_run_layout(run_id)
     run_dir, tables_dir = paths["run"], paths["tables"]
 
     source = run_dir / "one_cds__best.tsv"
@@ -87,4 +89,3 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
 
 if __name__ == "__main__":
     main()
-

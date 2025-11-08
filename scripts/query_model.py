@@ -56,20 +56,19 @@ def dna_to_ids(dna: str, stoi: Dict[str, int]) -> List[int]:
     if len(dna) < 3:
         return []
     L = len(dna) // 3 * 3
-    unk = stoi.get("<unk>", None)
-    bos = stoi.get("<bos>", None)
-    eog = stoi.get("<eog>", None)
+    bos = stoi.get("<BOS_CDS>", None)
+    eos = stoi.get("<EOS_CDS>", None)
     arr: List[int] = []
     if bos is not None:
         arr.append(bos)
     for i in range(0, L, 3):
         codon = dna[i : i + 3]
-        idx = stoi.get(codon, unk if unk is not None else None)
+        idx = stoi.get(codon)
         if idx is None:
-            raise ValueError(f"Unknown token and no <unk>: {codon}")
+            raise ValueError(f"Unknown codon: {codon}")
         arr.append(idx)
-    if eog is not None:
-        arr.append(eog)
+    if eos is not None:
+        arr.append(eos)
     return arr
 
 
@@ -100,7 +99,9 @@ def build_model_from_state(state_dict: Dict, cfg: Dict) -> TinyGPT:
 
 @torch.no_grad()
 def next_token(model: TinyGPT, device: torch.device, ctx_ids: List[int]) -> torch.Tensor:
-    x = torch.tensor(ctx_ids, dtype=torch.long, device=device).unsqueeze(0)  # (1, T)
+    max_T = getattr(model, "block_size", None)
+    ids = ctx_ids[-max_T:] if max_T is not None else ctx_ids
+    x = torch.tensor(ids, dtype=torch.long, device=device).unsqueeze(0)  # (1, T)
     logits, _ = model(x)
     return logits[0, -1]  # (V,)
 
@@ -108,6 +109,7 @@ def next_token(model: TinyGPT, device: torch.device, ctx_ids: List[int]) -> torc
 @torch.no_grad()
 def generate(model: TinyGPT, device: torch.device, ctx_ids: List[int], max_new: int, temperature: float = 1.0, topk: int = 0, eos_idx: int | None = None) -> List[int]:
     ids = list(ctx_ids)
+    max_T = getattr(model, "block_size", None)
     for _ in range(max_new):
         logits = next_token(model, device, ids)
         if temperature != 1.0:
@@ -120,6 +122,8 @@ def generate(model: TinyGPT, device: torch.device, ctx_ids: List[int], max_new: 
         else:
             next_id = torch.multinomial(probs, 1).item()
         ids.append(next_id)
+        if max_T is not None and len(ids) > max_T:
+            ids = ids[-max_T:]
         if eos_idx is not None and next_id == eos_idx:
             break
     return ids
@@ -136,7 +140,11 @@ def score_sequence(model: TinyGPT, device: torch.device, ids: List[int]) -> Dict
 
 
 def run_once(args) -> Dict:
-    run_dir = Path("runs") / args.run_id
+    if getattr(args, "run_dir", None):
+        rd = Path(args.run_dir)
+        run_dir = rd if (rd / "itos.txt").exists() else (Path("runs") / rd.name)
+    else:
+        run_dir = Path("runs") / args.run_id
     itos, stoi = _load_vocab(run_dir)
     state_dict, cfg = _load_checkpoint(run_dir)
     model = build_model_from_state(state_dict, cfg)
@@ -166,7 +174,7 @@ def _answer(dna: str, args, itos: List[str], stoi: Dict[str, int], model: TinyGP
     ids = dna_to_ids(dna, stoi)
     if not ids:
         return {"error": "prompt too short (<3 nt)"}
-    eos_idx = stoi.get("<eog>")
+    eos_idx = stoi.get("<EOS_CDS>")
     if args.mode == "next":
         logits = next_token(model, device, ids)
         probs = torch.softmax(logits, dim=-1)
@@ -187,7 +195,8 @@ def _answer(dna: str, args, itos: List[str], stoi: Dict[str, int], model: TinyGP
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("run_id")
+    ap.add_argument("run_id", nargs="?")
+    ap.add_argument("--run_dir", help="Alternative to run_id; path to outputs/checkpoints/<RUN_ID> or runs/<RUN_ID>")
     ap.add_argument("--mode", choices=["next", "generate", "score"], default="next")
     ap.add_argument("--dna", help="DNA prompt (uppercase ACGT)")
     ap.add_argument("--topk", type=int, default=5)
@@ -207,4 +216,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

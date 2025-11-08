@@ -88,10 +88,11 @@ def load_tokens(run_dir: Path) -> list[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate probe labels for a run.")
-    parser.add_argument("run_id", help="Run identifier under runs/")
+    parser.add_argument("run_id", nargs="?", help="Run identifier under runs/")
+    parser.add_argument("--run_dir", help="Alternative to run_id; path to runs/<RUN_ID>")
     args = parser.parse_args()
 
-    run_dir = RUNS_DIR / args.run_id
+    run_dir = Path(args.run_dir) if args.run_dir else (RUNS_DIR / str(args.run_id))
     if not run_dir.exists():
         raise FileNotFoundError(f"Run directory not found: {run_dir}")
 

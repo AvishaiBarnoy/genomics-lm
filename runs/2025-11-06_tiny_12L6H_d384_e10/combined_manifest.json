@@ -1,0 +1,49 @@
+{
+  "train": "data/processed/combined/2025-11-06_tiny_12L6H_d384_e10/train_bs512.npz",
+  "val": "data/processed/combined/2025-11-06_tiny_12L6H_d384_e10/val_bs512.npz",
+  "test": "data/processed/combined/2025-11-06_tiny_12L6H_d384_e10/test_bs512.npz",
+  "datasets": [
+    {
+      "name": "ecoli_k12",
+      "gbff": "data/raw/Enterobacteriaceae/GCF_000005845.gbff",
+      "min_len": 90,
+      "out_dir": "data/processed/ecoli_k12",
+      "dna": "data/processed/ecoli_k12/cds_dna.txt",
+      "meta": "data/processed/ecoli_k12/cds_meta.tsv",
+      "ids": "data/processed/ecoli_k12/codon_ids.txt",
+      "vocab": "data/processed/ecoli_k12/vocab_codon.txt",
+      "itos": "data/processed/ecoli_k12/itos.txt",
+      "train": "data/processed/ecoli_k12/train_bs512.npz",
+      "val": "data/processed/ecoli_k12/val_bs512.npz",
+      "test": "data/processed/ecoli_k12/test_bs512.npz"
+    },
+    {
+      "name": "Klebsiella",
+      "gbff": "data/raw/Enterobacteriaceae/GCF_000240185.gbff",
+      "min_len": 90,
+      "out_dir": "data/processed/Klebsiella",
+      "dna": "data/processed/Klebsiella/cds_dna.txt",
+      "meta": "data/processed/Klebsiella/cds_meta.tsv",
+      "ids": "data/processed/Klebsiella/codon_ids.txt",
+      "vocab": "data/processed/Klebsiella/vocab_codon.txt",
+      "itos": "data/processed/Klebsiella/itos.txt",
+      "train": "data/processed/Klebsiella/train_bs512.npz",
+      "val": "data/processed/Klebsiella/val_bs512.npz",
+      "test": "data/processed/Klebsiella/test_bs512.npz"
+    },
+    {
+      "name": "Salmonella",
+      "gbff": "data/raw/Enterobacteriaceae/GCF_000006945.gbff",
+      "min_len": 90,
+      "out_dir": "data/processed/Salmonella",
+      "dna": "data/processed/Salmonella/cds_dna.txt",
+      "meta": "data/processed/Salmonella/cds_meta.tsv",
+      "ids": "data/processed/Salmonella/codon_ids.txt",
+      "vocab": "data/processed/Salmonella/vocab_codon.txt",
+      "itos": "data/processed/Salmonella/itos.txt",
+      "train": "data/processed/Salmonella/train_bs512.npz",
+      "val": "data/processed/Salmonella/val_bs512.npz",
+      "test": "data/processed/Salmonella/test_bs512.npz"
+    }
+  ]
+}

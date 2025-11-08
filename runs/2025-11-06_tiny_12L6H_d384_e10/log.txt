@@ -1,0 +1,86 @@
+[info] run_id=2025-11-06_tiny_12L6H_d384_e10
+[info] config=configs/tiny_mps.yaml
+[info] resume=none
+[hardware] date: 2025-11-06 05:52:05 UTC
+[hardware] uname: Darwin MacBook-Pro.local 25.0.0 Darwin Kernel Version 25.0.0: Wed Sep 17 21:38:03 PDT 2025; root:xnu-12377.1.9~141/RELEASE_ARM64_T8112 arm64
+[hardware] cpu: Apple M2
+[hardware] python: 3.11.13
+[hardware] torch: 2.2.2
+[hardware] mps_available: True
+[hardware] cuda_available: False
+[hardware] cuda_device_count: 0
+[config] snapshot:
+[config] vocab_size: 69
+[config] 
+[config] block_size: 512 
+[config] n_layer: 12 
+[config] n_head: 6
+[config] n_embd: 384 
+[config] dropout: 0.05
+[config] 
+[config] windows_per_seq: 2
+[config] val_frac: 0.1
+[config] test_frac: 0.1
+[config] 
+[config] datasets:
+[config]   - name: ecoli_k12
+[config]     gbff: data/raw/Enterobacteriaceae/GCF_000005845.gbff
+[config]     min_len: 90
+[config]   - name: Klebsiella
+[config]     gbff: data/raw/Enterobacteriaceae/GCF_000240185.gbff
+[config]     min_len: 90
+[config]   - name: Salmonella
+[config]     gbff: data/raw/Enterobacteriaceae/GCF_000006945.gbff
+[config]     min_len: 90
+[config] 
+[config] batch_size: 2
+[config] grad_accum_steps: 16
+[config] lr: 0.0003
+[config] weight_decay: 0.05
+[config] epochs: 10
+[config] 
+[config] optimizer: "adamw"
+[config] amp: true
+[config] use_checkpoint: true
+[config] scheduler: "cosine"
+[config] label_smoothing: 0.02
+[config] warmup_steps: 500
+[config] min_lr: 1e-5
+[config] plateau_patience: 2
+[config] early_stop_patience: 5
+[config] compile: false # enable torch.compile for training loop (PyTorch 2.x)
+[config] compile_mode: reduce-overhead
+[config] matmul_precision: medium  # torch.set_float32_matmul_precision value (high | medium | highest)
+[config] 
+[config] out_dir: outputs/checkpoints
+[config] scores_dir: outputs/scores
+[config] log_csv: "curves.csv"
+[config] seed: 1337
+[config] itos_path: data/processed/itos_codon.txt
+[config] saliency_window: 9
+[config] saliency_top: 20
+[config] pack_mode: "multi"          # build_dataset: 'multi' packs multiple CDS per window; 'single' keeps one CDS per window
+[config] sep_mask_enabled: true      # TinyGPT: block attention across <SEP> boundaries
+[config] num_workers: 0              # DataLoader workers
+[config] pin_memory: false
+[config] prefetch_factor: 2
+[config] persistent_workers: true
+[info] extra_datasets_cli=none
+[cfg] sha256=c286af4b4d93ce080feed3f38ea65145265fdad36d092f83d76b86e5aa258f86 file=configs/tiny_mps.yaml
+[git] commit=653bd5e dirty=True
+[prepare] skip extract ecoli_k12
+[prepare] skip tokenize ecoli_k12
+[prepare] skip build ecoli_k12
+[prepare] skip extract Klebsiella
+[prepare] skip tokenize Klebsiella
+[prepare] skip build Klebsiella
+[prepare] skip extract Salmonella
+[prepare] skip tokenize Salmonella
+[prepare] skip build Salmonella
+[prepare] wrote runs/2025-11-06_tiny_12L6H_d384_e10/pipeline_prepare.json
+[info] combined_manifest=data/processed/combined/2025-11-06_tiny_12L6H_d384_e10/manifest.json
+[info] train_npz=data/processed/combined/2025-11-06_tiny_12L6H_d384_e10/train_bs512.npz
+[info] val_npz=data/processed/combined/2025-11-06_tiny_12L6H_d384_e10/val_bs512.npz
+[info] test_npz=data/processed/combined/2025-11-06_tiny_12L6H_d384_e10/test_bs512.npz
+[info] primary_dna=data/processed/ecoli_k12/cds_dna.txt
+[cfg] combined_manifest.sha256=7ba79ddaa6eccb2039d62afb08d0b040448707d3b723dce15e93a20ff949d1cb

@@ -91,6 +91,26 @@ def ensure_run_layout(run_id: str) -> Dict[str, Path]:
     return {"run": run_dir, "charts": charts_dir, "tables": tables_dir}
 
 
+def resolve_run(run_id: Optional[str] = None, run_dir: Optional[str | Path] = None) -> Tuple[str, Path]:
+    """Accept either a run_id or a run_dir and return (run_id, run_dir_path).
+
+    If both are provided, run_dir wins and run_id is inferred from its basename.
+    Raises ArtifactError if neither is provided or if the directory doesn't exist.
+    """
+    if run_dir is not None:
+        rd = Path(run_dir)
+        if not rd.exists():
+            raise ArtifactError(f"run_dir not found: {rd}")
+        return rd.name, rd
+    if run_id is not None:
+        rd = RUNS_DIR / run_id
+        if not rd.exists():
+            # create minimal layout if missing
+            ensure_run_layout(run_id)
+        return run_id, rd
+    raise ArtifactError("provide either run_id or run_dir")
+
+
 def read_meta(run_dir: Path) -> Dict[str, object]:
     meta_path = run_dir / "meta.json"
     if not meta_path.exists():

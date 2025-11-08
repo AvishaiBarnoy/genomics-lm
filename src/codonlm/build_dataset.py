@@ -106,7 +106,7 @@ def main():
             print(f"[build] {name}: {X.shape} → {out}")
             return
 
-        # Number of windows: keep similar scale as before
+        # Number of windows: keep similar scale as before but cap by available tokens
         windows_goal = max(1, args.windows_per_seq * len(seqs))
         Xs, Ys = [], []
 
@@ -115,6 +115,7 @@ def main():
         offsets = [0] * len(seqs)
         cur_ptr = 0
 
+        made = 0
         for _ in range(windows_goal):
             rng.shuffle(indices)
             buf: List[int] = []
@@ -136,6 +137,9 @@ def main():
                 # If CDS ended and we still have room, place a SEP
                 if offsets[idx] >= len(arr) and len(buf) < args.block_size:
                     buf.append(SEP_ID)
+            # If we couldn't place at least two tokens, stop to avoid empty/pad-only windows
+            if len(buf) < 2:
+                break
             # Build x/y with padding
             x = buf[:-1]
             y = buf[1:]
@@ -149,6 +153,15 @@ def main():
                 y = y[: args.block_size]
             Xs.append(x)
             Ys.append(y)
+            made += 1
+
+            # If total remaining unconsumed tokens across all sequences is tiny, stop early
+            remaining = 0
+            for i, arr in enumerate(seqs):
+                r = max(0, len(arr) - offsets[i])
+                remaining += r
+            if remaining < 2:
+                break
 
         X = np.array(Xs, dtype=np.int32)
         Y = np.array(Ys, dtype=np.int32)
@@ -160,7 +173,7 @@ def main():
         pad_pct = float((X == 0).sum()) / total_tokens if total_tokens else 0.0
         cds_per_win = (X == 3).sum(axis=1) + 1 if X.shape[0] else np.array([0])
         avg_cds = float(np.mean(cds_per_win)) if X.shape[0] else 0.0
-        print(f"[build] {name}: {X.shape} → {out}")
+        print(f"[build] {name}: {X.shape} (windows={made}) → {out}")
         print(f"[pack-stats] {name}: avg_cds_per_window={avg_cds:.2f} sep_pct={sep_pct:.3f} pad_pct={pad_pct:.3f}")
 
     def pack_single(name, subset):

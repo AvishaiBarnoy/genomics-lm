@@ -1,0 +1,520 @@
+[info] run_id=2025-11-07_tiny_10L4H_d256_e39
+[info] config=configs/tiny_mps.yaml
+[info] resume=none
+[hardware] date: 2025-11-07 09:03:26 UTC
+[hardware] uname: Darwin Mac 25.0.0 Darwin Kernel Version 25.0.0: Wed Sep 17 21:38:03 PDT 2025; root:xnu-12377.1.9~141/RELEASE_ARM64_T8112 arm64
+[hardware] cpu: Apple M2
+[hardware] python: 3.11.13
+[hardware] torch: 2.2.2
+[hardware] mps_available: True
+[hardware] cuda_available: False
+[hardware] cuda_device_count: 0
+[config] snapshot:
+[config] vocab_size: 69
+[config] 
+[config] block_size: 768 
+[config] n_layer: 10 
+[config] n_head: 4
+[config] n_embd: 256 
+[config] dropout: 0.05
+[config] 
+[config] windows_per_seq: 5
+[config] val_frac: 0.1
+[config] test_frac: 0.1
+[config] 
+[config] datasets:
+[config]   - name: ecoli_k12
+[config]     gbff: data/raw/Enterobacteriaceae/GCF_000005845.gbff
+[config]     min_len: 90
+[config]   - name: Klebsiella
+[config]     gbff: data/raw/Enterobacteriaceae/GCF_000240185.gbff
+[config]     min_len: 90
+[config]   - name: Salmonella
+[config]     gbff: data/raw/Enterobacteriaceae/GCF_000006945.gbff
+[config]     min_len: 90
+[config] 
+[config] batch_size: 2
+[config] grad_accum_steps: 16
+[config] lr: 0.0006
+[config] weight_decay: 0.08
+[config] epochs: 39 # set to an integer or "auto" to derive from tokens_per_param × n_params
+[config] 
+[config] optimizer: "adamw"
+[config] amp: true
+[config] use_checkpoint: true
+[config] scheduler: "cosine"
+[config] label_smoothing: 0.03
+[config] warmup_steps: 1000
+[config] min_lr: 1e-5
+[config] plateau_patience: 4
+[config] early_stop_patience: 8
+[config] compile: true # enable torch.compile for training loop (PyTorch 2.x)
+[config] compile_mode: reduce-overhead
+[config] matmul_precision: medium  # torch.set_float32_matmul_precision value (high | medium | highest)
+[config] tokens_per_param: 20.0  # heuristic for epochs=auto (T ≈ tokens_per_param × n_params)
+[config] 
+[config] out_dir: outputs/checkpoints
+[config] scores_dir: outputs/scores
+[config] log_csv: "curves.csv"
+[config] seed: 1337
+[config] itos_path: data/processed/itos_codon.txt
+[config] saliency_window: 9
+[config] saliency_top: 20
+[config] pack_mode: "multi"          # build_dataset: 'multi' packs multiple CDS per window; 'single' keeps one CDS per window
+[config] sep_mask_enabled: true      # TinyGPT: block attention across <SEP> boundaries
+[config] num_workers: 0              # DataLoader workers
+[config] pin_memory: false
+[config] prefetch_factor: 2
+[config] persistent_workers: true
+[info] extra_datasets_cli=none
+[cfg] sha256=65c0fbfa27f09f48bb2efdaa2669e2228559601d5a71a2da9d8a2531a2dbe360 file=configs/tiny_mps.yaml
+[git] commit=653bd5e dirty=True
+[extract] wrote 4236 CDS with meta.
+[tokenize] wrote 4236 sequences → data/processed/ecoli_k12/codon_ids.txt | vocab size 68 | itos data/processed/ecoli_k12/itos.txt
+[build] train: (17160, 768) → data/processed/ecoli_k12/train_bs768.npz
+[pack-stats] train: avg_cds_per_window=1.20 sep_pct=0.000 pad_pct=0.917
+[build] val: (1905, 768) → data/processed/ecoli_k12/val_bs768.npz
+[pack-stats] val: avg_cds_per_window=1.20 sep_pct=0.000 pad_pct=0.917
+[build] test: (2115, 768) → data/processed/ecoli_k12/test_bs768.npz
+[pack-stats] test: avg_cds_per_window=1.20 sep_pct=0.000 pad_pct=0.914
+[extract] wrote 5779 CDS with meta.
+[tokenize] wrote 5779 sequences → data/processed/Klebsiella/codon_ids.txt | vocab size 68 | itos data/processed/Klebsiella/itos.txt
+[build] train: (23410, 768) → data/processed/Klebsiella/train_bs768.npz
+[pack-stats] train: avg_cds_per_window=1.20 sep_pct=0.000 pad_pct=0.924
+[build] val: (2600, 768) → data/processed/Klebsiella/val_bs768.npz
+[pack-stats] val: avg_cds_per_window=1.20 sep_pct=0.000 pad_pct=0.924
+[build] test: (2885, 768) → data/processed/Klebsiella/test_bs768.npz
+[pack-stats] test: avg_cds_per_window=1.20 sep_pct=0.000 pad_pct=0.928
+[extract] wrote 4547 CDS with meta.
+[tokenize] wrote 4547 sequences → data/processed/Salmonella/codon_ids.txt | vocab size 68 | itos data/processed/Salmonella/itos.txt
+[build] train: (18420, 768) → data/processed/Salmonella/train_bs768.npz
+[pack-stats] train: avg_cds_per_window=1.20 sep_pct=0.000 pad_pct=0.918
+[build] val: (2045, 768) → data/processed/Salmonella/val_bs768.npz
+[pack-stats] val: avg_cds_per_window=1.20 sep_pct=0.000 pad_pct=0.918
+[build] test: (2270, 768) → data/processed/Salmonella/test_bs768.npz
+[pack-stats] test: avg_cds_per_window=1.20 sep_pct=0.000 pad_pct=0.914
+[prepare] detected legacy or incompatible itos specials; re-tokenizing all
+[prepare] detected inconsistent itos across datasets; re-tokenizing all
+[prepare] run python -m src.codonlm.extract_cds_from_genbank --gbff data/raw/Enterobacteriaceae/GCF_000005845.gbff --out_txt data/processed/ecoli_k12/cds_dna.txt --out_meta data/processed/ecoli_k12/cds_meta.tsv --min_len 90
+[prepare] run python -m src.codonlm.codon_tokenize --inp data/processed/ecoli_k12/cds_dna.txt --out_ids data/processed/ecoli_k12/codon_ids.txt --out_vocab data/processed/ecoli_k12/vocab_codon.txt --out_itos data/processed/ecoli_k12/itos.txt
+[prepare] run python -m src.codonlm.build_dataset --ids data/processed/ecoli_k12/codon_ids.txt --group_meta data/processed/ecoli_k12/cds_meta.tsv --block_size 768 --windows_per_seq 5 --val_frac 0.1 --test_frac 0.1 --out_dir data/processed/ecoli_k12 --pack_mode multi
+[prepare] run python -m src.codonlm.extract_cds_from_genbank --gbff data/raw/Enterobacteriaceae/GCF_000240185.gbff --out_txt data/processed/Klebsiella/cds_dna.txt --out_meta data/processed/Klebsiella/cds_meta.tsv --min_len 90
+[prepare] run python -m src.codonlm.codon_tokenize --inp data/processed/Klebsiella/cds_dna.txt --out_ids data/processed/Klebsiella/codon_ids.txt --out_vocab data/processed/Klebsiella/vocab_codon.txt --out_itos data/processed/Klebsiella/itos.txt
+[prepare] run python -m src.codonlm.build_dataset --ids data/processed/Klebsiella/codon_ids.txt --group_meta data/processed/Klebsiella/cds_meta.tsv --block_size 768 --windows_per_seq 5 --val_frac 0.1 --test_frac 0.1 --out_dir data/processed/Klebsiella --pack_mode multi
+[prepare] run python -m src.codonlm.extract_cds_from_genbank --gbff data/raw/Enterobacteriaceae/GCF_000006945.gbff --out_txt data/processed/Salmonella/cds_dna.txt --out_meta data/processed/Salmonella/cds_meta.tsv --min_len 90
+[prepare] run python -m src.codonlm.codon_tokenize --inp data/processed/Salmonella/cds_dna.txt --out_ids data/processed/Salmonella/codon_ids.txt --out_vocab data/processed/Salmonella/vocab_codon.txt --out_itos data/processed/Salmonella/itos.txt
+[prepare] run python -m src.codonlm.build_dataset --ids data/processed/Salmonella/codon_ids.txt --group_meta data/processed/Salmonella/cds_meta.tsv --block_size 768 --windows_per_seq 5 --val_frac 0.1 --test_frac 0.1 --out_dir data/processed/Salmonella --pack_mode multi
+[prepare] wrote runs/2025-11-07_tiny_10L4H_d256_e39/pipeline_prepare.json
+[info] combined_manifest=data/processed/combined/2025-11-07_tiny_10L4H_d256_e39/manifest.json
+[info] train_npz=data/processed/combined/2025-11-07_tiny_10L4H_d256_e39/train_bs768.npz
+[info] val_npz=data/processed/combined/2025-11-07_tiny_10L4H_d256_e39/val_bs768.npz
+[info] test_npz=data/processed/combined/2025-11-07_tiny_10L4H_d256_e39/test_bs768.npz
+[info] primary_dna=data/processed/ecoli_k12/cds_dna.txt
+[cfg] combined_manifest.sha256=5e41bbcebc81854f1c2e8a443ba2bf09a34bdc70882e81e0f3a212bd0e115f11
+[matmul] float32 precision set to medium
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING] WON'T CONVERT forward /Users/User/github/genomics-lm/src/codonlm/model_tiny_gpt.py line 72 
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING] due to: 
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING] Traceback (most recent call last):
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 727, in _convert_frame
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     result = inner_convert(frame, cache_entry, hooks, frame_state)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 383, in _convert_frame_assert
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     compiled_product = _compile(
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]                        ^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 665, in _compile
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     raise InternalTorchDynamoError(str(e)).with_traceback(
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 646, in _compile
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     guarded_code = compile_inner(code, one_graph, hooks, transform)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/utils.py", line 244, in time_wrapper
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     r = func(*args, **kwargs)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]         ^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 562, in compile_inner
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     out_code = transform_code_object(code, transform)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/bytecode_transformation.py", line 1033, in transform_code_object
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     transformations(instructions, code_options)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 151, in _fn
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     return fn(*args, **kwargs)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 527, in transform
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     tracer.run()
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 2128, in run
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     super().run()
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 818, in run
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     and self.step()
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]         ^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 781, in step
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     getattr(self, inst.opname)(inst)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 949, in LOAD_GLOBAL
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     self.push(VariableBuilder(self, source)(value))
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/builder.py", line 245, in __call__
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     vt = self._wrap(value).clone(**self.options())
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]          ^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/builder.py", line 578, in _wrap
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     elif DataClassVariable.is_matching_object(value):
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 522, in is_matching_object
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     return cls.is_matching_cls(type(obj))
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 518, in is_matching_cls
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     return _is_matching_transformers_cls(cls) or _is_matching_diffusers_cls(cls)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 453, in _is_matching_transformers_cls
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     return mod is not None and issubclass(cls, mod.ModelOutput)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]                                                ^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING] torch._dynamo.exc.InternalTorchDynamoError: module 'transformers.file_utils' has no attribute 'ModelOutput'
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING] 
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING] from user code:
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]    File "/Users/User/github/genomics-lm/src/codonlm/model_tiny_gpt.py", line 74, in forward
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     pos = torch.arange(0, T, device=idx.device).unsqueeze(0)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING] 
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING] Set TORCH_LOGS="+dynamo" and TORCHDYNAMO_VERBOSE=1 for more information
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING] 
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING] Traceback (most recent call last):
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 727, in _convert_frame
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     result = inner_convert(frame, cache_entry, hooks, frame_state)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 383, in _convert_frame_assert
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     compiled_product = _compile(
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]                        ^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 665, in _compile
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     raise InternalTorchDynamoError(str(e)).with_traceback(
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 646, in _compile
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     guarded_code = compile_inner(code, one_graph, hooks, transform)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/utils.py", line 244, in time_wrapper
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     r = func(*args, **kwargs)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]         ^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 562, in compile_inner
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     out_code = transform_code_object(code, transform)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/bytecode_transformation.py", line 1033, in transform_code_object
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     transformations(instructions, code_options)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 151, in _fn
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     return fn(*args, **kwargs)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 527, in transform
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     tracer.run()
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 2128, in run
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     super().run()
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 818, in run
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     and self.step()
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]         ^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 781, in step
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     getattr(self, inst.opname)(inst)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 949, in LOAD_GLOBAL
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     self.push(VariableBuilder(self, source)(value))
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/builder.py", line 245, in __call__
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     vt = self._wrap(value).clone(**self.options())
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]          ^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/builder.py", line 578, in _wrap
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     elif DataClassVariable.is_matching_object(value):
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 522, in is_matching_object
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     return cls.is_matching_cls(type(obj))
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 518, in is_matching_cls
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     return _is_matching_transformers_cls(cls) or _is_matching_diffusers_cls(cls)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 453, in _is_matching_transformers_cls
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     return mod is not None and issubclass(cls, mod.ModelOutput)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]                                                ^^^^^^^^^^^^^^^
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING] torch._dynamo.exc.InternalTorchDynamoError: module 'transformers.file_utils' has no attribute 'ModelOutput'
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING] 
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING] from user code:
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]    File "/Users/User/github/genomics-lm/src/codonlm/model_tiny_gpt.py", line 74, in forward
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING]     pos = torch.arange(0, T, device=idx.device).unsqueeze(0)
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING] 
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING] Set TORCH_LOGS="+dynamo" and TORCHDYNAMO_VERBOSE=1 for more information
+[2025-11-07 11:04:32,846] torch._dynamo.convert_frame: [WARNING] 
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING] WON'T CONVERT forward /Users/User/github/genomics-lm/src/codonlm/model_tiny_gpt.py line 52 
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING] due to: 
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING] Traceback (most recent call last):
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 727, in _convert_frame
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     result = inner_convert(frame, cache_entry, hooks, frame_state)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 383, in _convert_frame_assert
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     compiled_product = _compile(
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]                        ^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 665, in _compile
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     raise InternalTorchDynamoError(str(e)).with_traceback(
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 646, in _compile
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     guarded_code = compile_inner(code, one_graph, hooks, transform)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/utils.py", line 244, in time_wrapper
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     r = func(*args, **kwargs)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]         ^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 562, in compile_inner
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     out_code = transform_code_object(code, transform)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/bytecode_transformation.py", line 1033, in transform_code_object
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     transformations(instructions, code_options)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 151, in _fn
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     return fn(*args, **kwargs)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 527, in transform
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     tracer.run()
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 2128, in run
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     super().run()
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 818, in run
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     and self.step()
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]         ^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 781, in step
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     getattr(self, inst.opname)(inst)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 470, in wrapper
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     return inner_fn(self, inst)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 1802, in CALL
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     self.call_function(fn, args, kwargs)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 652, in call_function
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     self.push(fn.call_function(self, args, kwargs))
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/nn_module.py", line 328, in call_function
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     return tx.inline_user_function_return(
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 688, in inline_user_function_return
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     return InliningInstructionTranslator.inline_call(self, fn, args, kwargs)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 2261, in inline_call
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     return cls.inline_call_(parent, func, args, kwargs)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 2376, in inline_call_
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     tracer.run()
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 818, in run
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     and self.step()
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]         ^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 781, in step
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     getattr(self, inst.opname)(inst)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 949, in LOAD_GLOBAL
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     self.push(VariableBuilder(self, source)(value))
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/builder.py", line 245, in __call__
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     vt = self._wrap(value).clone(**self.options())
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]          ^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/builder.py", line 578, in _wrap
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     elif DataClassVariable.is_matching_object(value):
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 522, in is_matching_object
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     return cls.is_matching_cls(type(obj))
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 518, in is_matching_cls
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     return _is_matching_transformers_cls(cls) or _is_matching_diffusers_cls(cls)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 453, in _is_matching_transformers_cls
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     return mod is not None and issubclass(cls, mod.ModelOutput)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]                                                ^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING] torch._dynamo.exc.InternalTorchDynamoError: module 'transformers.file_utils' has no attribute 'ModelOutput'
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING] 
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING] from user code:
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]    File "/Users/User/github/genomics-lm/src/codonlm/model_tiny_gpt.py", line 53, in forward
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     x = x + self.attn(self.ln1(x), attn_mask=attn_mask)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1514, in _call_impl
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     forward_call = (self._slow_forward if torch._C._get_tracing_state() else self.forward)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING] 
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING] Set TORCH_LOGS="+dynamo" and TORCHDYNAMO_VERBOSE=1 for more information
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING] 
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING] Traceback (most recent call last):
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 727, in _convert_frame
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     result = inner_convert(frame, cache_entry, hooks, frame_state)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 383, in _convert_frame_assert
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     compiled_product = _compile(
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]                        ^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 665, in _compile
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     raise InternalTorchDynamoError(str(e)).with_traceback(
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 646, in _compile
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     guarded_code = compile_inner(code, one_graph, hooks, transform)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/utils.py", line 244, in time_wrapper
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     r = func(*args, **kwargs)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]         ^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 562, in compile_inner
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     out_code = transform_code_object(code, transform)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/bytecode_transformation.py", line 1033, in transform_code_object
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     transformations(instructions, code_options)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 151, in _fn
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     return fn(*args, **kwargs)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 527, in transform
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     tracer.run()
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 2128, in run
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     super().run()
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 818, in run
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     and self.step()
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]         ^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 781, in step
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     getattr(self, inst.opname)(inst)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 470, in wrapper
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     return inner_fn(self, inst)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 1802, in CALL
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     self.call_function(fn, args, kwargs)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 652, in call_function
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     self.push(fn.call_function(self, args, kwargs))
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/nn_module.py", line 328, in call_function
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     return tx.inline_user_function_return(
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 688, in inline_user_function_return
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     return InliningInstructionTranslator.inline_call(self, fn, args, kwargs)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 2261, in inline_call
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     return cls.inline_call_(parent, func, args, kwargs)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 2376, in inline_call_
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     tracer.run()
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 818, in run
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     and self.step()
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]         ^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 781, in step
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     getattr(self, inst.opname)(inst)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 949, in LOAD_GLOBAL
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     self.push(VariableBuilder(self, source)(value))
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/builder.py", line 245, in __call__
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     vt = self._wrap(value).clone(**self.options())
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]          ^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/builder.py", line 578, in _wrap
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     elif DataClassVariable.is_matching_object(value):
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 522, in is_matching_object
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     return cls.is_matching_cls(type(obj))
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 518, in is_matching_cls
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     return _is_matching_transformers_cls(cls) or _is_matching_diffusers_cls(cls)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 453, in _is_matching_transformers_cls
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     return mod is not None and issubclass(cls, mod.ModelOutput)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]                                                ^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING] torch._dynamo.exc.InternalTorchDynamoError: module 'transformers.file_utils' has no attribute 'ModelOutput'
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING] 
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING] from user code:
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]    File "/Users/User/github/genomics-lm/src/codonlm/model_tiny_gpt.py", line 53, in forward
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     x = x + self.attn(self.ln1(x), attn_mask=attn_mask)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1514, in _call_impl
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING]     forward_call = (self._slow_forward if torch._C._get_tracing_state() else self.forward)
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING] 
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING] Set TORCH_LOGS="+dynamo" and TORCHDYNAMO_VERBOSE=1 for more information
+[2025-11-07 13:55:30,222] torch._dynamo.convert_frame: [WARNING] 
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING] WON'T CONVERT forward /Users/User/github/genomics-lm/src/codonlm/model_tiny_gpt.py line 18 
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING] due to: 
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING] Traceback (most recent call last):
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 727, in _convert_frame
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     result = inner_convert(frame, cache_entry, hooks, frame_state)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 383, in _convert_frame_assert
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     compiled_product = _compile(
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]                        ^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 665, in _compile
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     raise InternalTorchDynamoError(str(e)).with_traceback(
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 646, in _compile
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     guarded_code = compile_inner(code, one_graph, hooks, transform)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/utils.py", line 244, in time_wrapper
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     r = func(*args, **kwargs)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]         ^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 562, in compile_inner
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     out_code = transform_code_object(code, transform)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/bytecode_transformation.py", line 1033, in transform_code_object
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     transformations(instructions, code_options)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 151, in _fn
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     return fn(*args, **kwargs)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 527, in transform
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     tracer.run()
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 2128, in run
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     super().run()
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 818, in run
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     and self.step()
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]         ^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 781, in step
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     getattr(self, inst.opname)(inst)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 949, in LOAD_GLOBAL
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     self.push(VariableBuilder(self, source)(value))
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/builder.py", line 245, in __call__
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     vt = self._wrap(value).clone(**self.options())
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]          ^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/builder.py", line 578, in _wrap
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     elif DataClassVariable.is_matching_object(value):
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 522, in is_matching_object
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     return cls.is_matching_cls(type(obj))
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 518, in is_matching_cls
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     return _is_matching_transformers_cls(cls) or _is_matching_diffusers_cls(cls)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 453, in _is_matching_transformers_cls
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     return mod is not None and issubclass(cls, mod.ModelOutput)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]                                                ^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING] torch._dynamo.exc.InternalTorchDynamoError: module 'transformers.file_utils' has no attribute 'ModelOutput'
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING] 
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING] from user code:
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]    File "/Users/User/github/genomics-lm/src/codonlm/model_tiny_gpt.py", line 23, in forward
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     att = (q @ k.transpose(-2,-1)) / math.sqrt(k.size(-1))
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING] 
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING] Set TORCH_LOGS="+dynamo" and TORCHDYNAMO_VERBOSE=1 for more information
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING] 
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING] Traceback (most recent call last):
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 727, in _convert_frame
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     result = inner_convert(frame, cache_entry, hooks, frame_state)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 383, in _convert_frame_assert
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     compiled_product = _compile(
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]                        ^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 665, in _compile
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     raise InternalTorchDynamoError(str(e)).with_traceback(
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 646, in _compile
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     guarded_code = compile_inner(code, one_graph, hooks, transform)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/utils.py", line 244, in time_wrapper
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     r = func(*args, **kwargs)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]         ^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 562, in compile_inner
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     out_code = transform_code_object(code, transform)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/bytecode_transformation.py", line 1033, in transform_code_object
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     transformations(instructions, code_options)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 151, in _fn
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     return fn(*args, **kwargs)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/convert_frame.py", line 527, in transform
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     tracer.run()
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 2128, in run
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     super().run()
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 818, in run
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     and self.step()
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]         ^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 781, in step
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     getattr(self, inst.opname)(inst)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/symbolic_convert.py", line 949, in LOAD_GLOBAL
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     self.push(VariableBuilder(self, source)(value))
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/builder.py", line 245, in __call__
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     vt = self._wrap(value).clone(**self.options())
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]          ^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/builder.py", line 578, in _wrap
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     elif DataClassVariable.is_matching_object(value):
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 522, in is_matching_object
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     return cls.is_matching_cls(type(obj))
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 518, in is_matching_cls
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     return _is_matching_transformers_cls(cls) or _is_matching_diffusers_cls(cls)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]   File "/Users/User/anaconda3/envs/codonlm/lib/python3.11/site-packages/torch/_dynamo/variables/dicts.py", line 453, in _is_matching_transformers_cls
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     return mod is not None and issubclass(cls, mod.ModelOutput)
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]                                                ^^^^^^^^^^^^^^^
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING] torch._dynamo.exc.InternalTorchDynamoError: module 'transformers.file_utils' has no attribute 'ModelOutput'
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING] 
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING] from user code:
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]    File "/Users/User/github/genomics-lm/src/codonlm/model_tiny_gpt.py", line 23, in forward
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING]     att = (q @ k.transpose(-2,-1)) / math.sqrt(k.size(-1))
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING] 
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING] Set TORCH_LOGS="+dynamo" and TORCHDYNAMO_VERBOSE=1 for more information
+[2025-11-07 13:55:30,252] torch._dynamo.convert_frame: [WARNING] 

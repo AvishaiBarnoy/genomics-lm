@@ -19,6 +19,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from src.codonlm.model_tiny_gpt import TinyGPT
+from scripts._shared import resolve_run
 from src.codonlm.metrics_io import write_merge_metrics
 
 
@@ -104,11 +105,14 @@ def evaluate(model: TinyGPT, device: torch.device, loader: DataLoader) -> tuple[
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run_dir", required=True, help="outputs/checkpoints/<RUN_ID>")
+    ap.add_argument("--run_dir", help="outputs/checkpoints/<RUN_ID>")
+    ap.add_argument("--run_id", help="Run id (alternative to --run_dir)")
     ap.add_argument("--data_dir", help="override test NPZ directory (contains test_bs*.npz)")
     args = ap.parse_args()
 
-    run_dir = Path(args.run_dir)
+    # accept run_id or run_dir
+    run_id, _ = resolve_run(args.run_id, None)
+    run_dir = Path(args.run_dir) if args.run_dir else (Path("outputs/checkpoints") / run_id)
     if not run_dir.exists():
         raise FileNotFoundError(run_dir)
     repo_root = Path(__file__).resolve().parents[1]
@@ -137,4 +141,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

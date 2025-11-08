@@ -1,0 +1,597 @@
+{
+  "charts_available": [
+    "attn_L0_H0_0-256.png",
+    "attn_L0_H1_0-256.png",
+    "attn_L0_H2_0-256.png",
+    "attn_L0_H3_0-256.png",
+    "attn_L0_H4_0-256.png",
+    "attn_L0_H5_0-256.png",
+    "attn_L10_H0_0-256.png",
+    "attn_L10_H1_0-256.png",
+    "attn_L10_H2_0-256.png",
+    "attn_L10_H3_0-256.png",
+    "attn_L10_H4_0-256.png",
+    "attn_L10_H5_0-256.png",
+    "attn_L11_H0_0-256.png",
+    "attn_L11_H1_0-256.png",
+    "attn_L11_H2_0-256.png",
+    "attn_L11_H3_0-256.png",
+    "attn_L11_H4_0-256.png",
+    "attn_L11_H5_0-256.png",
+    "attn_L1_H0_0-256.png",
+    "attn_L1_H1_0-256.png",
+    "attn_L1_H2_0-256.png",
+    "attn_L1_H3_0-256.png",
+    "attn_L1_H4_0-256.png",
+    "attn_L1_H5_0-256.png",
+    "attn_L2_H0_0-256.png",
+    "attn_L2_H1_0-256.png",
+    "attn_L2_H2_0-256.png",
+    "attn_L2_H3_0-256.png",
+    "attn_L2_H4_0-256.png",
+    "attn_L2_H5_0-256.png",
+    "attn_L3_H0_0-256.png",
+    "attn_L3_H1_0-256.png",
+    "attn_L3_H2_0-256.png",
+    "attn_L3_H3_0-256.png",
+    "attn_L3_H4_0-256.png",
+    "attn_L3_H5_0-256.png",
+    "attn_L4_H0_0-256.png",
+    "attn_L4_H1_0-256.png",
+    "attn_L4_H2_0-256.png",
+    "attn_L4_H3_0-256.png",
+    "attn_L4_H4_0-256.png",
+    "attn_L4_H5_0-256.png",
+    "attn_L5_H0_0-256.png",
+    "attn_L5_H1_0-256.png",
+    "attn_L5_H2_0-256.png",
+    "attn_L5_H3_0-256.png",
+    "attn_L5_H4_0-256.png",
+    "attn_L5_H5_0-256.png",
+    "attn_L6_H0_0-256.png",
+    "attn_L6_H1_0-256.png",
+    "attn_L6_H2_0-256.png",
+    "attn_L6_H3_0-256.png",
+    "attn_L6_H4_0-256.png",
+    "attn_L6_H5_0-256.png",
+    "attn_L7_H0_0-256.png",
+    "attn_L7_H1_0-256.png",
+    "attn_L7_H2_0-256.png",
+    "attn_L7_H3_0-256.png",
+    "attn_L7_H4_0-256.png",
+    "attn_L7_H5_0-256.png",
+    "attn_L8_H0_0-256.png",
+    "attn_L8_H1_0-256.png",
+    "attn_L8_H2_0-256.png",
+    "attn_L8_H3_0-256.png",
+    "attn_L8_H4_0-256.png",
+    "attn_L8_H5_0-256.png",
+    "attn_L9_H0_0-256.png",
+    "attn_L9_H1_0-256.png",
+    "attn_L9_H2_0-256.png",
+    "attn_L9_H3_0-256.png",
+    "attn_L9_H4_0-256.png",
+    "attn_L9_H5_0-256.png",
+    "emb_pca.png",
+    "first_position_counts.png",
+    "top20_freq.png"
+  ],
+  "embedding_neighbors": [
+    {
+      "neighbors": [
+        {
+          "similarity": 0.1037,
+          "token": "<unk>"
+        },
+        {
+          "similarity": 0.0981,
+          "token": "AAA"
+        },
+        {
+          "similarity": 0.0726,
+          "token": "TGA"
+        },
+        {
+          "similarity": 0.0724,
+          "token": "GAA"
+        },
+        {
+          "similarity": 0.0701,
+          "token": "TCA"
+        }
+      ],
+      "token": "<pad>"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.115,
+          "token": "GCG"
+        },
+        {
+          "similarity": 0.0879,
+          "token": "TAG"
+        },
+        {
+          "similarity": 0.0862,
+          "token": "GAC"
+        },
+        {
+          "similarity": 0.0682,
+          "token": "<pad>"
+        },
+        {
+          "similarity": 0.0641,
+          "token": "ATG"
+        }
+      ],
+      "token": "<bos>"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.1294,
+          "token": "CTG"
+        },
+        {
+          "similarity": 0.1098,
+          "token": "GGC"
+        },
+        {
+          "similarity": 0.0947,
+          "token": "TGG"
+        },
+        {
+          "similarity": 0.0932,
+          "token": "AGT"
+        },
+        {
+          "similarity": 0.0809,
+          "token": "GCG"
+        }
+      ],
+      "token": "<eos>"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.1288,
+          "token": "CAA"
+        },
+        {
+          "similarity": 0.0987,
+          "token": "TGG"
+        },
+        {
+          "similarity": 0.0909,
+          "token": "GAG"
+        },
+        {
+          "similarity": 0.075,
+          "token": "CAC"
+        },
+        {
+          "similarity": 0.0647,
+          "token": "ACC"
+        }
+      ],
+      "token": "<eog>"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.1037,
+          "token": "<pad>"
+        },
+        {
+          "similarity": 0.1032,
+          "token": "TTA"
+        },
+        {
+          "similarity": 0.0961,
+          "token": "GAG"
+        },
+        {
+          "similarity": 0.0863,
+          "token": "GCC"
+        },
+        {
+          "similarity": 0.0858,
+          "token": "CAT"
+        }
+      ],
+      "token": "<unk>"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.1249,
+          "token": "TCT"
+        },
+        {
+          "similarity": 0.1084,
+          "token": "GGC"
+        },
+        {
+          "similarity": 0.0981,
+          "token": "<pad>"
+        },
+        {
+          "similarity": 0.0955,
+          "token": "TTA"
+        },
+        {
+          "similarity": 0.0938,
+          "token": "ATG"
+        }
+      ],
+      "token": "AAA"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.1109,
+          "token": "GTA"
+        },
+        {
+          "similarity": 0.1077,
+          "token": "TAA"
+        },
+        {
+          "similarity": 0.1057,
+          "token": "TGG"
+        },
+        {
+          "similarity": 0.0902,
+          "token": "GTT"
+        },
+        {
+          "similarity": 0.0884,
+          "token": "CTA"
+        }
+      ],
+      "token": "AAC"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.0919,
+          "token": "CTC"
+        },
+        {
+          "similarity": 0.0893,
+          "token": "TAT"
+        },
+        {
+          "similarity": 0.0851,
+          "token": "ATC"
+        },
+        {
+          "similarity": 0.0823,
+          "token": "TCT"
+        },
+        {
+          "similarity": 0.081,
+          "token": "CCA"
+        }
+      ],
+      "token": "AAG"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.1004,
+          "token": "CAG"
+        },
+        {
+          "similarity": 0.0831,
+          "token": "ATA"
+        },
+        {
+          "similarity": 0.0801,
+          "token": "GAA"
+        },
+        {
+          "similarity": 0.0694,
+          "token": "CGA"
+        },
+        {
+          "similarity": 0.0661,
+          "token": "AAC"
+        }
+      ],
+      "token": "AAT"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.0825,
+          "token": "CTG"
+        },
+        {
+          "similarity": 0.0781,
+          "token": "AAC"
+        },
+        {
+          "similarity": 0.0778,
+          "token": "GAC"
+        },
+        {
+          "similarity": 0.0674,
+          "token": "ATA"
+        },
+        {
+          "similarity": 0.0661,
+          "token": "TAG"
+        }
+      ],
+      "token": "ACA"
+    }
+  ],
+  "embedding_quality": {
+    "pca explained variance (pc1, pc2)": [
+      0.0282,
+      0.0269
+    ],
+    "silhouette score": -0.0031
+  },
+  "frequency_top_tokens": [
+    {
+      "count": 35286,
+      "frequency": 0.18088705708661418,
+      "token": "<pad>"
+    },
+    {
+      "count": 8453,
+      "frequency": 0.04333271817585302,
+      "token": "CTG"
+    },
+    {
+      "count": 6292,
+      "frequency": 0.03225475721784777,
+      "token": "GAA"
+    },
+    {
+      "count": 5431,
+      "frequency": 0.027841002296587928,
+      "token": "GCG"
+    },
+    {
+      "count": 5301,
+      "frequency": 0.027174581692913386,
+      "token": "AAA"
+    },
+    {
+      "count": 5185,
+      "frequency": 0.026579929461942257,
+      "token": "GAT"
+    },
+    {
+      "count": 4996,
+      "frequency": 0.025611056430446193,
+      "token": "ATT"
+    },
+    {
+      "count": 4759,
+      "frequency": 0.024396120406824148,
+      "token": "GGC"
+    },
+    {
+      "count": 4651,
+      "frequency": 0.023842478674540684,
+      "token": "CAG"
+    },
+    {
+      "count": 4480,
+      "frequency": 0.022965879265091863,
+      "token": "ATG"
+    }
+  ],
+  "meta": {
+    "checkpoint_path": "/Users/User/github/genomics-lm/outputs/checkpoints/2025-11-05_tiny_12L6H_d384_e5/best.pt",
+    "config_path": "/Users/User/github/genomics-lm/configs/tiny_mps.yaml",
+    "model_spec": {
+      "block_size": 256,
+      "dropout": 0.1,
+      "label_smoothing": 0.05,
+      "model_type": "tiny_gpt",
+      "n_embd": 384,
+      "n_head": 6,
+      "n_layer": 12,
+      "use_checkpoint": true,
+      "vocab_size": 69
+    },
+    "token_count": 69,
+    "val_ppl": 54.74487798929096
+  },
+  "next_token_tests": [
+    {
+      "predictions": [
+        {
+          "prob": 0.0719,
+          "token": "ATG"
+        },
+        {
+          "prob": 0.0642,
+          "token": "CTG"
+        },
+        {
+          "prob": 0.0424,
+          "token": "GAA"
+        },
+        {
+          "prob": 0.0391,
+          "token": "ATT"
+        },
+        {
+          "prob": 0.0385,
+          "token": "AAA"
+        }
+      ],
+      "prefix": "ATG"
+    },
+    {
+      "predictions": [
+        {
+          "prob": 0.0788,
+          "token": "AAA"
+        },
+        {
+          "prob": 0.0624,
+          "token": "CTG"
+        },
+        {
+          "prob": 0.0383,
+          "token": "GAA"
+        },
+        {
+          "prob": 0.0342,
+          "token": "ATT"
+        },
+        {
+          "prob": 0.0311,
+          "token": "GCG"
+        }
+      ],
+      "prefix": "ATG-AAA"
+    },
+    {
+      "predictions": [
+        {
+          "prob": 0.1004,
+          "token": "GAA"
+        },
+        {
+          "prob": 0.0578,
+          "token": "CTG"
+        },
+        {
+          "prob": 0.0379,
+          "token": "ATT"
+        },
+        {
+          "prob": 0.0324,
+          "token": "AAA"
+        },
+        {
+          "prob": 0.0308,
+          "token": "GGC"
+        }
+      ],
+      "prefix": "ATG-GAA"
+    },
+    {
+      "predictions": [
+        {
+          "prob": 0.0666,
+          "token": "CTG"
+        },
+        {
+          "prob": 0.0447,
+          "token": "GAA"
+        },
+        {
+          "prob": 0.0385,
+          "token": "GCG"
+        },
+        {
+          "prob": 0.0367,
+          "token": "AAA"
+        },
+        {
+          "prob": 0.0361,
+          "token": "ATT"
+        }
+      ],
+      "prefix": "TAA"
+    }
+  ],
+  "probe_results": [
+    {
+      "mean_accuracy": 0.0806,
+      "std_accuracy": 0.0161,
+      "task": "AA identity"
+    },
+    {
+      "mean_accuracy": 0.4271,
+      "std_accuracy": 0.0406,
+      "task": "polarity class"
+    },
+    {
+      "mean_accuracy": 0.6064,
+      "std_accuracy": 0.1103,
+      "task": "hydropathy class"
+    },
+    {
+      "mean_accuracy": 0.9531,
+      "std_accuracy": 0.001,
+      "task": "is_stop"
+    },
+    {
+      "mean_accuracy": 0.9531,
+      "std_accuracy": 0.001,
+      "task": "is_start"
+    }
+  ],
+  "run_id": "2025-11-05_tiny_12L6H_d384_e5",
+  "saliency_top_positions": [
+    {
+      "position": 164,
+      "saliency": -0.003277,
+      "token": "GTG"
+    },
+    {
+      "position": 242,
+      "saliency": -0.003225,
+      "token": "TCC"
+    },
+    {
+      "position": 158,
+      "saliency": -0.0031,
+      "token": "GCA"
+    },
+    {
+      "position": 217,
+      "saliency": -0.002966,
+      "token": "ATT"
+    },
+    {
+      "position": 148,
+      "saliency": -0.002961,
+      "token": "ATC"
+    },
+    {
+      "position": 201,
+      "saliency": -0.002932,
+      "token": "ATC"
+    },
+    {
+      "position": 16,
+      "saliency": -0.002824,
+      "token": "ACC"
+    },
+    {
+      "position": 30,
+      "saliency": -0.002801,
+      "token": "CAG"
+    },
+    {
+      "position": 161,
+      "saliency": 0.000847,
+      "token": "GGC"
+    },
+    {
+      "position": 234,
+      "saliency": 0.000781,
+      "token": "GAA"
+    }
+  ],
+  "tables_used": [
+    "tables/frequencies.csv",
+    "tables/nearest_neighbors.csv",
+    "tables/embed_quality.txt",
+    "tables/saliency.csv",
+    "tables/next_token_tests.csv",
+    "tables/probe_results.csv"
+  ]
+}
