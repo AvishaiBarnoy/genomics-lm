@@ -1,0 +1,14 @@
+protocol: std
+task: probe_cds
+out_dir: outputs/reports/probe_cds
+
+data:
+  train_embeddings: outputs/reports/probe_cds/train_embeddings.npz
+  train_labels: data/labels/train_cds.csv
+  test_embeddings: outputs/reports/probe_cds/test_embeddings.npz
+  test_labels: data/labels/test_cds.csv
+
+classifier:
+  kind: probe_svm
+  C: 1.0
+

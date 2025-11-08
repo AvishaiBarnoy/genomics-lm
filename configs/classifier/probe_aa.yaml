@@ -1,0 +1,14 @@
+protocol: std
+task: probe_aa
+out_dir: outputs/reports/probe_aa
+
+data:
+  train_embeddings: outputs/reports/probe_aa/train_embeddings.npz
+  train_labels: data/labels/train_aa.csv   # CSV columns: id,label
+  test_embeddings: outputs/reports/probe_aa/test_embeddings.npz
+  test_labels: data/labels/test_aa.csv
+
+classifier:
+  kind: probe_logreg   # probe_logreg | probe_svm | mlp
+  C: 1.0
+

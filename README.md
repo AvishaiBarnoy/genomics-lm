@@ -34,6 +34,19 @@ Tips
 - If data integrity fails (pad‑only windows), re‑run with --force or reduce block_size/windows_per_seq; see MANUAL.md.
 - On Apple Silicon, AMP is enabled; CE is computed in float32 to avoid NaNs.
 
+Stage‑2 Classifiers
+
+- Goal: benchmark sequence‑level representations from the LM against classical baselines.
+- Extract embeddings from a run:
+  - python -m scripts.extract_embeddings --run_id <RUN_ID> --fasta data/my.fasta --out outputs/reports/e1/train_embeddings.npz
+- Train a probe or baseline (configure paths in configs/classifier/*):
+  - python -m scripts.train_classifier --config configs/classifier/probe_aa.yaml
+  - python -m scripts.train_classifier --config configs/classifier/kmer_aa.yaml
+- Evaluate a saved classifier:
+  - python -m scripts.eval_classifier --kind probe --model outputs/reports/e1/model.pkl --embeddings <NPZ> --labels <CSV> --out outputs/reports/e1
+- Protocols:
+  - TSTR/TRTS are supported by choosing train_* and test_* sources in the config (e.g., synthetic vs real).
+
 Examples:
 
 ```bash

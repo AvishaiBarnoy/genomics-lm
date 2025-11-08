@@ -1,0 +1,16 @@
+protocol: std
+task: kmer_aa
+out_dir: outputs/reports/kmer_aa
+
+data:
+  train_seqs: data/sequences/train_aa.csv   # CSV columns: id,seq
+  train_labels: data/labels/train_aa.csv    # CSV columns: id,label
+  test_seqs: data/sequences/test_aa.csv
+  test_labels: data/labels/test_aa.csv
+
+classifier:
+  kind: kmer_logreg   # kmer_logreg | kmer_svm | kmer_xgb
+  k: 3
+  tfidf: true
+  C: 1.0
+

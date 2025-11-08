@@ -1,0 +1,18 @@
+protocol: std
+task: mlp_aa
+out_dir: outputs/reports/mlp_aa
+
+data:
+  train_embeddings: outputs/reports/mlp_aa/train_embeddings.npz
+  train_labels: data/labels/train_aa.csv
+  test_embeddings: outputs/reports/mlp_aa/test_embeddings.npz
+  test_labels: data/labels/test_aa.csv
+
+classifier:
+  kind: mlp
+  hidden: 128
+  depth: 1
+  epochs: 30
+  lr: 0.001
+  batch_size: 128
+
