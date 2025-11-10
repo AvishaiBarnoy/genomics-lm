@@ -10,20 +10,18 @@ import argparse, torch, math, os
 from pathlib import Path
 import torch.nn.functional as F
 from .model_tiny_gpt import TinyGPT
-
-CODONS = [a+b+c for a in "ACGT" for b in "ACGT" for c in "ACGT"]
-SPECIALS = ["<pad>", "<bos>", "<eog>", "<unk>", "<eos>"]
-VOCAB = SPECIALS + CODONS
-stoi = {t:i for i,t in enumerate(VOCAB)}
-itos = {i:t for t,i in stoi.items()}
+from .codon_tokenize import CODONS, VOCAB as TOK_VOCAB, stoi as TOK_STOI, itos as TOK_ITOS
 
 def dna_to_ids(dna):
     dna = dna.strip().upper().replace("U","T")
     L = (len(dna)//3)*3
-    ids = [stoi["<bos>"]]
-    for i in range(0,L,3):
-        ids.append(stoi.get(dna[i:i+3], stoi["<unk>"]))
-    ids.append(stoi["<eog>"])
+    ids = [TOK_STOI["<BOS_CDS>"]]
+    for i in range(0, L, 3):
+        cod = dna[i:i+3]
+        idx = TOK_STOI.get(cod)
+        if idx is not None:
+            ids.append(idx)
+    ids.append(TOK_STOI["<EOS_CDS>"])
     return ids
 
 def dev():
@@ -52,7 +50,7 @@ def main():
         "label_smoothing": 0.0,
     }
     model = TinyGPT(
-        cfg_src.get("vocab_size", 69),
+        cfg_src.get("vocab_size", len(TOK_VOCAB)),
         cfg_src.get("block_size", 256),
         n_layer=cfg_src.get("n_layer", 2),
         n_head=cfg_src.get("n_head", 4),
@@ -137,9 +135,9 @@ def main():
         w = csv.writer(f, delimiter="\t")
         w.writerow(["pos","wt"] + CODONS)
         for pos in range(1, len(ids)-1):
-            wt_id = ids[pos]; wt = itos[wt_id]
+            wt_id = ids[pos]; wt = TOK_ITOS[wt_id]
             baseline = float(logp_pred[pos-1, wt_id])
-            row = [pos, wt] + [f"{float(logp_pred[pos-1, stoi[c]] - baseline):.4f}" for c in CODONS]
+            row = [pos, wt] + [f"{float(logp_pred[pos-1, TOK_STOI[c]] - baseline):.4f}" for c in CODONS]
             w.writerow(row)
     print(f"[save] {output_path}")
 

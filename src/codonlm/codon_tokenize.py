@@ -29,7 +29,16 @@ STOP_CODONS = {"TAA", "TAG", "TGA"}
 SPECIALS = ["<PAD>", "<BOS_CDS>", "<EOS_CDS>", "<SEP>"]
 VOCAB = SPECIALS + CODONS
 stoi = {tok: i for i, tok in enumerate(VOCAB)}
-itos = {i: t for t, i in stoi.items()}
+# itos must map to canonical tokens; build from VOCAB only
+itos = {i: tok for i, tok in enumerate(VOCAB)}
+# Backward-compat aliases for legacy tests/configs (affect stoi only)
+ALIASES = {
+    "<bos>": "<BOS_CDS>",
+    "<eog>": "<EOS_CDS>",
+    "<eos>": "<EOS_CDS>",
+}
+for alias, canonical in ALIASES.items():
+    stoi[alias] = stoi[canonical]
 
 def to_ids(dna: str) -> list[int]:
     dna = dna.strip().upper().replace("U", "T")

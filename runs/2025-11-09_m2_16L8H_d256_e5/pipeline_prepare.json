@@ -1,0 +1,7 @@
+{
+  "train_npz": "data/processed/combined/2025-11-09_m2_16L8H_d256_e5/train_bs320.npz",
+  "val_npz": "data/processed/combined/2025-11-09_m2_16L8H_d256_e5/val_bs320.npz",
+  "test_npz": "data/processed/combined/2025-11-09_m2_16L8H_d256_e5/test_bs320.npz",
+  "primary_dna": "data/processed/ecoli_k12/cds_dna.txt",
+  "combined_manifest": "data/processed/combined/2025-11-09_m2_16L8H_d256_e5/manifest.json"
+}

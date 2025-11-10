@@ -1,0 +1,109 @@
+[info] run_id=2025-11-08_m2_16L8H_d256_e5
+[info] config=configs/m2_depth_upgrade.yaml
+[info] resume=none
+[hardware] date: 2025-11-08 21:31:05 UTC
+[hardware] uname: Darwin Mac 25.1.0 Darwin Kernel Version 25.1.0: Mon Oct 20 19:34:03 PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8112 arm64
+[hardware] cpu: Apple M2
+[hardware] python: 3.11.13
+[hardware] torch: 2.2.2
+[hardware] mps_available: True
+[hardware] cuda_available: False
+[hardware] cuda_device_count: 0
+[config] snapshot:
+[config] vocab_size: 68
+[config] 
+[config] # Model depth/width
+[config] n_layer: 16
+[config] n_head: 8
+[config] n_kv_head: 2
+[config] n_embd: 256
+[config] dropout: 0.05
+[config] 
+[config] # Context
+[config] block_size: 320   # train_block_size
+[config] 
+[config] # Training
+[config] batch_size: 2
+[config] grad_accum_steps: 16
+[config] lr: 0.0003
+[config] weight_decay: 0.05
+[config] epochs: 5
+[config] 
+[config] # Toggles
+[config] tie_embeddings: true
+[config] grad_checkpointing: true
+[config] use_sdpa: true
+[config] optimizer: adafactor
+[config] sep_mask_enabled: true
+[config] 
+[config] # Data
+[config] windows_per_seq: 2
+[config] val_frac: 0.1
+[config] test_frac: 0.1
+[config] datasets:
+[config]   - name: ecoli_k12
+[config]     gbff: data/raw/Enterobacteriaceae/GCF_000005845.gbff
+[config]     min_len: 90
+[config] 
+[config] out_dir: outputs/checkpoints
+[config] scores_dir: outputs/scores
+[config] log_csv: curves.csv
+[config] seed: 1337
+[config] 
+[info] extra_datasets_cli=none
+[cfg] sha256=8a349d9a5eaa2b791da93354a33b3af2bed22d783e4ff357eb06006f8e6a3549 file=configs/m2_depth_upgrade.yaml
+[git] commit=51d4a41 dirty=True
+[prepare] skip extract ecoli_k12
+[prepare] skip tokenize ecoli_k12
+[prepare] skip build ecoli_k12
+[prepare] wrote runs/2025-11-08_m2_16L8H_d256_e5/pipeline_prepare.json
+[integrity] ok: empty_windows train=0 val=0 test=0
+[info] combined_manifest=data/processed/combined/2025-11-08_m2_16L8H_d256_e5/manifest.json
+[info] train_npz=data/processed/combined/2025-11-08_m2_16L8H_d256_e5/train_bs320.npz
+[info] val_npz=data/processed/combined/2025-11-08_m2_16L8H_d256_e5/val_bs320.npz
+[info] test_npz=data/processed/combined/2025-11-08_m2_16L8H_d256_e5/test_bs320.npz
+[info] primary_dna=data/processed/ecoli_k12/cds_dna.txt
+[cfg] combined_manifest.sha256=14c44db2c20483f18ba9a73e48212c7beb172fbcc754c8ce6b1507f930aa6884
+[run] id=2025-11-08_m2_16L8H_d256_e5
+[paths] ckpts=outputs/checkpoints/2025-11-08_m2_16L8H_d256_e5 scores=outputs/scores/2025-11-08_m2_16L8H_d256_e5 log_csv=/Users/User/github/genomics-lm/outputs/scores/2025-11-08_m2_16L8H_d256_e5/curves.csv
+[model] params=12736000 sep_mask_enabled=True
+[loader] num_workers=0 pin_memory=False prefetch_factor=None persistent_workers=False
+[train] starting: epochs=5, steps_per_epoch=108, total_steps=540, batch_size=2, grad_accum=16, scheduler=cosine
+[epoch 1] train 63.463 | val 10.799 | ppl 48973.21 | lr 1.62e-04
+[timing] epoch 1 wall_sec=231.50 cpu_sec=144.78
+[epoch 2] train 6.321 | val 4.539 | ppl 93.63 | lr 2.99e-04
+[timing] epoch 2 wall_sec=226.42 cpu_sec=144.14
+[epoch 3] train 4.683 | val 4.128 | ppl 62.02 | lr 2.18e-04
+[timing] epoch 3 wall_sec=225.96 cpu_sec=145.89
+[epoch 4] train 4.432 | val 4.020 | ppl 55.71 | lr 8.10e-05
+[timing] epoch 4 wall_sec=223.28 cpu_sec=143.11
+[epoch 5] train 4.396 | val 4.011 | ppl 55.20 | lr 1.02e-05
+[timing] epoch 5 wall_sec=225.69 cpu_sec=147.04
+[timing] train_wall_sec=1135.07 train_cpu_sec=726.13
+[state] missing: []
+[state] unexpected: []
+[state] missing: []
+[state] unexpected: []
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/User/github/genomics-lm/src/codonlm/score_mutations.py", line 147, in <module>
+    main()
+  File "/Users/User/github/genomics-lm/src/codonlm/score_mutations.py", line 142, in main
+    row = [pos, wt] + [f"{float(logp_pred[pos-1, stoi[c]] - baseline):.4f}" for c in CODONS]
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/User/github/genomics-lm/src/codonlm/score_mutations.py", line 142, in <listcomp>
+    row = [pos, wt] + [f"{float(logp_pred[pos-1, stoi[c]] - baseline):.4f}" for c in CODONS]
+                                ~~~~~~~~~^^^^^^^^^^^^^^^^
+IndexError: index 68 is out of bounds for dimension 1 with size 68
+
+ERROR conda.cli.main_run:execute(127): `conda run python -m src.codonlm.score_mutations --ckpt outputs/checkpoints/2025-11-08_m2_16L8H_d256_e5/best.pt --dna data/processed/one_cds.txt --out outputs/scores/2025-11-08_m2_16L8H_d256_e5/one_cds__best.tsv` failed. (See above for error)
+[state] missing: []
+[state] unexpected: []
+
+[motifs] skipped (enable with --with-motifs or run analysis.sh)
+[artifacts] skipped (enable with --with-artifacts or run analysis.sh/post_process.sh)
+[timing] training_sec=1138
+[timing] training_time=0 hours, 18 minutes, 58 seconds
+[timing] total_sec=1195
+[timing] total_time=0 hours, 19 minutes, 55 seconds

@@ -54,9 +54,13 @@ def _aa_seq(codons: List[str]) -> List[str]:
 
 
 def _ngram_repeat_ratio(tokens: List[str], n: int = 3) -> float:
+    """Fraction of repeated n-grams using non-overlapping windows.
+
+    This matches legacy expectations in tests where sequences are chunked by codons.
+    """
     if len(tokens) < n:
         return 0.0
-    grams = [tuple(tokens[i : i + n]) for i in range(len(tokens) - n + 1)]
+    grams = [tuple(tokens[i : i + n]) for i in range(0, len(tokens) - n + 1, n)]
     uniq = len(set(grams))
     total = len(grams)
     return 1.0 - (uniq / total) if total else 0.0

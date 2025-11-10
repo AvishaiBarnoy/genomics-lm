@@ -2,8 +2,8 @@ vocab_size: 68
 
 # Model depth/width
 n_layer: 16
-n_head: 6
-n_kv_head: 2
+n_head: 8
+# n_kv_head: 2
 n_embd: 256
 dropout: 0.05
 
@@ -19,9 +19,13 @@ epochs: 5
 
 # Toggles
 tie_embeddings: true
-grad_checkpointing: true
+grad_checkpointing: false 
 use_sdpa: true
-optimizer: adafactor
+optimizer: adamw 
+sep_mask_enabled: true
+amp: true
+matmul_precision: high
+pack_mode: "multi"
 sep_mask_enabled: true
 
 # Data

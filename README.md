@@ -24,6 +24,10 @@ Documentation
 
 - MANUAL.md — full configuration, integrity checks, training details, and the complete analysis suite.
 - ROADMAP.md — staged plan and progress notes.
+- RELEASE_NOTES.md — high‑level changes and new features across releases.
+- Build reference tables (codon usage/CAI weights):
+  - python -m scripts.build_reference_tables --name ecoli_k12 --cds data/processed/ecoli_k12/cds_dna.txt
+  - Outputs to data/reference/<name>/{codon_usage.tsv,cai_weights.tsv}; use with seq_quality.
 
 Compare Runs
 
@@ -98,3 +102,32 @@ python -m scripts.compare_runs
 ```
 
 The benchmarking scripts merge results into each run’s `outputs/scores/<RUN_ID>/metrics.json` without overwriting unrelated fields.
+
+Secondary-Structure Checks (optional)
+
+- Heuristic propensities (unsupervised):
+  - python -m scripts.ss_propensity --run_id <RUN_ID>
+  - Or: python -m scripts.ss_propensity --dna data/processed/<name>/cds_dna.txt --out_dir outputs/analysis/ss_propensity
+  - Writes per-sequence segment stats and length histograms; merges median helix/sheet segment lengths into metrics.json when run_id is used.
+- Linear probe (supervised):
+  - Prepare NPZ with token embeddings and per-token SS labels (H/E/C): H (N,T,D), Y (N,T), optional M (N,T).
+  - python -m scripts.probe_ss_linear --emb_npz path/to/ss_tokens.npz --out_dir outputs/analysis/ss_probe
+  - Reports accuracy, macro‑F1, AUROC, and a confusion matrix.
+Notes: Propensity analysis is heuristic/correlation‑level. For stronger labels, use a local SS predictor (e.g., PSIPRED/NetSurfP) to generate H/E/C and then run the probe.
+
+Disorder Heuristics (optional)
+
+- Estimate disorder signals complementary to SS:
+  - python -m scripts.disorder_heuristics --run_id <RUN_ID>
+  - Or: python -m scripts.disorder_heuristics --dna data/processed/<name>/cds_dna.txt --out_dir outputs/analysis/disorder
+- Outputs: summary.csv with charge–hydropathy (Uversky) classification, disorder-promoting residue fraction, low-complexity segments; plots (CH-plane, length histograms). Merges a few aggregate KPIs into metrics.json when run_id is used.
+
+Sequence Quality & Calibration (optional)
+
+- End-to-end verifier:
+  - python -m scripts.seq_quality --run_id <RUN_ID>
+  - Or: python -m scripts.seq_quality --dna data/processed/<name>/cds_dna.txt --ref_cds data/processed/<ref>/cds_dna.txt --ref_usage path/to/usage.tsv --ref_cai path/to/cai.tsv
+  - Computes ORF integrity, length/GC%, codon usage KL/JS vs reference, CAI (if provided), FFT 1/3 periodicity, and diversity/novelty (k-mer Jaccard + MinHash). Merges headline KPIs into metrics.json.
+- Calibration on a split:
+  - python -m scripts.calibration_metrics --ckpt outputs/checkpoints/<RUN_ID>/best.pt --npz data/processed/combined/<RUN_ID>/val_bs512.npz --out outputs/scores/<RUN_ID>/metrics.json
+  - Reports ECE and Brier score (PAD tokens ignored).

@@ -1,0 +1,10 @@
+{
+  "train_npz": "data/processed/combined/2025-11-08_m2_16L8H_d256_e5/train_bs320.npz",
+  "val_npz": "data/processed/combined/2025-11-08_m2_16L8H_d256_e5/val_bs320.npz",
+  "test_npz": "data/processed/combined/2025-11-08_m2_16L8H_d256_e5/test_bs320.npz",
+  "empty_windows": {
+    "train": 0,
+    "val": 0,
+    "test": 0
+  }
+}

@@ -33,6 +33,7 @@ Pipelines
 - Training: src/codonlm/train_codon_lm.py trains with AMP (MPS aware), AdamW by default, cosine warmup schedule, early stopping, CSV curves.
 - Evaluation: scripts/evaluate_test.py, scripts/probe_next_token.py, scripts/probe_linear.py, scripts/analyze_* write tables/plots in runs/<RUN_ID>.
 - End‑to‑end: main.sh wraps all steps with logging, timing, and optional artifacts/motifs.
+- Reference tables: scripts/build_reference_tables.py builds per‑organism codon usage and CAI weights under data/reference/<name>/ from CDS, avoiding duplicate files.
 
 Benchmarks & Inference
 
@@ -55,6 +56,34 @@ Long CDS generation (prefix benchmark)
 - Outputs:
   - samples.csv includes gen_len_codons, had_terminal_stop, hit_hard_cap, target_codons.
   - summary.csv adds mean_aa_len, median_aa_len, terminal_stop_rate, hard_cap_rate and aa_len_vs_k.png plot.
+
+Secondary-Structure Analysis
+
+- Heuristic propensities (unsupervised): scripts/ss_propensity.py
+  - Inputs: --run_id (resolves primary_dna) or --dna path/to/cds.txt
+  - Method: sliding-window averages of AA propensities (Chou–Fasman‑style tables), thresholds for helix/sheet calls.
+  - Outputs: per-sequence counts/fractions/lengths; length histograms; merges median segment lengths into outputs/scores/<RUN_ID>/metrics.json when run_id is provided.
+  - Caveat: correlation‑level only; not a structure predictor. Use to gauge plausibility and compare runs.
+
+- Linear probe (supervised): scripts/probe_ss_linear.py
+  - Inputs: NPZ with H (N,T,D) token embeddings, Y (N,T) labels in {0:C,1:H,2:E}, optional M (N,T) mask.
+  - Outputs: metrics.json (accuracy, macro‑F1, AUROC when possible), confusion.png, and a saved probe.
+  - Purpose: measure how linearly decodable H/E/C is from LM token embeddings when given labels (from PSIPRED/NetSurfP/DSSP, etc.).
+
+Disorder Heuristics
+
+- scripts/disorder_heuristics.py complements SS analysis by covering intrinsically disordered regions (IDRs).
+  - Inputs: --run_id or --dna (CDS per line), optional --out_dir.
+  - KPIs: charge–hydropathy (Uversky) point + class, net charge per residue (NCPR), kappa-like charge patterning proxy, fraction of disorder-promoting residues (E,D,K,R,Q,S,P,G), low-complexity segments via Shannon entropy windows.
+  - Outputs: summary.csv and plots (CH-plane, LCR length and fraction histograms). Merges aggregate KPIs into outputs/scores/<RUN_ID>/metrics.json when run_id is provided.
+  - Caveat: Heuristics, not predictors. For per-residue disorder probabilities, integrate a local predictor (IUPred2A, DISOPRED, etc.).
+
+Modern propensity sources
+
+- The bundled propensities reflect classic Chou–Fasman‑style rankings. For updated scales:
+  - AAindex database (curated physico‑chemical/propensity indices).
+  - Helix propensity scales (e.g., Pace & Scholtz) and strand propensities from large curated datasets.
+  - GOR‑style methods use neighbor information (information theory) and outperform simple thresholds, but require model‑based scoring beyond this script’s scope.
 
 Stage‑2 Classifiers (sequence‑level benchmarking)
 
@@ -101,3 +130,22 @@ A/B Switches
 - sep_mask_enabled: true|false (block cross‑ORF attention)
 - optimizer: adamw|adafactor
 - scheduler: cosine|plateau (cosine uses warmup + decay to min_lr)
+Sequence Quality & Calibration
+
+- scripts/seq_quality.py aggregates coding sanity and realism KPIs:
+  - ORF integrity (start codon ATG/GTG/TTG; no internal stops; terminal stop present)
+  - Length distribution (optionally Z‑scores vs reference), GC%
+  - Codon usage divergence (KL/JS) vs reference usage from a provided table or reference CDS
+  - CAI (Codon Adaptation Index) using supplied weights (or derived from usage by per‑AA normalization)
+  - 3‑nt periodicity: FFT peak at 1/3 cycles/nt over a purine indicator signal
+  - Diversity/novelty: k‑mer Jaccard and MinHash Jaccard vs a reference CDS set
+  - Outputs per‑sequence summary.csv, histograms; merges headline KPIs into metrics.json when run_id is used.
+
+- scripts/calibration_metrics.py computes ECE/Brier on a split using a checkpoint, ignoring PAD targets.
+
+Theoretical notes
+
+- ORF integrity and 3‑nt periodicity test coding‑like grammar (frame, codon structure).
+- Codon usage and CAI reflect organism‑specific translational biases; KL/JS measures divergence from reference; CAI is a geometric mean of relative adaptiveness per codon.
+- Diversity/novelty (k‑mer Jaccard/MinHash) ensure runs/generations aren’t memorizing; MinHash provides a fast approximation to set similarity.
+- Calibration: ECE and Brier quantify the alignment between predicted probabilities and empirical outcomes (proper scoring); label smoothing and warmup schedules often improve ECE.

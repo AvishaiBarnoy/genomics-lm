@@ -121,3 +121,7 @@ Output: `runs/_summary/summary.csv` with columns `[run_id, val_ppl, silhouette, 
 ## ✅ Summary
 
 On laptops you can **train toy codon LMs and run a principled 6‑step interpretability suite** after every run. The same pipeline scales to adapters and large models, giving you a consistent, biology‑aware view of how the model’s “language” grows with capacity.
+4. **Remote Bioinformatics Integrations (optional)**
+
+* Add optional remote BLAST/EBI requests with caching and rate‑limits to annotate generated sequences; keep disabled by default (local‑first philosophy).
+* Roadmap item only; not implemented yet.

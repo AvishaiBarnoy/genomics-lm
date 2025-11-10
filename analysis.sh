@@ -44,5 +44,35 @@ python -m scripts.probe_linear          "${RUN_ID}"
 python -m scripts.summarize_one_cds     "${RUN_ID}" || true
 python -m scripts.export_run_summary    "${RUN_ID}" || true
 
-echo "[analysis] Done. See runs/${RUN_ID}/{charts,tables} and runs/${RUN_ID}/llm_summary.json"
+# Additional evaluation and quality checks
+# 7) Test perplexity + KPIs
+python -m scripts.evaluate_test --run_dir "outputs/checkpoints/${RUN_ID}" || true
+python -m scripts.sanity_kpis --run_dir "outputs/checkpoints/${RUN_ID}" || true
 
+# 8) Sequence quality, SS/disorder, calibration
+VAL_NPZ=$(python - <<'PY'
+import json,sys,Pathlib
+from pathlib import Path
+run_id = sys.argv[1]
+prep = Path('runs')/run_id/'pipeline_prepare.json'
+try:
+    info = json.loads(prep.read_text())
+    print(info.get('val_npz',''))
+except Exception:
+    print('')
+PY
+"${RUN_ID}")
+python -m scripts.seq_quality --run_id "${RUN_ID}" || true
+python -m scripts.ss_propensity --run_id "${RUN_ID}" || true
+python -m scripts.disorder_heuristics --run_id "${RUN_ID}" || true
+if [[ -n "${VAL_NPZ}" && -f "${VAL_NPZ}" ]]; then
+  python -m scripts.calibration_metrics --ckpt "outputs/checkpoints/${RUN_ID}/best.pt" --npz "${VAL_NPZ}" --out "outputs/scores/${RUN_ID}/metrics.json" || true
+fi
+
+# 9) Optional: prefix generation summary plots if present
+SUMMARY="outputs/scores/${RUN_ID}/gen_prefix/summary.csv"
+if [[ -f "${SUMMARY}" ]]; then
+  python -m scripts.plot_eval_prefix --summary "${SUMMARY}" --out_dir "outputs/figs" || true
+fi
+
+echo "[analysis] Done. See runs/${RUN_ID}/{charts,tables} and runs/${RUN_ID}/llm_summary.json"
