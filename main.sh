@@ -71,11 +71,23 @@ fi
 
 # Auto-generate RUN_ID from config if not provided
 RUN_ID=${RUN_ID:-$(python -m scripts.make_run_id "$CONF")}
+# Disambiguate RUN_ID if it already exists to avoid overwriting prior runs
+BASE_RUN_ID="$RUN_ID"
+DISAMBIG=0
+while [[ -d "runs/${RUN_ID}" || -d "outputs/checkpoints/${RUN_ID}" || -d "outputs/scores/${RUN_ID}" ]]; do
+  DISAMBIG=$((DISAMBIG+1))
+  RUN_ID="${BASE_RUN_ID}-${DISAMBIG}"
+done
 RUN_DIR="runs/${RUN_ID}"
 mkdir -p "$RUN_DIR"
 LOG="$RUN_DIR/log.txt"
 
-echo "[info] run_id=${RUN_ID}" | tee "$LOG"
+if [[ $DISAMBIG -gt 0 ]]; then
+  echo "[info] run_id_base=${BASE_RUN_ID}" | tee "$LOG"
+  echo "[info] run_id=${RUN_ID} (disambiguated)" | tee -a "$LOG"
+else
+  echo "[info] run_id=${RUN_ID}" | tee "$LOG"
+fi
 echo "[info] config=${CONF}" | tee -a "$LOG"
 echo "[info] resume=${RESUME:-none}" | tee -a "$LOG"
 echo "[hardware] date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" | tee -a "$LOG"
