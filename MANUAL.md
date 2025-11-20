@@ -25,35 +25,130 @@ Model architecture, training parameters, and data paths are defined in YAML conf
 
 ## Training
 
+
+
 The module includes two training scripts in `src/protein_lm/`.
+
+
 
 ### Language Model Training
 
+
+
 To train the language model, run the `train_lm.py` script with a configuration file:
 
+
+
 ```bash
+
 python -m src.protein_lm.train_lm --config configs/protein_lm/small.yaml
+
 ```
 
+
+
 The script will:
+
 1.  Load the model configuration and training parameters.
+
 2.  Initialize the `ProteinConditionalTransformer` model.
+
 3.  Load the training and validation data using the `ProteinDataset`.
+
 4.  Train the model using cross-entropy loss to predict the next token.
+
 5.  Save checkpoints to `outputs/protein_lm/<run_id>/`.
+
+
 
 ### Classifier Training
 
+
+
 To train the classifier, run the `train_classifier.py` script:
 
+
+
 ```bash
+
 python -m src.protein_lm.train_classifier --config configs/protein_lm/classifier_small.yaml
+
 ```
 
+
+
 This script will:
+
 1.  Load the classifier configuration.
+
 2.  Initialize the `ProteinClassifier` model.
+
 3.  Load the training and validation data using the `ProteinClassificationDataset`, which is designed to handle class labels.
+
 4.  Train the model using cross-entropy loss for classification.
+
 5.  Log validation accuracy and F1 score.
+
 6.  Save checkpoints to `outputs/protein_classifier/<run_id>/`.
+
+
+
+## Testing
+
+
+
+The `protein_lm` module comes with a suite of tests to verify its functionality. To run the tests, use `pytest`:
+
+
+
+```bash
+
+pytest tests/test_protein_tokenizer.py
+
+pytest tests/test_protein_models.py
+
+```
+
+
+
+## Extending the Module
+
+
+
+### Adding New Condition Tokens
+
+
+
+The `ProteinTokenizer` can be easily extended to support new condition tokens. To add a new token, you need to modify the `condition_tokens` dictionary in `src/protein_lm/tokenizer.py`.
+
+
+
+For example, to add a new condition for a subcellular location, you could do the following:
+
+
+
+```python
+
+# In src/protein_lm/tokenizer.py
+
+
+
+self.condition_tokens = {
+
+    'FUNC_ENZYME': '<FUNC:ENZYME>',
+
+    'FUNC_NON_ENZYME': '<FUNC:NON_ENZYME>',
+
+    'TOPO_TM': '<TOPO:TM>',
+
+    'TOPO_GLOBULAR': '<TOPO:GLOBULAR>',
+
+    'LOC_MEMBRANE': '<LOC:MEMBRANE>', # New condition token
+
+}
+
+```
+
+
+
+The tokenizer will automatically update its vocabulary and token-to-ID mappings. You will also need to update your data preparation scripts to include the new labels in the JSONL files.
