@@ -49,8 +49,27 @@ class ProteinDataset(Dataset):
         return torch.tensor(input_ids, dtype=torch.long)
 
 
-def create_dataloader(split_path, batch_size, num_workers, tokenizer, block_size, shuffle=True):
-    dataset = ProteinDataset(split_path, tokenizer, block_size)
+
+class ProteinClassificationDataset(ProteinDataset):
+    def __init__(self, file_path: str, tokenizer: ProteinTokenizer, block_size: int, label_field: str):
+        super().__init__(file_path, tokenizer, block_size)
+        self.label_field = label_field
+
+    def __getitem__(self, idx):
+        input_ids = super().__getitem__(idx)
+        sample = self.samples[idx]
+        label = sample.get(self.label_field)
+        # Simple binary classification for now
+        label_map = {'ENZYME': 0, 'NON_ENZYME': 1} 
+        return input_ids, torch.tensor(label_map.get(label, -1), dtype=torch.long)
+
+
+def create_dataloader(split_path, batch_size, num_workers, tokenizer, block_size, shuffle=True, dataset_class=ProteinDataset, label_field=None):
+    if dataset_class == ProteinClassificationDataset:
+        dataset = dataset_class(split_path, tokenizer, block_size, label_field=label_field)
+    else:
+        dataset = dataset_class(split_path, tokenizer, block_size)
+        
     return DataLoader(
         dataset,
         batch_size=batch_size,
