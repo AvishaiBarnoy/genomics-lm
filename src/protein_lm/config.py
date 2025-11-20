@@ -1,9 +1,9 @@
-
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 import yaml
 
 @dataclass
 class ProteinLMConfig:
+    """Configuration for the Protein Language Model."""
     vocab_size: int
     n_layer: int
     n_head: int
@@ -13,6 +13,7 @@ class ProteinLMConfig:
 
 @dataclass
 class ProteinClassifierConfig:
+    """Configuration for the Protein Classifier."""
     vocab_size: int
     n_layer: int
     n_head: int
@@ -22,16 +23,24 @@ class ProteinClassifierConfig:
     num_classes: int
 
 def load_config(path: str, config_class):
+    """
+    Loads a model configuration from a YAML file.
+
+    Args:
+        path: The path to the YAML file.
+        config_class: The dataclass to instantiate (e.g., ProteinLMConfig).
+
+    Returns:
+        An instance of the provided config_class.
+    """
     with open(path, 'r') as f:
         data = yaml.safe_load(f)
-    
-    # Assuming the config is under a 'model' key
+
+    # The configuration is expected to be under a 'model' key in the YAML
     model_data = data.get('model', {})
-    
-    # Filter only the arguments that the config_class expects
+
+    # Filter the loaded data to include only the fields expected by the dataclass
     expected_fields = {f.name for f in fields(config_class)}
     filtered_data = {k: v for k, v in model_data.items() if k in expected_fields}
 
     return config_class(**filtered_data)
-
-from dataclasses import fields

@@ -20,6 +20,12 @@ What’s In Here
 - Data prep that extracts CDS, tokenizes codons, builds NPZ datasets, and checks integrity (scripts/pipeline_prepare.py).
 - Analysis scripts for frequencies, embeddings, attention, next‑token probes, saliency, and linear probes (scripts/*; see MANUAL).
 
+### Protein Language Model
+
+- A new `protein_lm` module has been added to support amino-acid-level language modeling.
+- This module includes a conditional language model and a classifier.
+- For full details on how to use this new functionality, please see `MANUAL.md`.
+
 Documentation
 
 - MANUAL.md — full configuration, integrity checks, training details, and the complete analysis suite.

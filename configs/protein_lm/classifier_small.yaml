@@ -1,11 +1,10 @@
-
 model:
   n_layer: 6
   n_head: 4
   n_embd: 256
   block_size: 512
   dropout: 0.1
-  num_classes: 2 # e.g., for ENZYME vs NON_ENZYME
+  num_classes: 2 # e.g., for ENZYME vs NON_ENZYME. Can be updated or detected from data.
 
 training:
   batch_size: 32
