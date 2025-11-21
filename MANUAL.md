@@ -129,8 +129,6 @@ Notes: Propensity analysis is heuristic/correlation‑level. For stronger labels
 
 ## Protein Language Model (`protein_lm`)
 
-This document provides instructions on how to use the `protein_lm` module, which includes a function-conditional protein language model and a protein classifier.
-
 ### Overview
 
 The `protein_lm` module is designed to model protein sequences and their functional properties. It consists of two main components:
@@ -217,3 +215,5 @@ self.condition_tokens = {
 ```
 
 The tokenizer will automatically update its vocabulary and token-to-ID mappings. You will also need to update your data preparation scripts to include the new labels in the JSONL files.
+
+```
