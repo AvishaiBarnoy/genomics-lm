@@ -17,3 +17,4 @@
 ## Tools
 - **Testing:** Pytest
 - **Static Analysis:** Ruff (inferred from CI configuration)
+- **Data Visualization & Tabulation:** Matplotlib, Scikit-learn (PCA), Pandas, Tabulate
