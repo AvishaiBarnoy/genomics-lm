@@ -15,9 +15,9 @@ Integrate Frequencies, Embeddings, and Attention comparison logic.
 - [x] Task: Implement comparative visualization for Step 2 (Embeddings). fb8bbdc
     - [x] Write Tests for embedding aggregation logic.
     - [x] Implement side-by-side PCA/UMAP plotting.
-- [ ] Task: Implement comparative visualization for Step 3 (Attention).
-    - [ ] Write Tests for attention head specialization comparison.
-    - [ ] Implement attention map comparison view.
+- [x] Task: Implement comparative visualization for Step 3 (Attention). 5583223
+    - [x] Write Tests for attention head specialization comparison.
+    - [x] Implement attention map comparison view.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Interpretability Step Integration (Steps 1-3)' (Protocol in workflow.md)
 
 ## Phase 3: Interpretability Step Integration (Steps 4-6) & Export
