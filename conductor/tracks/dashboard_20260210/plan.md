@@ -12,9 +12,9 @@ Focus on extracting and centralizing metrics from multiple runs.
 ## Phase 2: Interpretability Step Integration (Steps 1-3)
 Integrate Frequencies, Embeddings, and Attention comparison logic.
 
-- [ ] Task: Implement comparative visualization for Step 2 (Embeddings).
-    - [ ] Write Tests for embedding aggregation logic.
-    - [ ] Implement side-by-side PCA/UMAP plotting.
+- [x] Task: Implement comparative visualization for Step 2 (Embeddings). fb8bbdc
+    - [x] Write Tests for embedding aggregation logic.
+    - [x] Implement side-by-side PCA/UMAP plotting.
 - [ ] Task: Implement comparative visualization for Step 3 (Attention).
     - [ ] Write Tests for attention head specialization comparison.
     - [ ] Implement attention map comparison view.
