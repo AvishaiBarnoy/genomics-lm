@@ -26,7 +26,7 @@ Integrate Probes and Saliency, and implement report exporting.
 - [x] Task: Implement comparative visualization for Step 5 (Saliency). ce95f55
     - [x] Write Tests for saliency spike alignment logic.
     - [x] Implement saliency comparison view.
-- [ ] Task: Implement report export functionality (Markdown/HTML).
-    - [ ] Write Tests for report generation and file writing.
-    - [ ] Implement export to `outputs/reports/comparison_<TIMESTAMP>/`.
+- [x] Task: Implement report export functionality (Markdown/HTML). 9eac209
+    - [x] Write Tests for report generation and file writing.
+    - [x] Implement export to `outputs/reports/comparison_<TIMESTAMP>/`.
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Interpretability Step Integration (Steps 4-6) & Export' (Protocol in workflow.md)
