@@ -23,9 +23,9 @@ Integrate Frequencies, Embeddings, and Attention comparison logic.
 ## Phase 3: Interpretability Step Integration (Steps 4-6) & Export
 Integrate Probes and Saliency, and implement report exporting.
 
-- [ ] Task: Implement comparative visualization for Step 5 (Saliency).
-    - [ ] Write Tests for saliency spike alignment logic.
-    - [ ] Implement saliency comparison view.
+- [x] Task: Implement comparative visualization for Step 5 (Saliency). ce95f55
+    - [x] Write Tests for saliency spike alignment logic.
+    - [x] Implement saliency comparison view.
 - [ ] Task: Implement report export functionality (Markdown/HTML).
     - [ ] Write Tests for report generation and file writing.
     - [ ] Implement export to `outputs/reports/comparison_<TIMESTAMP>/`.
