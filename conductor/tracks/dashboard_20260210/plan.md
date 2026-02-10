@@ -6,9 +6,7 @@ This plan outlines the steps to implement the experiment comparison dashboard, f
 Focus on extracting and centralizing metrics from multiple runs.
 
 - [x] Task: Design and implement the `ResultsAggregator` class to load data from `metrics.json` and `artifacts.npz`. a95d86f
-- [ ] Task: Create a CLI entry point for run selection and basic metric tabulation.
-    - [ ] Write Tests for CLI argument parsing and table generation logic.
-    - [ ] Implement `scripts/dashboard.py` (basic metrics view).
+- [x] Task: Create a CLI entry point for run selection and basic metric tabulation. 4e51ba3
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Data Aggregation & Core Metrics' (Protocol in workflow.md)
 
 ## Phase 2: Interpretability Step Integration (Steps 1-3)
