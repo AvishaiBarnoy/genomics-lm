@@ -65,3 +65,52 @@ class Visualizer:
             
         plt.tight_layout()
         return fig
+
+    def plot_attention_entropy(self, figsize=(10, 6)):
+        """
+        Plots the average attention entropy per layer for each run.
+        Returns the matplotlib Figure object.
+        """
+        fig, ax = plt.subplots(figsize=figsize)
+        
+        has_data = False
+        for run_id in self.aggregator.run_ids:
+            try:
+                artifacts = self.aggregator.get_artifacts(run_id)
+                if 'attn' not in artifacts:
+                    continue
+                
+                # attn shape: (layers, batch, heads, T, T)
+                attn = artifacts['attn']
+                if len(attn.shape) != 5:
+                    continue
+                
+                # Avoid log(0)
+                attn = np.clip(attn, 1e-10, 1.0)
+                
+                # H = -sum(p * log(p)) over the last dim (attention weights)
+                entropy = -np.sum(attn * np.log(attn), axis=-1)
+                # entropy shape: (layers, batch, heads, T)
+                
+                # Average over batch, heads, and tokens
+                avg_entropy = np.mean(entropy, axis=(1, 2, 3))
+                # avg_entropy shape: (layers,)
+                
+                layers = np.arange(len(avg_entropy))
+                ax.plot(layers, avg_entropy, marker='o', label=run_id)
+                has_data = True
+                
+            except Exception as e:
+                print(f"Warning: Could not compute attention entropy for {run_id}: {e}")
+        
+        if not has_data:
+            print("No attention data available for entropy plotting.")
+            return fig
+
+        ax.set_title("Average Attention Entropy per Layer")
+        ax.set_xlabel("Layer")
+        ax.set_ylabel("Entropy (nats)")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+        return fig
