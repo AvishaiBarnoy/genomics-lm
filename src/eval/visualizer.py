@@ -3,6 +3,7 @@ import os
 import pandas as pd
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
+from datetime import datetime
 
 class Visualizer:
     def __init__(self, aggregator):
@@ -53,8 +54,7 @@ class Visualizer:
         n_runs = len(pca_data)
         
         if n_runs == 0:
-            print("No data available for PCA plotting.")
-            return plt.figure()
+            return None
 
         fig, axes = plt.subplots(1, n_runs, figsize=figsize, squeeze=False)
         axes = axes.flatten()
@@ -84,18 +84,12 @@ class Visualizer:
                 if 'attn' not in artifacts:
                     continue
                 
-                # attn shape: (layers, batch, heads, T, T)
                 attn = artifacts['attn']
                 if len(attn.shape) != 5:
                     continue
                 
-                # Avoid log(0)
                 attn = np.clip(attn, 1e-10, 1.0)
-                
-                # H = -sum(p * log(p)) over the last dim (attention weights)
                 entropy = -np.sum(attn * np.log(attn), axis=-1)
-                
-                # Average over batch, heads, and tokens
                 avg_entropy = np.mean(entropy, axis=(1, 2, 3))
                 
                 layers = np.arange(len(avg_entropy))
@@ -106,8 +100,8 @@ class Visualizer:
                 print(f"Warning: Could not compute attention entropy for {run_id}: {e}")
         
         if not has_data:
-            print("No attention data available for entropy plotting.")
-            return fig
+            plt.close(fig)
+            return None
 
         ax.set_title("Average Attention Entropy per Layer")
         ax.set_xlabel("Layer")
@@ -139,8 +133,8 @@ class Visualizer:
                 print(f"Warning: Could not load saliency for {run_id}: {e}")
         
         if not has_data:
-            print("No saliency data available for plotting.")
-            return fig
+            plt.close(fig)
+            return None
 
         ax.set_title("Saliency Scores Comparison")
         ax.set_xlabel("Position")
@@ -149,3 +143,58 @@ class Visualizer:
         ax.grid(True, alpha=0.3)
         plt.tight_layout()
         return fig
+
+    def export_report(self, output_dir=None):
+        """
+        Generates and saves a Markdown report with comparative visualizations.
+        """
+        if output_dir is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = os.path.join("outputs", "reports", f"comparison_{timestamp}")
+        
+        os.makedirs(output_dir, exist_ok=True)
+        
+        metrics = self.aggregator.load_metrics()
+        
+        report_lines = [
+            "# Experiment Comparison Report",
+            f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            "",
+            "## Core Metrics",
+            ""
+        ]
+        
+        # Build metrics table
+        headers = ["Run ID", "Val Loss", "Perplexity"]
+        report_lines.append("| " + " | ".join(headers) + " |")
+        report_lines.append("| " + " | ".join(["---"] * len(headers)) + " |")
+        
+        for run_id in self.aggregator.run_ids:
+            m = metrics.get(run_id, {})
+            val_loss = m.get("val_loss", m.get("best_val_loss", "N/A"))
+            ppl = m.get("last_perplexity", "N/A")
+            report_lines.append(f"| {run_id} | {val_loss} | {ppl} |")
+        
+        report_lines.append("")
+        
+        # Generate and save plots
+        plots = {
+            "pca_comparison.png": self.plot_pca_comparison(),
+            "attention_entropy.png": self.plot_attention_entropy(),
+            "saliency_comparison.png": self.plot_saliency_comparison()
+        }
+        
+        for filename, fig in plots.items():
+            if fig:
+                report_lines.append(f"## {filename.replace('_', ' ').replace('.png', '').title()}")
+                fig.savefig(os.path.join(output_dir, filename))
+                report_lines.append(f"![{filename}]({filename})")
+                report_lines.append("")
+                plt.close(fig)
+        
+        report_path = os.path.join(output_dir, "report.md")
+        with open(report_path, "w") as f:
+            f.write("\n".join(report_lines))
+        
+        print(f"Report exported to {output_dir}")
+        return report_path
