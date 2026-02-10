@@ -1,4 +1,6 @@
 import numpy as np
+import os
+import pandas as pd
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
@@ -18,6 +20,8 @@ class Visualizer:
                 artifacts = self.aggregator.get_artifacts(run_id)
                 if 'embeddings' in artifacts:
                     emb = artifacts['embeddings']
+                elif 'token_embeddings' in artifacts:
+                    emb = artifacts['token_embeddings']
                 elif 'h_avg' in artifacts:
                     emb = artifacts['h_avg']
                 else:
@@ -90,11 +94,9 @@ class Visualizer:
                 
                 # H = -sum(p * log(p)) over the last dim (attention weights)
                 entropy = -np.sum(attn * np.log(attn), axis=-1)
-                # entropy shape: (layers, batch, heads, T)
                 
                 # Average over batch, heads, and tokens
                 avg_entropy = np.mean(entropy, axis=(1, 2, 3))
-                # avg_entropy shape: (layers,)
                 
                 layers = np.arange(len(avg_entropy))
                 ax.plot(layers, avg_entropy, marker='o', label=run_id)
@@ -110,6 +112,39 @@ class Visualizer:
         ax.set_title("Average Attention Entropy per Layer")
         ax.set_xlabel("Layer")
         ax.set_ylabel("Entropy (nats)")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+        return fig
+
+    def plot_saliency_comparison(self, figsize=(12, 6)):
+        """
+        Plots saliency scores comparison for all runs.
+        Returns the matplotlib Figure object.
+        """
+        fig, ax = plt.subplots(figsize=figsize)
+        
+        has_data = False
+        for run_id in self.aggregator.run_ids:
+            try:
+                saliency_path = os.path.join(self.aggregator.runs_base_dir, run_id, "tables", "saliency.csv")
+                if not os.path.exists(saliency_path):
+                    continue
+                
+                df = pd.read_csv(saliency_path)
+                ax.plot(df['position'], df['saliency'], label=run_id, alpha=0.8)
+                has_data = True
+                
+            except Exception as e:
+                print(f"Warning: Could not load saliency for {run_id}: {e}")
+        
+        if not has_data:
+            print("No saliency data available for plotting.")
+            return fig
+
+        ax.set_title("Saliency Scores Comparison")
+        ax.set_xlabel("Position")
+        ax.set_ylabel("Saliency")
         ax.legend()
         ax.grid(True, alpha=0.3)
         plt.tight_layout()
