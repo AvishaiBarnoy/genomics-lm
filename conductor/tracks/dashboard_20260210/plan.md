@@ -20,7 +20,7 @@ Integrate Frequencies, Embeddings, and Attention comparison logic.
     - [x] Implement attention map comparison view.
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Interpretability Step Integration (Steps 1-3)' (Protocol in workflow.md)
 
-## Phase 3: Interpretability Step Integration (Steps 4-6) & Export
+## Phase 3: Interpretability Step Integration (Steps 4-6) & Export [checkpoint: bfcf843]
 Integrate Probes and Saliency, and implement report exporting.
 
 - [x] Task: Implement comparative visualization for Step 5 (Saliency). ce95f55
@@ -29,4 +29,4 @@ Integrate Probes and Saliency, and implement report exporting.
 - [x] Task: Implement report export functionality (Markdown/HTML). 9eac209
     - [x] Write Tests for report generation and file writing.
     - [x] Implement export to `outputs/reports/comparison_<TIMESTAMP>/`.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Interpretability Step Integration (Steps 4-6) & Export' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Interpretability Step Integration (Steps 4-6) & Export' (Protocol in workflow.md)
