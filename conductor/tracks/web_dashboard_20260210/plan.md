@@ -2,11 +2,11 @@
 
 This plan outlines the steps to build the Streamlit-based dashboard.
 
-## Phase 1: Streamlit Setup & Metrics [checkpoint: ]
+## Phase 1: Streamlit Setup & Metrics [checkpoint: 79b2a64]
 Establish the basic web application structure.
 
 - [x] Task: Install Streamlit and create the basic app skeleton. f529f9b
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Streamlit Setup & Metrics' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Streamlit Setup & Metrics' (Protocol in workflow.md)
 
 ## Phase 2: Interactive Visualizations [checkpoint: ]
 Integrate PCA and Attention plots into the Streamlit UI.
