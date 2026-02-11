@@ -19,6 +19,26 @@ class ResultsAggregator:
                 self.metrics[run_id] = json.load(f)
         return self.metrics
 
+    def get_run_details(self, run_id):
+        """Loads meta.json and log.txt for a specific run."""
+        run_dir = os.path.join(self.runs_base_dir, run_id)
+        if not os.path.exists(run_dir):
+            raise FileNotFoundError(f"Run directory not found for {run_id}")
+            
+        details = {"meta": {}, "log": ""}
+        
+        meta_path = os.path.join(run_dir, "meta.json")
+        if os.path.exists(meta_path):
+            with open(meta_path, "r") as f:
+                details["meta"] = json.load(f)
+                
+        log_path = os.path.join(run_dir, "log.txt")
+        if os.path.exists(log_path):
+            with open(log_path, "r") as f:
+                details["log"] = f.read()
+                
+        return details
+
     def get_artifacts(self, run_id):
         artifacts_path = os.path.join(self.runs_base_dir, run_id, "artifacts.npz")
         if not os.path.exists(artifacts_path):

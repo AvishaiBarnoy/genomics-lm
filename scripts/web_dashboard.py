@@ -81,69 +81,99 @@ def main():
     aggregator = ResultsAggregator(run_ids=selected_runs)
     visualizer = Visualizer(aggregator)
     
-    try:
-        metrics = aggregator.load_metrics()
-        st.header("📊 Core Metrics")
-        
-        # Convert metrics to DataFrame for display
-        rows = []
-        for run_id, m in metrics.items():
-            rows.append({
-                "Run ID": run_id,
-                "Val Loss": m.get("val_loss", m.get("best_val_loss", "N/A")),
-                "Perplexity": m.get("last_perplexity", "N/A")
-            })
-        df_metrics = pd.DataFrame(rows)
-        st.table(df_metrics)
+    tab1, tab2 = st.tabs(["🚀 Comparison", "🔍 Individual Run"])
 
-        st.divider()
-        col1, col2 = st.columns(2)
+    with tab1:
+        try:
+            metrics = aggregator.load_metrics()
+            st.header("📊 Core Metrics")
+            
+            # Convert metrics to DataFrame for display
+            rows = []
+            for run_id, m in metrics.items():
+                rows.append({
+                    "Run ID": run_id,
+                    "Val Loss": m.get("val_loss", m.get("best_val_loss", "N/A")),
+                    "Perplexity": m.get("last_perplexity", "N/A")
+                })
+            df_metrics = pd.DataFrame(rows)
+            st.table(df_metrics)
 
-        with col1:
-            st.header("📉 Step 2: Embeddings (PCA)")
-            pca_results = visualizer.compute_pca()
-            if pca_results:
-                df_pca = prepare_pca_dataframe(pca_results)
-                st.scatter_chart(
-                    df_pca,
-                    x="PC1",
-                    y="PC2",
-                    color="Run ID",
-                    size=10
-                )
-            else:
-                st.info("No embedding data available for PCA.")
+            st.divider()
+            col1, col2 = st.columns(2)
 
-        with col2:
-            st.header("🧠 Step 3: Attention Entropy")
-            attention_results = visualizer.compute_attention_entropy()
-            if attention_results:
-                df_attn = prepare_attention_dataframe(attention_results)
+            with col1:
+                st.header("📉 Step 2: Embeddings (PCA)")
+                pca_results = visualizer.compute_pca()
+                if pca_results:
+                    df_pca = prepare_pca_dataframe(pca_results)
+                    st.scatter_chart(
+                        df_pca,
+                        x="PC1",
+                        y="PC2",
+                        color="Run ID",
+                        size=10
+                    )
+                else:
+                    st.info("No embedding data available for PCA.")
+
+            with col2:
+                st.header("🧠 Step 3: Attention Entropy")
+                attention_results = visualizer.compute_attention_entropy()
+                if attention_results:
+                    df_attn = prepare_attention_dataframe(attention_results)
+                    st.line_chart(
+                        df_attn,
+                        x="Layer",
+                        y="Entropy",
+                        color="Run ID"
+                    )
+                else:
+                    st.info("No attention data available.")
+
+            st.divider()
+            st.header("🔦 Step 5: Saliency Scores")
+            saliency_results = visualizer.load_saliency_data()
+            if saliency_results:
+                df_saliency = prepare_saliency_dataframe(saliency_results)
                 st.line_chart(
-                    df_attn,
-                    x="Layer",
-                    y="Entropy",
+                    df_saliency,
+                    x="Position",
+                    y="Saliency",
                     color="Run ID"
                 )
             else:
-                st.info("No attention data available.")
+                st.info("No saliency data available.")
+            
+        except Exception as e:
+            st.error(f"Error loading metrics: {e}")
 
-        st.divider()
-        st.header("🔦 Step 5: Saliency Scores")
-        saliency_results = visualizer.load_saliency_data()
-        if saliency_results:
-            df_saliency = prepare_saliency_dataframe(saliency_results)
-            st.line_chart(
-                df_saliency,
-                x="Position",
-                y="Saliency",
-                color="Run ID"
-            )
-        else:
-            st.info("No saliency data available.")
+    with tab2:
+        st.header("🔎 Individual Run Details")
+        selected_detail_run = st.selectbox("Select Run to Inspect", options=selected_runs)
         
-    except Exception as e:
-        st.error(f"Error loading metrics: {e}")
+        if selected_detail_run:
+            try:
+                details = aggregator.get_run_details(selected_detail_run)
+                
+                col_m, col_l = st.columns([1, 2])
+                
+                with col_m:
+                    st.subheader("📋 Hyperparameters")
+                    if details["meta"]:
+                        st.json(details["meta"])
+                    else:
+                        st.info("No metadata found.")
+                
+                with col_l:
+                    st.subheader("📄 Training Log")
+                    if details["log"]:
+                        st.text_area("Full Log Output", details["log"], height=400)
+                    else:
+                        st.info("No log file found.")
+                        
+            except Exception as e:
+                st.error(f"Error loading run details: {e}")
 
 if __name__ == "__main__":
     main()
