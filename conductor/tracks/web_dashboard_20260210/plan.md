@@ -15,16 +15,12 @@ Integrate PCA and Attention plots into the Streamlit UI.
 - [x] Task: Integrate Attention Entropy visualization. 0670c34
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Interactive Visualizations' (Protocol in workflow.md)
 
-## Phase 3: Saliency & Export Integration [checkpoint: ]
+## Phase 3: Saliency & Export Integration [checkpoint: 3204a33]
 Add saliency charts and export triggers.
 
-- [ ] Task: Integrate Saliency visualization.
-    - [ ] Write Tests for saliency data formatting for Streamlit.
-    - [ ] Implement Saliency plot in `web_dashboard.py`.
-- [ ] Task: Implement Export Report button.
-    - [ ] Write Tests for report trigger logic.
-    - [ ] Implement the export button in the sidebar.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Saliency & Export Integration' (Protocol in workflow.md)
+- [x] Task: Integrate Saliency visualization. 3ffc8cd
+- [x] Task: Implement Export Report button. 3ffc8cd
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Saliency & Export Integration' (Protocol in workflow.md)
 
 ## Phase 4: Individual Run Investigation [checkpoint: ]
 Provide a detailed view for a single selected run.
