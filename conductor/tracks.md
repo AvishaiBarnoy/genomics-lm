@@ -4,6 +4,4 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [x] **Track: Implement a Web-based Dashboard GUI using Streamlit for interactive experiment comparison and visualization.**
-  *Link: [./tracks/web_dashboard_20260210/](./tracks/web_dashboard_20260210/)*
 
