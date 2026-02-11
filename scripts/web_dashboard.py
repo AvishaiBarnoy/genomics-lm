@@ -14,6 +14,31 @@ def get_available_runs(scores_dir="outputs/scores"):
         return []
     return [d for d in os.listdir(scores_dir) if os.path.isdir(os.path.join(scores_dir, d)) and d != "compare"]
 
+def prepare_pca_dataframe(pca_results):
+    """Converts a dictionary of PCA results into a long-format DataFrame."""
+    rows = []
+    for run_id, data in pca_results.items():
+        for i in range(data.shape[0]):
+            rows.append({
+                "Run ID": run_id,
+                "PC1": data[i, 0],
+                "PC2": data[i, 1],
+                "Point Index": i
+            })
+    return pd.DataFrame(rows)
+
+def prepare_attention_dataframe(attention_data):
+    """Converts a dictionary of attention entropy results into a long-format DataFrame."""
+    rows = []
+    for run_id, data in attention_data.items():
+        for layer, entropy in enumerate(data):
+            rows.append({
+                "Run ID": run_id,
+                "Layer": layer,
+                "Entropy": entropy
+            })
+    return pd.DataFrame(rows)
+
 def main():
     st.set_page_config(page_title="Genomics-LM Dashboard", layout="wide")
     st.title("🧬 Genomics-LM Experiment Dashboard")
@@ -27,6 +52,7 @@ def main():
         return
 
     aggregator = ResultsAggregator(run_ids=selected_runs)
+    visualizer = Visualizer(aggregator)
     
     try:
         metrics = aggregator.load_metrics()
@@ -42,6 +68,38 @@ def main():
             })
         df_metrics = pd.DataFrame(rows)
         st.table(df_metrics)
+
+        st.divider()
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.header("📉 Step 2: Embeddings (PCA)")
+            pca_results = visualizer.compute_pca()
+            if pca_results:
+                df_pca = prepare_pca_dataframe(pca_results)
+                st.scatter_chart(
+                    df_pca,
+                    x="PC1",
+                    y="PC2",
+                    color="Run ID",
+                    size=10
+                )
+            else:
+                st.info("No embedding data available for PCA.")
+
+        with col2:
+            st.header("🧠 Step 3: Attention Entropy")
+            attention_results = visualizer.compute_attention_entropy()
+            if attention_results:
+                df_attn = prepare_attention_dataframe(attention_results)
+                st.line_chart(
+                    df_attn,
+                    x="Layer",
+                    y="Entropy",
+                    color="Run ID"
+                )
+            else:
+                st.info("No attention data available.")
         
     except Exception as e:
         st.error(f"Error loading metrics: {e}")

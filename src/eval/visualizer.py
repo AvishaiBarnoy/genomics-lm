@@ -45,6 +45,31 @@ class Visualizer:
                 
         return pca_results
 
+    def compute_attention_entropy(self):
+        """
+        Computes average attention entropy per layer for all runs.
+        Returns a dictionary mapping run_id to entropy arrays.
+        """
+        entropy_results = {}
+        for run_id in self.aggregator.run_ids:
+            try:
+                artifacts = self.aggregator.get_artifacts(run_id)
+                if 'attn' not in artifacts:
+                    continue
+                
+                attn = artifacts['attn']
+                if len(attn.shape) != 5:
+                    continue
+                
+                attn = np.clip(attn, 1e-10, 1.0)
+                entropy = -np.sum(attn * np.log(attn), axis=-1)
+                avg_entropy = np.mean(entropy, axis=(1, 2, 3))
+                entropy_results[run_id] = avg_entropy
+                
+            except Exception as e:
+                print(f"Warning: Could not compute attention entropy for {run_id}: {e}")
+        return entropy_results
+
     def plot_pca_comparison(self, figsize=(12, 6)):
         """
         Plots PCA comparison for all runs side-by-side.
