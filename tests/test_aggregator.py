@@ -55,5 +55,7 @@ def test_aggregator_invalid_run(mock_run_dirs):
         scores_base_dir=str(mock_run_dirs / "outputs" / "scores"),
         runs_base_dir=str(mock_run_dirs / "runs")
     )
-    with pytest.raises(FileNotFoundError):
-        agg.load_metrics()
+    # Should now return an empty dict instead of raising FileNotFoundError
+    metrics = agg.load_metrics()
+    assert metrics == {}
+
