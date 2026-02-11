@@ -70,6 +70,22 @@ class Visualizer:
                 print(f"Warning: Could not compute attention entropy for {run_id}: {e}")
         return entropy_results
 
+    def load_saliency_data(self):
+        """
+        Loads saliency CSV data for all runs.
+        Returns a dictionary mapping run_id to DataFrames.
+        """
+        saliency_results = {}
+        for run_id in self.aggregator.run_ids:
+            try:
+                saliency_path = os.path.join(self.aggregator.runs_base_dir, run_id, "tables", "saliency.csv")
+                if os.path.exists(saliency_path):
+                    df = pd.read_csv(saliency_path)
+                    saliency_results[run_id] = df
+            except Exception as e:
+                print(f"Warning: Could not load saliency for {run_id}: {e}")
+        return saliency_results
+
     def plot_pca_comparison(self, figsize=(12, 6)):
         """
         Plots PCA comparison for all runs side-by-side.

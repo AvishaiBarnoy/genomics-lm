@@ -32,3 +32,19 @@ def test_prepare_attention_dataframe():
     assert "Entropy" in df.columns
     assert "Run ID" in df.columns
 
+def test_prepare_saliency_dataframe():
+    # Saliency results from multiple runs
+    saliency_data = {
+        "run_a": pd.DataFrame({"position": [0, 1], "token": ["A", "G"], "saliency": [0.1, 0.2]}),
+        "run_b": pd.DataFrame({"position": [0, 1], "token": ["A", "G"], "saliency": [0.05, 0.25]})
+    }
+    from scripts.web_dashboard import prepare_saliency_dataframe
+    df = prepare_saliency_dataframe(saliency_data)
+    
+    assert isinstance(df, pd.DataFrame)
+    assert len(df) == 4
+    assert "Position" in df.columns
+    assert "Saliency" in df.columns
+    assert "Run ID" in df.columns
+
+

@@ -39,6 +39,24 @@ def prepare_attention_dataframe(attention_data):
             })
     return pd.DataFrame(rows)
 
+def prepare_saliency_dataframe(saliency_data):
+    """Converts a dictionary of saliency DataFrames into a long-format DataFrame."""
+    all_rows = []
+    for run_id, df in saliency_data.items():
+        # df has columns [position, token, saliency]
+        temp_df = df.copy()
+        temp_df["Run ID"] = run_id
+        temp_df = temp_df.rename(columns={
+            "position": "Position",
+            "saliency": "Saliency",
+            "token": "Token"
+        })
+        all_rows.append(temp_df)
+    
+    if not all_rows:
+        return pd.DataFrame()
+    return pd.concat(all_rows, ignore_index=True)
+
 def main():
     st.set_page_config(page_title="Genomics-LM Dashboard", layout="wide")
     st.title("🧬 Genomics-LM Experiment Dashboard")
@@ -46,6 +64,15 @@ def main():
     st.sidebar.header("Run Selection")
     available_runs = get_available_runs()
     selected_runs = st.sidebar.multiselect("Select Runs to Compare", options=available_runs)
+
+    if selected_runs:
+        st.sidebar.divider()
+        if st.sidebar.button("📄 Export Comparison Report"):
+            aggregator = ResultsAggregator(run_ids=selected_runs)
+            visualizer = Visualizer(aggregator)
+            with st.spinner("Generating report..."):
+                report_path = visualizer.export_report()
+                st.sidebar.success(f"Report exported to: {report_path}")
 
     if not selected_runs:
         st.warning("Please select at least one run from the sidebar.")
@@ -100,6 +127,20 @@ def main():
                 )
             else:
                 st.info("No attention data available.")
+
+        st.divider()
+        st.header("🔦 Step 5: Saliency Scores")
+        saliency_results = visualizer.load_saliency_data()
+        if saliency_results:
+            df_saliency = prepare_saliency_dataframe(saliency_results)
+            st.line_chart(
+                df_saliency,
+                x="Position",
+                y="Saliency",
+                color="Run ID"
+            )
+        else:
+            st.info("No saliency data available.")
         
     except Exception as e:
         st.error(f"Error loading metrics: {e}")
