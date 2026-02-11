@@ -17,6 +17,7 @@ This track implements a graphical user interface (GUI) for the experiment compar
     - Saliency score line charts.
 4. **Live Inspection:** Ability to hover over data points in plots to see specific details (run name, position, etc.).
 5. **Report Trigger:** A button to trigger the `export_report` logic and provide a download link or path.
+6. **Individual Run Investigation:** A dedicated page or mode to inspect a single run in detail (hyperparameters, training logs, individual step visualizations).
 
 ## Non-Functional Requirements
 - **Responsiveness:** The dashboard should update quickly when new runs are selected.

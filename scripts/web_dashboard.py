@@ -1,6 +1,11 @@
 import streamlit as st
 import os
+import sys
 import pandas as pd
+
+# Add project root to sys.path to resolve 'src' when running directly with streamlit
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from src.eval.aggregator import ResultsAggregator
 from src.eval.visualizer import Visualizer
 
