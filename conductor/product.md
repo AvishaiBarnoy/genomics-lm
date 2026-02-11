@@ -13,5 +13,6 @@ The project is specifically designed for **Machine Learning Researchers** who ar
 ## Key Features
 -   **6-Step Interpretability Pipeline:** An automated suite of analysis tools (including embedding visualization, attention specializations, and saliency maps) specifically designed for biological validation of model outputs.
 -   **Experiment Comparison Dashboard:** A high-level dashboard to aggregate and compare results from multiple model runs, featuring metric tabulation, side-by-side visualizations (PCA, Attention Entropy, Saliency), and report exporting.
+-   **Interactive Web Dashboard:** A user-friendly GUI built with Streamlit for dynamic run selection, interactive visualizations (PCA, Attention, Saliency), and detailed individual run investigation (hyperparameters, training logs).
 -   **Modular Agentic Architecture:** A structured development approach using conceptual "agents" to handle discrete tasks like data extraction, tokenization, and multi-stage model training.
 -   **Motif & Mutation Analysis:** Dedicated tools for generating mutation heatmaps and mining functional motifs directly from the model's hidden states to understand sequence-function relationships.
