@@ -25,7 +25,5 @@ Add saliency charts and export triggers.
 ## Phase 4: Individual Run Investigation [checkpoint: ]
 Provide a detailed view for a single selected run.
 
-- [ ] Task: Implement a "Run Details" page/mode in Streamlit.
-    - [ ] Write Tests for run-specific data loading.
-    - [ ] Implement hyperparameter and log display for the selected run.
-- [ ] Task: Conductor - User Manual Verification 'Phase 4: Individual Run Investigation' (Protocol in workflow.md)
+- [x] Task: Implement a "Run Details" page/mode in Streamlit. 44838b5
+- [x] Task: Conductor - User Manual Verification 'Phase 4: Individual Run Investigation' (Protocol in workflow.md)
