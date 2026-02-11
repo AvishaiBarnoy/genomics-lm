@@ -22,7 +22,7 @@ Add saliency charts and export triggers.
 - [x] Task: Implement Export Report button. 3ffc8cd
 - [x] Task: Conductor - User Manual Verification 'Phase 3: Saliency & Export Integration' (Protocol in workflow.md)
 
-## Phase 4: Individual Run Investigation [checkpoint: ]
+## Phase 4: Individual Run Investigation [checkpoint: 1aa31a1]
 Provide a detailed view for a single selected run.
 
 - [x] Task: Implement a "Run Details" page/mode in Streamlit. 44838b5
