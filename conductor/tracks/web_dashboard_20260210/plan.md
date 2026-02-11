@@ -8,16 +8,12 @@ Establish the basic web application structure.
 - [x] Task: Install Streamlit and create the basic app skeleton. f529f9b
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Streamlit Setup & Metrics' (Protocol in workflow.md)
 
-## Phase 2: Interactive Visualizations [checkpoint: ]
+## Phase 2: Interactive Visualizations [checkpoint: a07233e]
 Integrate PCA and Attention plots into the Streamlit UI.
 
-- [ ] Task: Integrate PCA visualization with interactive controls.
-    - [ ] Write Tests for embedding data formatting for Streamlit.
-    - [ ] Implement PCA plot in `web_dashboard.py`.
-- [ ] Task: Integrate Attention Entropy visualization.
-    - [ ] Write Tests for attention data formatting for Streamlit.
-    - [ ] Implement Attention plot in `web_dashboard.py`.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Interactive Visualizations' (Protocol in workflow.md)
+- [x] Task: Integrate PCA visualization with interactive controls. 0670c34
+- [x] Task: Integrate Attention Entropy visualization. 0670c34
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Interactive Visualizations' (Protocol in workflow.md)
 
 ## Phase 3: Saliency & Export Integration [checkpoint: ]
 Add saliency charts and export triggers.
