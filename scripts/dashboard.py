@@ -20,6 +20,8 @@ def main():
     parser.add_argument("--runs", type=str, help="Comma-separated list of run IDs to compare")
     parser.add_argument("--scores_dir", type=str, default="outputs/scores", help="Base directory for scores")
     parser.add_argument("--runs_dir", type=str, default="runs", help="Base directory for run artifacts")
+    parser.add_argument("--export", action="store_true", help="Export a full Markdown report with plots")
+    parser.add_argument("--out_dir", type=str, help="Directory to save the exported report")
     
     args = parser.parse_args()
     
@@ -39,6 +41,13 @@ def main():
         metrics = aggregator.load_metrics()
         print("\n--- Experiment Comparison Dashboard ---")
         print(format_metrics_table(metrics))
+        
+        if args.export:
+            from src.eval.visualizer import Visualizer
+            visualizer = Visualizer(aggregator)
+            report_path = visualizer.export_report(output_dir=args.out_dir)
+            print(f"\nFull report exported to: {report_path}")
+            
     except Exception as e:
         print(f"Error loading metrics: {e}")
         sys.exit(1)
