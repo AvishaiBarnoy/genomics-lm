@@ -5,9 +5,7 @@ This plan outlines the steps to build the Streamlit-based dashboard.
 ## Phase 1: Streamlit Setup & Metrics [checkpoint: ]
 Establish the basic web application structure.
 
-- [ ] Task: Install Streamlit and create the basic app skeleton.
-    - [ ] Write Tests for a simple "smoke test" of the dashboard layout (mocking streamlit).
-    - [ ] Implement `scripts/web_dashboard.py` with run selection and metrics table.
+- [x] Task: Install Streamlit and create the basic app skeleton. f529f9b
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Streamlit Setup & Metrics' (Protocol in workflow.md)
 
 ## Phase 2: Interactive Visualizations [checkpoint: ]
