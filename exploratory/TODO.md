@@ -1,23 +1,19 @@
-# Analysis TODOs
+# Research & Analysis TODOs
 
-## Mutation Maps
-- [ ] Ingest `outputs/scores/<RUN_ID>/*.tsv` into pandas
-- [ ] Per-position summaries: `best_delta`, `n_better`
-- [ ] Top-K mutants per position (+ synonymous flag)
-- [ ] Heatmap (positions × codons) of ΔlogP
-- [ ] Export `summary.csv`, `topk.csv`, and plots
+## Stage 2: Universal Bacterial Grammar
+- [x] Extract diversified dataset (High-GC, Gram-pos, Entero).
+- [x] Establish Transfer Learning pipeline.
+- [x] Implement Multi-Dimensional Structural Probe (Roll, MGW, EP).
+- [x] Refine 6-layer model to 91 PPL.
+- [/] **Anchored Operon Bridges**: Train specifically on gene-gene boundaries to master operon logic. (In Progress)
 
-## Motif Mining
-- [ ] Extract n-gram/k-mer motifs from high-ΔlogP regions
-- [ ] Compare motif frequencies vs background
-- [ ] Visualize motif logos
+## Stage 3: Hierarchical Modeling & Design
+- [ ] **Protein-Critic Bridge**: Create script to translate CodonLM DNA -> ProteinLM scores.
+- [ ] **Multi-Task Classifiers**: Train ProteinLM for Pfam family and stability.
+- [ ] **Energy-Based Model (EBM)**: Pilot a thermodynamic filter for generated sequences.
+- [ ] **Multi-Scale Modeling**: Prototype parallel-frame codon processing.
 
-## Codon Language Model
-- [ ] Track training curves (loss, ppl)
-- [ ] Ablations: block_size, n_layer, n_head, n_embd
-- [ ] Bias checks: AA-frozen shuffle vs original
-
-## Bias & Validation
-- [ ] Synonymous vs non-synonymous breakdown
-- [ ] Cross-dataset evaluation (organism/taxonomy mix)
-- [ ] Correlate ΔlogP with conservation scores (if available)
+## Validation Benchmarks
+- [x] Biological Recall Benchmark (Known Motifs).
+- [x] Structural Awareness Probe (Implicit Physics).
+- [/] **Inference Benchmark**: Increase Termination Rate beyond 20% with Operon training.
