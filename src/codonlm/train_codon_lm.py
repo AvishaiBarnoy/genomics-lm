@@ -129,8 +129,10 @@ def main():
     ap.add_argument("--train_npz", action="append", default=None, help="Training NPZ file (repeatable)")
     ap.add_argument("--val_npz", action="append", default=None, help="Validation NPZ file (repeatable)")
     ap.add_argument("--test_npz", action="append", default=None, help="Test NPZ file (repeatable)")
+    ap.add_argument("--save_epochs", action="store_true", help="Save checkpoint at every epoch")
     args = ap.parse_args()
     cfg = yaml.safe_load(open(args.config))
+    cfg["save_epochs"] = args.save_epochs or cfg.get("save_epochs", False)
     resume_path = args.resume or cfg.pop("resume", None)
     if resume_path is not None:
         resume_path = str(resume_path)
@@ -496,6 +498,8 @@ def main():
             "step": step,
         }
         torch.save(ckpt_payload, ckpt_dir / "last.pt")
+        if cfg.get("save_epochs", False):
+            torch.save(ckpt_payload, ckpt_dir / f"epoch_{epoch_idx}.pt")
         with log_csv.open("a", newline="") as f:
             csv.writer(f).writerow([epoch_idx, f"{train_loss:.4f}", f"{val_loss:.4f}", f"{ppl:.3f}", f"{lr_now:.3e}"])
 
