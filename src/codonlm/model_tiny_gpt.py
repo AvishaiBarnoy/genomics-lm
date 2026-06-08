@@ -10,9 +10,13 @@ class CausalSelfAttention(nn.Module):
         self.n_head = n_head
         self.n_kv_head = n_kv_head if (n_kv_head is not None and n_kv_head > 0 and n_kv_head <= n_head) else None
         self.use_sdpa = bool(use_sdpa)
-        self.key = nn.Linear(n_embd, n_embd)
+        
+        head_dim = n_embd // n_head
+        kv_dim = (self.n_kv_head * head_dim) if self.n_kv_head is not None else n_embd
+        
+        self.key = nn.Linear(n_embd, kv_dim)
         self.query = nn.Linear(n_embd, n_embd)
-        self.value = nn.Linear(n_embd, n_embd)
+        self.value = nn.Linear(n_embd, kv_dim)
         self.proj = nn.Linear(n_embd, n_embd)
         self.dropout = nn.Dropout(dropout)
         self.register_buffer("mask", torch.tril(torch.ones(block_size, block_size)).unsqueeze(0).unsqueeze(0))
@@ -28,10 +32,8 @@ class CausalSelfAttention(nn.Module):
             # Grouped-query attention: fewer KV heads broadcast to query heads
             if self.n_head % self.n_kv_head != 0:
                 raise ValueError("n_head must be divisible by n_kv_head for GQA")
-            kv_dim = C // self.n_kv_head
-            kv_head_dim = kv_dim // self.n_kv_head  # equals head_dim when dims align
-            k = self.key(x).view(B, T, self.n_kv_head, head_dim * (self.n_head // self.n_kv_head)).transpose(1,2)
-            v = self.value(x).view(B, T, self.n_kv_head, head_dim * (self.n_head // self.n_kv_head)).transpose(1,2)
+            k = self.key(x).view(B, T, self.n_kv_head, head_dim).transpose(1,2)
+            v = self.value(x).view(B, T, self.n_kv_head, head_dim).transpose(1,2)
             # Repeat along heads to match n_head
             rep = self.n_head // self.n_kv_head
             k = k.repeat_interleave(rep, dim=1)
@@ -64,10 +66,10 @@ class CausalSelfAttention(nn.Module):
         return self.proj(y)
 
 class Block(nn.Module):
-    def __init__(self, n_embd, n_head, dropout, block_size):
+    def __init__(self, n_embd, n_head, dropout, block_size, n_kv_head: int | None = None, use_sdpa: bool = False):
         super().__init__()
         self.ln1 = nn.LayerNorm(n_embd)
-        self.attn = CausalSelfAttention(n_embd, n_head, dropout, block_size)
+        self.attn = CausalSelfAttention(n_embd, n_head, dropout, block_size, n_kv_head=n_kv_head, use_sdpa=use_sdpa)
         self.ln2 = nn.LayerNorm(n_embd)
         self.mlp = nn.Sequential(
             nn.Linear(n_embd, 4*n_embd),
@@ -94,7 +96,7 @@ class TinyGPT(nn.Module):
         self.tok_emb = nn.Embedding(vocab_size, n_embd)
         self.pos_emb = nn.Embedding(block_size, n_embd)
         self.drop = nn.Dropout(dropout)
-        self.blocks = nn.ModuleList([Block(n_embd, n_head, dropout, block_size) for _ in range(n_layer)])
+        self.blocks = nn.ModuleList([Block(n_embd, n_head, dropout, block_size, n_kv_head=self.n_kv_head, use_sdpa=self.use_sdpa) for _ in range(n_layer)])
         self.ln_f = nn.LayerNorm(n_embd)
         self.head = nn.Linear(n_embd, vocab_size, bias=False)
         if self.tie_embeddings:

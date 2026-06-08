@@ -107,12 +107,15 @@ def main():
     if print_codons:
         print("pos\twt\t" + "\t".join(CODONS))
         for pos in range(1, len(ids)-1):
-            wt_id = ids[pos]; wt = itos[wt_id]
-            baseline = float(logp_pred[pos-1, wt_id])
+            wt_id = ids[pos]; wt = TOK_ITOS[wt_id]
+            baseline = float(logp_pred[pos-1, wt_id]) if wt_id < logp_pred.size(-1) else 0.0
             row = [f"{pos}\t{wt}"]
             for cod in CODONS:
-                mid = stoi[cod]
-                row.append(f"{float(logp_pred[pos-1, mid] - baseline):.4f}")
+                mid = TOK_STOI[cod]
+                if mid < logp_pred.size(-1):
+                    row.append(f"{float(logp_pred[pos-1, mid] - baseline):.4f}")
+                else:
+                    row.append("-inf")
             print("\t".join(row))
 
     output_path: Path
@@ -136,8 +139,15 @@ def main():
         w.writerow(["pos","wt"] + CODONS)
         for pos in range(1, len(ids)-1):
             wt_id = ids[pos]; wt = TOK_ITOS[wt_id]
-            baseline = float(logp_pred[pos-1, wt_id])
-            row = [pos, wt] + [f"{float(logp_pred[pos-1, TOK_STOI[c]] - baseline):.4f}" for c in CODONS]
+            baseline = float(logp_pred[pos-1, wt_id]) if wt_id < logp_pred.size(-1) else 0.0
+            row = [pos, wt]
+            for c in CODONS:
+                idx = TOK_STOI[c]
+                if idx < logp_pred.size(-1):
+                    val = float(logp_pred[pos-1, idx] - baseline)
+                    row.append(f"{val:.4f}")
+                else:
+                    row.append("-inf")
             w.writerow(row)
     print(f"[save] {output_path}")
 
