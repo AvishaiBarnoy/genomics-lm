@@ -30,5 +30,5 @@ Launch the Stage 2 training run.
 
 - [x] Task: Run the transfer learning process.
     - [x] Execute `train_codon_lm.py` with corrected architecture and diversified data.
-- [/] Task: Run Long-Context (512-block) Training. (In Progress)
-    - [ ] Train a 6-layer model with doubled context size to improve gene termination.
+- [x] Task: Run Long-Context (512-block) Training.
+    - [x] Train a 6-layer model with doubled context size to improve gene termination.

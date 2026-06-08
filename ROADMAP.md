@@ -51,10 +51,10 @@ All steps read `runs/<run_id>/artifacts.npz` (plus optional labels) and write ch
 **Status: IN PROGRESS (Groundwork Complete)**
 - [x] Diversified Bacterial Dataset (Gram-pos, High-GC, Entero)
 - [x] Transfer Learning Pipeline (Fine-tuning support)
-- [ ] **Hierarchical Supervisor Model**: Use ProteinLM to 'critic' CodonLM outputs.
+- [x] **Hierarchical Supervisor Model**: Use ProteinLM to 'critic' CodonLM outputs.
   - [x] **Protein-Critic Bridge**: DNA -> ProteinLM scoring script (`scripts/protein_critic_bridge.py`).
-  - [ ] **Multi-Task Classifiers**: Multi-head model for Family, Stability, and Function.
-- [ ] **Inference Policy Optimization (ReD)**: Implement Reset-and-Discard to overcome the sublinear coverage trap and the 0% termination barrier.
+  - [x] **Multi-Task Classifiers**: Multi-head model for Family, Stability, and Function.
+- [x] **Inference Policy Optimization (ReD)**: Implement Reset-and-Discard to overcome the sublinear coverage trap and the 0% termination barrier.
 - [ ] **Energy-Based Physical Models (EBM)**: Integrate thermodynamic/structural stability as a global sequence filter.
 
 **Projects**

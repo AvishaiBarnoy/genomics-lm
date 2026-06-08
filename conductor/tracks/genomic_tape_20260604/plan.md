@@ -21,5 +21,5 @@ Prepare the tape data for the model.
 ## Phase 3: Validation & Training [checkpoint: ]
 - [x] Task: Verification.
     - [x] Verify that tape segments correctly overlap known operons and transitions.
-- [/] Task: Launch Stage 2.5 "Master" Training. (In Progress)
+- [x] Task: Launch Stage 2.5 "Master" Training.
     - [x] Execute fine-tuning from pre-trained 6-layer weights on the mixed Tape+Bridge dataset.
