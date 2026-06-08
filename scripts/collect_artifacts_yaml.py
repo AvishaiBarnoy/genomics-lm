@@ -94,7 +94,7 @@ def _load_yaml(yaml_path: Path) -> Mapping[str, object]:
         raise ValueError(f"Config at {yaml_path} is not a mapping")
     return cfg
 
-def _find_checkpoint(check_dir: Path, run_id: Optional[str] = None) -> Path:
+def _find_checkpoint(check_dir: Path, run_id: Optional[str] = None, target_name: str = "best.pt") -> Path:
     """
     Look for best.pt/last.pt in either:
     - check_dir (flat layout), or
@@ -322,6 +322,7 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("run_id")
     ap.add_argument("config")
+    ap.add_argument("--ckpt", default="best.pt", help="Which checkpoint to use (e.g., best.pt or last.pt)")
     args = ap.parse_args(argv)
 
     run_paths = ensure_run_layout(args.run_id)
@@ -336,7 +337,7 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
     if out_dir is None or not out_dir.exists():
         raise FileNotFoundError(f"Output directory not found: {out_dir}")
 
-    checkpoint_path = _find_checkpoint(out_dir, run_id=args.run_id)
+    checkpoint_path = _find_checkpoint(out_dir, run_id=args.run_id, target_name=args.ckpt)
 
     weights_dst = run_dir / "weights.pt"
     if weights_dst.exists() or weights_dst.is_symlink():

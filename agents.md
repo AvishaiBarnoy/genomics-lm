@@ -102,6 +102,29 @@ Each agent handles a specific part of the DNA/codon–language modelling pipelin
 
 ---
 
+## 9. Hierarchical Supervisor Agent (Planned)
+**Concept:** Use ProteinLM (Amino Acid-level) as a 'Critic' for CodonLM (DNA-level) outputs.
+**Input:** DNA sequences proposed by CodonLM.
+**Output:** Functional scores, family alignment, and stability predictions.
+**Purpose:** Ensures that sequences that are 'syntactically' correct in DNA are also 'functionally' viable as proteins. This bridges the gap between DNA grammar and biological activity.
+
+---
+
+## 10. Physical Energy Critic (EBM) (Planned)
+**Concept:** An Energy-Based Model that evaluates the global physical stability of a generated DNA sequence.
+**Why EBM?** Traditional LMs (like CodonLM) are *causal*—they predict the next letter based on the past. EBMs look at the *whole* sequence and assign an energy score based on 3D physics (bending, torque, melting temp).
+**Purpose:** Acting as a second-stage filter to ensure that generated DNA is physically viable in a real cell environment.
+
+---
+
+## 11. Multi-Scale Frame Agent (Planned)
+**Concept:** A transformer architecture that simultaneously processes DNA in all three reading frames (Frame 0, +1, +2) and at the raw nucleotide level.
+**Input:** Raw genomic tape or individual ORFs.
+**Output:** Joint probabilities across frames.
+**Purpose:** Specifically designed to model "Overprinted Genes" and frame-shifting events that standard codon-level models are blind to. This ensures the model learns the full "density" of bacterial and viral genomes.
+
+---
+
 ### 🧾 References  
 - See the project’s `ROADMAP.md` for high-level stages of the work.  
 - The `configs/` directory contains YAML files governing each agent’s parameters.  

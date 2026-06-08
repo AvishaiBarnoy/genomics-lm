@@ -48,6 +48,15 @@ All steps read `runs/<run_id>/artifacts.npz` (plus optional labels) and write ch
 
 *Goal: Add functional prediction and motif‑conditioned generation while keeping the same 6‑step lens.*
 
+**Status: IN PROGRESS (Groundwork Complete)**
+- [x] Diversified Bacterial Dataset (Gram-pos, High-GC, Entero)
+- [x] Transfer Learning Pipeline (Fine-tuning support)
+- [ ] **Hierarchical Supervisor Model**: Use ProteinLM to 'critic' CodonLM outputs.
+  - [x] **Protein-Critic Bridge**: DNA -> ProteinLM scoring script (`scripts/protein_critic_bridge.py`).
+  - [ ] **Multi-Task Classifiers**: Multi-head model for Family, Stability, and Function.
+- [ ] **Inference Policy Optimization (ReD)**: Implement Reset-and-Discard to overcome the sublinear coverage trap and the 0% termination barrier.
+- [ ] **Energy-Based Physical Models (EBM)**: Integrate thermodynamic/structural stability as a global sequence filter.
+
 **Projects**
 
 1. **Protein Classifier with LoRA** (ESM‑2 35M / ProtT5 60M).
@@ -87,6 +96,17 @@ All steps read `runs/<run_id>/artifacts.npz` (plus optional labels) and write ch
 
 * Combine LM generation with structure/energy scores; use RL or preference optimization.
 * Use Steps 2–6 to ensure interpretability and avoid mode‑collapse.
+
+4. **Multi-Scale Genomic Modelling**
+
+* Implement nucleotide-level and parallel-frame (Frame 0, +1, +2) processing.
+* Target: Model overlapping/overprinted genes in high-density prokaryotic/viral genomes.
+
+5. **Hardware Scaling Ablation (Speculative)**
+
+* Test the jump from 8GB/M2 to 16GB/M4.
+* Scaling Targets: 2048 block size, 16 layers, 100+ genome diversity.
+* Goal: Quantify the 'Capability Leap' provided by unified memory expansion.
 
 **Hardware**: Cloud GPUs (A100/H100) or university cluster.
 **Outcome**: First de‑novo functional design experiments.

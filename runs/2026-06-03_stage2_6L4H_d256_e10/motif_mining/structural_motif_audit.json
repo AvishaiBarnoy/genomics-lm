@@ -1,0 +1,210 @@
+[
+    {
+        "name": "Cluster 6",
+        "sequence": "GGCGGCGGCGGCGGCGGCGGCGGCCTG",
+        "structural_stats": {
+            "MGW": 4.5,
+            "Roll": 4.81,
+            "EP": -4.78,
+            "ProT": -11.22,
+            "HelT": 35.63
+        },
+        "interpretations": [
+            "Highly Flexible/Bent"
+        ]
+    },
+    {
+        "name": "Cluster 0",
+        "sequence": "CTGCTGCTGCTGCTGCTGCTGGGCCTG",
+        "structural_stats": {
+            "MGW": 4.5,
+            "Roll": 4.63,
+            "EP": -4.78,
+            "ProT": -11.44,
+            "HelT": 34.0
+        },
+        "interpretations": [
+            "Highly Flexible/Bent"
+        ]
+    },
+    {
+        "name": "Cluster 9",
+        "sequence": "CTGGCCGCCCTGGCCGCCGCGGGCGCC",
+        "structural_stats": {
+            "MGW": 4.5,
+            "Roll": 4.63,
+            "EP": -4.56,
+            "ProT": -11.44,
+            "HelT": 35.26
+        },
+        "interpretations": [
+            "Highly Flexible/Bent"
+        ]
+    },
+    {
+        "name": "Cluster 8",
+        "sequence": "CTGGAGCTGCTGCTGCTGCTGCTGCTG",
+        "structural_stats": {
+            "MGW": 4.5,
+            "Roll": 4.54,
+            "EP": -5.0,
+            "ProT": -11.56,
+            "HelT": 34.0
+        },
+        "interpretations": [
+            "Highly Flexible/Bent"
+        ]
+    },
+    {
+        "name": "Cluster 14",
+        "sequence": "GGCGGCGGCGGCGGCGGCGGCGGCGGC",
+        "structural_stats": {
+            "MGW": 4.5,
+            "Roll": 5.0,
+            "EP": -5.0,
+            "ProT": -11.0,
+            "HelT": 35.85
+        },
+        "interpretations": [
+            "Highly Flexible/Bent"
+        ]
+    },
+    {
+        "name": "Cluster 3",
+        "sequence": "CTGCTGCTGCTGCTGCTGCTGCTGCTG",
+        "structural_stats": {
+            "MGW": 4.5,
+            "Roll": 4.81,
+            "EP": -5.0,
+            "ProT": -11.22,
+            "HelT": 34.0
+        },
+        "interpretations": [
+            "Highly Flexible/Bent"
+        ]
+    },
+    {
+        "name": "Cluster 2",
+        "sequence": "GCCGCCGCCGCCGCCGCCGCCGCCGCC",
+        "structural_stats": {
+            "MGW": 4.5,
+            "Roll": 5.0,
+            "EP": -5.0,
+            "ProT": -11.0,
+            "HelT": 35.85
+        },
+        "interpretations": [
+            "Highly Flexible/Bent"
+        ]
+    },
+    {
+        "name": "Cluster 11",
+        "sequence": "GCCGCCGCCGCCGCCGCCGCCGCCGCC",
+        "structural_stats": {
+            "MGW": 4.5,
+            "Roll": 5.0,
+            "EP": -5.0,
+            "ProT": -11.0,
+            "HelT": 35.85
+        },
+        "interpretations": [
+            "Highly Flexible/Bent"
+        ]
+    },
+    {
+        "name": "Cluster 7",
+        "sequence": "GAGATTGAGGAACTGCTGGAAATTGAA",
+        "structural_stats": {
+            "MGW": 4.5,
+            "Roll": 1.3,
+            "EP": -5.0,
+            "ProT": -14.74,
+            "HelT": 34.0
+        },
+        "interpretations": []
+    },
+    {
+        "name": "Cluster 12",
+        "sequence": "GCCGCCGCCGCCGCCGCCGTCGCCGCC",
+        "structural_stats": {
+            "MGW": 4.5,
+            "Roll": 5.0,
+            "EP": -5.0,
+            "ProT": -11.22,
+            "HelT": 35.85
+        },
+        "interpretations": [
+            "Highly Flexible/Bent"
+        ]
+    },
+    {
+        "name": "Cluster 1",
+        "sequence": "GAAAAAGAAGAAAAAGAAGAAAAAGAA",
+        "structural_stats": {
+            "MGW": 4.17,
+            "Roll": 0.0,
+            "EP": -6.67,
+            "ProT": -14.0,
+            "HelT": 34.0
+        },
+        "interpretations": [
+            "Stiff/Straight"
+        ]
+    },
+    {
+        "name": "Cluster 4",
+        "sequence": "ATTAAATTAATTTTATTAGAATTATTA",
+        "structural_stats": {
+            "MGW": 4.5,
+            "Roll": 0.0,
+            "EP": -5.0,
+            "ProT": -17.26,
+            "HelT": 32.44
+        },
+        "interpretations": [
+            "Stiff/Straight"
+        ]
+    },
+    {
+        "name": "Cluster 5",
+        "sequence": "CTGGCCCGCCTGGCCCGCCTGGCCCGC",
+        "structural_stats": {
+            "MGW": 4.5,
+            "Roll": 4.63,
+            "EP": -4.33,
+            "ProT": -11.44,
+            "HelT": 34.89
+        },
+        "interpretations": [
+            "Highly Flexible/Bent"
+        ]
+    },
+    {
+        "name": "Cluster 13",
+        "sequence": "GACGCCGCCGCCGCCGTCGCGGCCGCC",
+        "structural_stats": {
+            "MGW": 4.5,
+            "Roll": 4.91,
+            "EP": -4.78,
+            "ProT": -11.44,
+            "HelT": 35.85
+        },
+        "interpretations": [
+            "Highly Flexible/Bent"
+        ]
+    },
+    {
+        "name": "Cluster 10",
+        "sequence": "ATTAAAATTAAAAAAATTAAAAAAATT",
+        "structural_stats": {
+            "MGW": 4.06,
+            "Roll": 0.0,
+            "EP": -7.22,
+            "ProT": -16.22,
+            "HelT": 33.11
+        },
+        "interpretations": [
+            "Stiff/Straight"
+        ]
+    }
+]

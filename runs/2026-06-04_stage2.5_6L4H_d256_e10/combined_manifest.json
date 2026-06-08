@@ -1,0 +1,8 @@
+{
+  "datasets": [
+    {
+      "name": "stage2_diverse",
+      "dna": "data/processed/stage2_dna.txt"
+    }
+  ]
+}

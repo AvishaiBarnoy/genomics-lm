@@ -1,0 +1,36 @@
+{
+    "run_id": "2026-06-05_stage2.5_6L4H_d256_e10",
+    "biological_recall_score": 0.4909,
+    "matches": [
+        {
+            "known_motif": "Shine-Dalgarno",
+            "consensus": "AGGAGG",
+            "best_match_discovered": "TGATGATGAGCTTGATGATTTTGATGA",
+            "score": 0.364
+        },
+        {
+            "known_motif": "Pribnow_Box",
+            "consensus": "TATAAT",
+            "best_match_discovered": "TGATGATATTTTTGATGATAATGATGA",
+            "score": 0.364
+        },
+        {
+            "known_motif": "TTGACA_Box",
+            "consensus": "TTGACA",
+            "best_match_discovered": "CGCCGCTTTGTTTGACGCTGACGCCGC",
+            "score": 0.364
+        },
+        {
+            "known_motif": "START_Codon",
+            "consensus": "ATG",
+            "best_match_discovered": "TGATGATGAGCTTGATGATTTTGATGA",
+            "score": 1.0
+        },
+        {
+            "known_motif": "Poly-U_Tract",
+            "consensus": "TTTTTT",
+            "best_match_discovered": "CGCCGCTTTGTTTGACGCTGACGCCGC",
+            "score": 0.364
+        }
+    ]
+}

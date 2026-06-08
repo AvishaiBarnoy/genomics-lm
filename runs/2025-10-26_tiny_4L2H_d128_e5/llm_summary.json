@@ -1,0 +1,535 @@
+{
+  "charts_available": [
+    "attn_L0_H0_0-256.png",
+    "attn_L0_H1_0-256.png",
+    "attn_L1_H0_0-256.png",
+    "attn_L1_H1_0-256.png",
+    "attn_L2_H0_0-256.png",
+    "attn_L2_H1_0-256.png",
+    "attn_L3_H0_0-256.png",
+    "attn_L3_H1_0-256.png",
+    "emb_pca.png",
+    "first_position_counts.png",
+    "one_cds__best_heatmap.png",
+    "one_cds__best_profile.png",
+    "top20_freq.png"
+  ],
+  "embedding_neighbors": [
+    {
+      "neighbors": [
+        {
+          "similarity": 0.1833,
+          "token": "GAC"
+        },
+        {
+          "similarity": 0.1657,
+          "token": "<eog>"
+        },
+        {
+          "similarity": 0.1595,
+          "token": "GTC"
+        },
+        {
+          "similarity": 0.1477,
+          "token": "ATA"
+        },
+        {
+          "similarity": 0.1436,
+          "token": "CAC"
+        }
+      ],
+      "token": "<pad>"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.253,
+          "token": "TCC"
+        },
+        {
+          "similarity": 0.1965,
+          "token": "AGA"
+        },
+        {
+          "similarity": 0.1514,
+          "token": "ACG"
+        },
+        {
+          "similarity": 0.1385,
+          "token": "CCT"
+        },
+        {
+          "similarity": 0.135,
+          "token": "CCA"
+        }
+      ],
+      "token": "<bos>"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.2143,
+          "token": "TAT"
+        },
+        {
+          "similarity": 0.1379,
+          "token": "CCT"
+        },
+        {
+          "similarity": 0.1356,
+          "token": "ATA"
+        },
+        {
+          "similarity": 0.123,
+          "token": "AGC"
+        },
+        {
+          "similarity": 0.111,
+          "token": "TCT"
+        }
+      ],
+      "token": "<eos>"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.1889,
+          "token": "GGG"
+        },
+        {
+          "similarity": 0.1717,
+          "token": "TCT"
+        },
+        {
+          "similarity": 0.1657,
+          "token": "<pad>"
+        },
+        {
+          "similarity": 0.16,
+          "token": "CCA"
+        },
+        {
+          "similarity": 0.1569,
+          "token": "GAA"
+        }
+      ],
+      "token": "<eog>"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.223,
+          "token": "TAA"
+        },
+        {
+          "similarity": 0.1904,
+          "token": "GGA"
+        },
+        {
+          "similarity": 0.171,
+          "token": "AAA"
+        },
+        {
+          "similarity": 0.157,
+          "token": "TCG"
+        },
+        {
+          "similarity": 0.1305,
+          "token": "GAT"
+        }
+      ],
+      "token": "<unk>"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.171,
+          "token": "<unk>"
+        },
+        {
+          "similarity": 0.1536,
+          "token": "GTG"
+        },
+        {
+          "similarity": 0.1362,
+          "token": "GTA"
+        },
+        {
+          "similarity": 0.1346,
+          "token": "TGT"
+        },
+        {
+          "similarity": 0.1336,
+          "token": "CCT"
+        }
+      ],
+      "token": "AAA"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.2089,
+          "token": "AGT"
+        },
+        {
+          "similarity": 0.1879,
+          "token": "GGC"
+        },
+        {
+          "similarity": 0.1821,
+          "token": "CCA"
+        },
+        {
+          "similarity": 0.158,
+          "token": "ACA"
+        },
+        {
+          "similarity": 0.1451,
+          "token": "TTC"
+        }
+      ],
+      "token": "AAC"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.1461,
+          "token": "GAG"
+        },
+        {
+          "similarity": 0.1436,
+          "token": "ATA"
+        },
+        {
+          "similarity": 0.1329,
+          "token": "TAA"
+        },
+        {
+          "similarity": 0.119,
+          "token": "CTT"
+        },
+        {
+          "similarity": 0.1167,
+          "token": "GAC"
+        }
+      ],
+      "token": "AAG"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.211,
+          "token": "CAT"
+        },
+        {
+          "similarity": 0.2063,
+          "token": "GTC"
+        },
+        {
+          "similarity": 0.1896,
+          "token": "TGG"
+        },
+        {
+          "similarity": 0.1496,
+          "token": "ATT"
+        },
+        {
+          "similarity": 0.1418,
+          "token": "ATC"
+        }
+      ],
+      "token": "AAT"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.2019,
+          "token": "TAC"
+        },
+        {
+          "similarity": 0.1699,
+          "token": "TGG"
+        },
+        {
+          "similarity": 0.158,
+          "token": "AAC"
+        },
+        {
+          "similarity": 0.1328,
+          "token": "TAG"
+        },
+        {
+          "similarity": 0.1223,
+          "token": "CTC"
+        }
+      ],
+      "token": "ACA"
+    }
+  ],
+  "embedding_quality": {
+    "pca explained variance (pc1, pc2)": [
+      0.0427,
+      0.0393
+    ],
+    "silhouette score": -0.008
+  },
+  "frequency_top_tokens": [
+    {
+      "count": 35286,
+      "frequency": 0.18088705708661418,
+      "token": "<pad>"
+    },
+    {
+      "count": 8453,
+      "frequency": 0.04333271817585302,
+      "token": "CTG"
+    },
+    {
+      "count": 6292,
+      "frequency": 0.03225475721784777,
+      "token": "GAA"
+    },
+    {
+      "count": 5431,
+      "frequency": 0.027841002296587928,
+      "token": "GCG"
+    },
+    {
+      "count": 5301,
+      "frequency": 0.027174581692913386,
+      "token": "AAA"
+    },
+    {
+      "count": 5185,
+      "frequency": 0.026579929461942257,
+      "token": "GAT"
+    },
+    {
+      "count": 4996,
+      "frequency": 0.025611056430446193,
+      "token": "ATT"
+    },
+    {
+      "count": 4759,
+      "frequency": 0.024396120406824148,
+      "token": "GGC"
+    },
+    {
+      "count": 4651,
+      "frequency": 0.023842478674540684,
+      "token": "CAG"
+    },
+    {
+      "count": 4480,
+      "frequency": 0.022965879265091863,
+      "token": "ATG"
+    }
+  ],
+  "meta": {
+    "checkpoint_path": "/Users/User/github/genomics-lm/outputs/checkpoints/2025-10-26_tiny_4L2H_d128_e5/best.pt",
+    "config_path": "/Users/User/github/genomics-lm/configs/tiny_mps.yaml",
+    "model_spec": {
+      "block_size": 256,
+      "dropout": 0.1,
+      "label_smoothing": 0.05,
+      "model_type": "tiny_gpt",
+      "n_embd": 128,
+      "n_head": 2,
+      "n_layer": 4,
+      "use_checkpoint": true,
+      "vocab_size": 69
+    },
+    "token_count": 69,
+    "val_ppl": 55.932176963187146
+  },
+  "next_token_tests": [
+    {
+      "predictions": [
+        {
+          "prob": 0.0585,
+          "token": "ATG"
+        },
+        {
+          "prob": 0.0494,
+          "token": "CTG"
+        },
+        {
+          "prob": 0.0481,
+          "token": "GAA"
+        },
+        {
+          "prob": 0.0386,
+          "token": "AAA"
+        },
+        {
+          "prob": 0.0385,
+          "token": "ATT"
+        }
+      ],
+      "prefix": "ATG"
+    },
+    {
+      "predictions": [
+        {
+          "prob": 0.0712,
+          "token": "AAA"
+        },
+        {
+          "prob": 0.0513,
+          "token": "GAA"
+        },
+        {
+          "prob": 0.0479,
+          "token": "CTG"
+        },
+        {
+          "prob": 0.0363,
+          "token": "ATT"
+        },
+        {
+          "prob": 0.0362,
+          "token": "GTG"
+        }
+      ],
+      "prefix": "ATG-AAA"
+    },
+    {
+      "predictions": [
+        {
+          "prob": 0.0958,
+          "token": "GAA"
+        },
+        {
+          "prob": 0.0575,
+          "token": "CTG"
+        },
+        {
+          "prob": 0.04,
+          "token": "ATT"
+        },
+        {
+          "prob": 0.0338,
+          "token": "GTG"
+        },
+        {
+          "prob": 0.0328,
+          "token": "AAA"
+        }
+      ],
+      "prefix": "ATG-GAA"
+    },
+    {
+      "predictions": [
+        {
+          "prob": 0.0506,
+          "token": "CTG"
+        },
+        {
+          "prob": 0.0408,
+          "token": "GAA"
+        },
+        {
+          "prob": 0.0384,
+          "token": "GCG"
+        },
+        {
+          "prob": 0.0363,
+          "token": "AAA"
+        },
+        {
+          "prob": 0.0323,
+          "token": "ATT"
+        }
+      ],
+      "prefix": "TAA"
+    }
+  ],
+  "probe_results": [
+    {
+      "mean_accuracy": 0.0806,
+      "std_accuracy": 0.0161,
+      "task": "AA identity"
+    },
+    {
+      "mean_accuracy": 0.2958,
+      "std_accuracy": 0.112,
+      "task": "polarity class"
+    },
+    {
+      "mean_accuracy": 0.4282,
+      "std_accuracy": 0.1028,
+      "task": "hydropathy class"
+    },
+    {
+      "mean_accuracy": 0.9531,
+      "std_accuracy": 0.001,
+      "task": "is_stop"
+    },
+    {
+      "mean_accuracy": 0.9531,
+      "std_accuracy": 0.001,
+      "task": "is_start"
+    }
+  ],
+  "run_id": "2025-10-26_tiny_4L2H_d128_e5",
+  "saliency_top_positions": [
+    {
+      "position": 242,
+      "saliency": -0.003499,
+      "token": "TCC"
+    },
+    {
+      "position": 30,
+      "saliency": -0.002919,
+      "token": "CAG"
+    },
+    {
+      "position": 16,
+      "saliency": -0.002522,
+      "token": "ACC"
+    },
+    {
+      "position": 158,
+      "saliency": -0.002467,
+      "token": "GCA"
+    },
+    {
+      "position": 217,
+      "saliency": -0.002109,
+      "token": "ATT"
+    },
+    {
+      "position": 164,
+      "saliency": -0.001937,
+      "token": "GTG"
+    },
+    {
+      "position": 201,
+      "saliency": -0.001861,
+      "token": "ATC"
+    },
+    {
+      "position": 148,
+      "saliency": -0.001827,
+      "token": "ATC"
+    },
+    {
+      "position": 3,
+      "saliency": 0.001495,
+      "token": "ATT"
+    },
+    {
+      "position": 0,
+      "saliency": 0.001001,
+      "token": "CTG"
+    }
+  ],
+  "tables_used": [
+    "tables/frequencies.csv",
+    "tables/nearest_neighbors.csv",
+    "tables/embed_quality.txt",
+    "tables/saliency.csv",
+    "tables/next_token_tests.csv",
+    "tables/probe_results.csv"
+  ]
+}

@@ -1,0 +1,445 @@
+{
+  "charts_available": [
+    "attn_L0_H0_0-256.png",
+    "attn_L0_H1_0-256.png",
+    "attn_L1_H0_0-256.png",
+    "attn_L1_H1_0-256.png",
+    "attn_L2_H0_0-256.png",
+    "attn_L2_H1_0-256.png",
+    "attn_L3_H0_0-256.png",
+    "attn_L3_H1_0-256.png",
+    "emb_pca.png",
+    "first_position_counts.png",
+    "one_cds__best_heatmap.png",
+    "one_cds__best_profile.png",
+    "top20_freq.png"
+  ],
+  "embedding_neighbors": [
+    {
+      "neighbors": [
+        {
+          "similarity": 0.1829,
+          "token": "tok_38"
+        },
+        {
+          "similarity": 0.1662,
+          "token": "tok_3"
+        },
+        {
+          "similarity": 0.1612,
+          "token": "tok_50"
+        },
+        {
+          "similarity": 0.1472,
+          "token": "tok_17"
+        },
+        {
+          "similarity": 0.1457,
+          "token": "tok_22"
+        }
+      ],
+      "token": "tok_0"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.253,
+          "token": "tok_58"
+        },
+        {
+          "similarity": 0.1963,
+          "token": "tok_13"
+        },
+        {
+          "similarity": 0.1515,
+          "token": "tok_11"
+        },
+        {
+          "similarity": 0.1388,
+          "token": "tok_28"
+        },
+        {
+          "similarity": 0.1349,
+          "token": "tok_25"
+        }
+      ],
+      "token": "tok_1"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.215,
+          "token": "tok_56"
+        },
+        {
+          "similarity": 0.1385,
+          "token": "tok_28"
+        },
+        {
+          "similarity": 0.1352,
+          "token": "tok_17"
+        },
+        {
+          "similarity": 0.1233,
+          "token": "tok_14"
+        },
+        {
+          "similarity": 0.112,
+          "token": "tok_60"
+        }
+      ],
+      "token": "tok_2"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.1889,
+          "token": "tok_47"
+        },
+        {
+          "similarity": 0.1716,
+          "token": "tok_60"
+        },
+        {
+          "similarity": 0.1662,
+          "token": "tok_0"
+        },
+        {
+          "similarity": 0.16,
+          "token": "tok_25"
+        },
+        {
+          "similarity": 0.1565,
+          "token": "tok_37"
+        }
+      ],
+      "token": "tok_3"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.2231,
+          "token": "tok_53"
+        },
+        {
+          "similarity": 0.1908,
+          "token": "tok_45"
+        },
+        {
+          "similarity": 0.1721,
+          "token": "tok_5"
+        },
+        {
+          "similarity": 0.1568,
+          "token": "tok_59"
+        },
+        {
+          "similarity": 0.1306,
+          "token": "tok_40"
+        }
+      ],
+      "token": "tok_4"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.1721,
+          "token": "tok_4"
+        },
+        {
+          "similarity": 0.1532,
+          "token": "tok_51"
+        },
+        {
+          "similarity": 0.1366,
+          "token": "tok_49"
+        },
+        {
+          "similarity": 0.1348,
+          "token": "tok_64"
+        },
+        {
+          "similarity": 0.1332,
+          "token": "tok_28"
+        }
+      ],
+      "token": "tok_5"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.2087,
+          "token": "tok_16"
+        },
+        {
+          "similarity": 0.188,
+          "token": "tok_46"
+        },
+        {
+          "similarity": 0.1822,
+          "token": "tok_25"
+        },
+        {
+          "similarity": 0.158,
+          "token": "tok_9"
+        },
+        {
+          "similarity": 0.145,
+          "token": "tok_66"
+        }
+      ],
+      "token": "tok_6"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.1459,
+          "token": "tok_39"
+        },
+        {
+          "similarity": 0.1436,
+          "token": "tok_17"
+        },
+        {
+          "similarity": 0.1328,
+          "token": "tok_53"
+        },
+        {
+          "similarity": 0.1189,
+          "token": "tok_36"
+        },
+        {
+          "similarity": 0.1168,
+          "token": "tok_38"
+        }
+      ],
+      "token": "tok_7"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.2109,
+          "token": "tok_24"
+        },
+        {
+          "similarity": 0.2063,
+          "token": "tok_50"
+        },
+        {
+          "similarity": 0.1893,
+          "token": "tok_63"
+        },
+        {
+          "similarity": 0.1494,
+          "token": "tok_20"
+        },
+        {
+          "similarity": 0.1421,
+          "token": "tok_18"
+        }
+      ],
+      "token": "tok_8"
+    },
+    {
+      "neighbors": [
+        {
+          "similarity": 0.2013,
+          "token": "tok_54"
+        },
+        {
+          "similarity": 0.1699,
+          "token": "tok_63"
+        },
+        {
+          "similarity": 0.158,
+          "token": "tok_6"
+        },
+        {
+          "similarity": 0.133,
+          "token": "tok_55"
+        },
+        {
+          "similarity": 0.1227,
+          "token": "tok_34"
+        }
+      ],
+      "token": "tok_9"
+    }
+  ],
+  "embedding_quality": {
+    "pca explained variance (pc1, pc2)": [
+      0.0426,
+      0.0393
+    ],
+    "silhouette score": -0.0001
+  },
+  "frequency_top_tokens": [
+    {
+      "count": 60776,
+      "frequency": 0.04870870947886746,
+      "token": "tok_4"
+    },
+    {
+      "count": 60447,
+      "frequency": 0.048445033596635205,
+      "token": "tok_36"
+    },
+    {
+      "count": 45618,
+      "frequency": 0.03656038418137054,
+      "token": "tok_19"
+    },
+    {
+      "count": 40644,
+      "frequency": 0.03257398953631514,
+      "token": "tok_39"
+    },
+    {
+      "count": 37769,
+      "frequency": 0.030269830990972506,
+      "token": "tok_67"
+    },
+    {
+      "count": 33226,
+      "frequency": 0.026628859766105867,
+      "token": "tok_18"
+    },
+    {
+      "count": 33168,
+      "frequency": 0.026582375871973738,
+      "token": "tok_17"
+    },
+    {
+      "count": 28779,
+      "frequency": 0.02306482740049241,
+      "token": "tok_45"
+    },
+    {
+      "count": 28566,
+      "frequency": 0.022894119306524414,
+      "token": "tok_34"
+    },
+    {
+      "count": 28480,
+      "frequency": 0.022825194911776776,
+      "token": "tok_35"
+    }
+  ],
+  "meta": {
+    "checkpoint_path": "/Users/User/github/genomics-lm/outputs/checkpoints/2026-06-03_stage2_4L2H_d128_e10/best.pt",
+    "config_path": "/Users/User/github/genomics-lm/configs/stage2_diverse.yaml",
+    "model_spec": {
+      "block_size": 256,
+      "dropout": 0.1,
+      "label_smoothing": 0.05,
+      "model_type": "tiny_gpt",
+      "n_embd": 128,
+      "n_head": 2,
+      "n_layer": 4,
+      "use_checkpoint": true,
+      "vocab_size": 69
+    },
+    "token_count": 69,
+    "val_ppl": 83.70398862568798
+  },
+  "next_token_tests": [
+    {
+      "predictions": [
+        {
+          "prob": null,
+          "token": "NA"
+        }
+      ],
+      "prefix": "ATG"
+    },
+    {
+      "predictions": [
+        {
+          "prob": null,
+          "token": "NA"
+        }
+      ],
+      "prefix": "ATG-AAA"
+    },
+    {
+      "predictions": [
+        {
+          "prob": null,
+          "token": "NA"
+        }
+      ],
+      "prefix": "ATG-GAA"
+    },
+    {
+      "predictions": [
+        {
+          "prob": null,
+          "token": "NA"
+        }
+      ],
+      "prefix": "TAA"
+    }
+  ],
+  "probe_results": [],
+  "run_id": "2026-06-03_stage2_4L2H_d128_e10",
+  "saliency_top_positions": [
+    {
+      "position": 239,
+      "saliency": -0.002278,
+      "token": "tok_36"
+    },
+    {
+      "position": 172,
+      "saliency": -0.002259,
+      "token": "tok_36"
+    },
+    {
+      "position": 50,
+      "saliency": -0.002228,
+      "token": "tok_36"
+    },
+    {
+      "position": 133,
+      "saliency": -0.002045,
+      "token": "tok_4"
+    },
+    {
+      "position": 135,
+      "saliency": -0.001557,
+      "token": "tok_41"
+    },
+    {
+      "position": 40,
+      "saliency": -0.001367,
+      "token": "tok_51"
+    },
+    {
+      "position": 125,
+      "saliency": 0.000563,
+      "token": "tok_39"
+    },
+    {
+      "position": 219,
+      "saliency": 0.000529,
+      "token": "tok_58"
+    },
+    {
+      "position": 246,
+      "saliency": 0.000518,
+      "token": "tok_17"
+    },
+    {
+      "position": 193,
+      "saliency": 0.000506,
+      "token": "tok_17"
+    }
+  ],
+  "tables_used": [
+    "tables/frequencies.csv",
+    "tables/nearest_neighbors.csv",
+    "tables/embed_quality.txt",
+    "tables/saliency.csv",
+    "tables/next_token_tests.csv",
+    "tables/probe_results.csv"
+  ]
+}

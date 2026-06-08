@@ -94,10 +94,36 @@ def main():
                 rows.append({
                     "Run ID": run_id,
                     "Val Loss": m.get("val_loss", m.get("best_val_loss", "N/A")),
-                    "Perplexity": m.get("last_perplexity", "N/A")
+                    "Perplexity": m.get("last_perplexity", m.get("val_ppl", "N/A")),
+                    "Bio Recall": m.get("bio_recall", "N/A")
                 })
             df_metrics = pd.DataFrame(rows)
             st.table(df_metrics)
+
+            st.divider()
+            
+            # New Stage 2 Section
+            st.header("🧬 Stage 2: Biological Deep Dive")
+            
+            col_bio1, col_bio2 = st.columns(2)
+            with col_bio1:
+                st.subheader("📊 Biological Recall Score")
+                st.info("Measures how many 'Known Motifs' (Start codons, Promoters) the AI discovered on its own.")
+                # Bar chart of Bio Recall
+                if not df_metrics.empty and "Bio Recall" in df_metrics.columns:
+                    # Clean N/A for plotting
+                    plot_df = df_metrics[df_metrics["Bio Recall"] != "N/A"].copy()
+                    if not plot_df.empty:
+                        plot_df["Bio Recall"] = plot_df["Bio Recall"].astype(float)
+                        st.bar_chart(plot_df, x="Run ID", y="Bio Recall")
+            
+            with col_bio2:
+                st.subheader("🗣️ Genomic Dialects")
+                dialect_img = "outputs/analysis/stage2_diversity/dialect_comparison.png"
+                if os.path.exists(dialect_img):
+                    st.image(dialect_img, caption="Codon usage differences across Gram-positive, High-GC, and Entero groups.")
+                else:
+                    st.info("Run scripts/analyze_dialects.py to generate this view.")
 
             st.divider()
             col1, col2 = st.columns(2)
@@ -133,6 +159,8 @@ def main():
 
             st.divider()
             st.header("🔦 Step 5: Saliency Scores")
+            st.info("**What is this?** This is a 'Highlight Map'. It shows which specific positions in a gene the AI is most sensitive to. "
+                    "Peaks represent 'Hotspots' where even a small change in DNA would drastically change the model's prediction.")
             saliency_results = visualizer.load_saliency_data()
             if saliency_results:
                 df_saliency = prepare_saliency_dataframe(saliency_results)
@@ -164,13 +192,48 @@ def main():
                         st.json(details["meta"])
                     else:
                         st.info("No metadata found.")
-                
+                    
+                    st.divider()
+                    st.subheader("🛠️ Operations")
+                    if st.button(f"🚀 Run Full Analysis for {selected_detail_run}"):
+                        with st.spinner("Executing analysis pipeline... this may take a few minutes."):
+                            import subprocess
+                            # Use analysis.sh
+                            cmd = f"PYTHONPATH=. ./analysis.sh {selected_detail_run} configs/tiny_mps.yaml"
+                            res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                            if res.returncode == 0:
+                                st.success("Analysis complete! Refresh to see results.")
+                            else:
+                                st.error(f"Analysis failed: {res.stderr}")
+
                 with col_l:
                     st.subheader("📄 Training Log")
                     if details["log"]:
-                        st.text_area("Full Log Output", details["log"], height=400)
+                        st.text_area("Full Log Output", details["log"], height=300)
                     else:
                         st.info("No log file found.")
+                    
+                    st.subheader("📝 Biological Summary")
+                    summary_path = os.path.join("runs", selected_detail_run, "PLAIN_ENGLISH_SUMMARY.md")
+                    if os.path.exists(summary_path):
+                        with open(summary_path, "r") as f:
+                            st.markdown(f.read())
+                    else:
+                        st.info("No Plain English summary generated yet.")
+                    
+                    st.subheader("🧬 Structural Motif Audit")
+                    audit_path = os.path.join("runs", selected_detail_run, "motif_mining", "structural_motif_audit.json")
+                    if os.path.exists(audit_path):
+                        import json
+                        with open(audit_path, "r") as f:
+                            audit_data = json.load(f)
+                            for m in audit_data:
+                                if "structural_stats" in m:
+                                    st.markdown(f"**{m['name']}** ({m.get('sequence', '')})")
+                                    st.write(f"Interpretations: {', '.join(m['interpretations'])}")
+                                    st.json(m["structural_stats"])
+                    else:
+                        st.info("No structural audit found.")
                         
             except Exception as e:
                 st.error(f"Error loading run details: {e}")

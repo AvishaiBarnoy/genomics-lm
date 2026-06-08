@@ -4,6 +4,11 @@ This document tracks notable changes to the project. We follow a simple date‑b
 
 ## Unreleased
 
+- **Stage 2.5: Genomic Tapes & Anchored Operons**: `src/codonlm/extract_genomic_tape.py` and `extract_anchored_operons.py` enable training on contiguous chromosomal data and targeted gene-boundary transitions.
+- **Structural DNA Probing**: `scripts/probe_structural_awareness.py` validates model physics by mapping hidden states to Roll, EP, and MGW using DNAshape heuristics.
+- **Stage 3 Preparations**: `scripts/fetch_uniprot_metadata.py` and `scripts/build_multitask_dataset.py` introduced to create unified Pfam/Stability datasets for the Protein-Critic.
+- **Hardware Optimization**: Re-enabled SDPA (Flash-like attention) in `model_tiny_gpt.py` providing a 3x speedup on Apple Silicon, alongside gradient accumulation fixes to respect 8GB RAM ceilings.
+- **Dashboard Automation**: `scripts/web_dashboard.py` upgraded with retroactive Analysis execution, Structural Audit views, and Plain English biological summaries.
 - Analysis unification: `analysis.sh` now runs end‑to‑end analysis, including perplexity/KPIs, sequence quality, SS/disorder heuristics, calibration, and optional prefix plots.
 - Reference tables: `scripts/build_reference_tables.py` builds per‑organism `codon_usage.tsv` and `cai_weights.tsv` to avoid duplicates (outputs under `data/reference/<name>/`).
 - Sequence quality verifier: `scripts/seq_quality.py` computes ORF integrity, length/GC%, codon usage KL/JS vs reference, CAI (if provided), 3‑nt FFT periodicity, diversity/novelty (k‑mer Jaccard + MinHash). Merges KPIs into `metrics.json`.

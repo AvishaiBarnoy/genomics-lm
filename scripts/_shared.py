@@ -164,12 +164,12 @@ def build_model(spec: ModelSpec) -> torch.nn.Module:
     return model
 
 
-def load_model(run_dir: Path, device: torch.device | str = "cpu") -> Tuple[torch.nn.Module, ModelSpec]:
+def load_model(run_dir: Path, device: torch.device | str = "cpu", ckpt_name: str = "weights.pt") -> Tuple[torch.nn.Module, ModelSpec]:
     meta = read_meta(run_dir)
     spec = ModelSpec.from_dict(meta["model_spec"])
-    weights_path = run_dir / "weights.pt"
+    weights_path = run_dir / ckpt_name
     if not weights_path.exists():
-        raise ArtifactError(f"weights.pt missing under {run_dir}")
+        raise ArtifactError(f"{ckpt_name} missing under {run_dir}")
     ckpt = torch.load(weights_path, map_location=device)
     state_dict = ckpt["model"] if isinstance(ckpt, Mapping) and "model" in ckpt else ckpt
     model = build_model(spec)

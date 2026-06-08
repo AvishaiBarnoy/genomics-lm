@@ -1,0 +1,7 @@
+pos,wt,best_delta,n_better,n_better_syn,n_better_nonsyn
+1,ATG,0.8533,12,0,12
+2,AAA,2.264,42,1,41
+3,ACC,0.8032,11,0,11
+4,CGT,1.8077,31,2,29
+5,AGT,2.9689,59,4,55
+6,GGT,1.5848,25,2,23

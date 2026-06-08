@@ -1,0 +1,36 @@
+{
+    "run_id": "2025-10-26_tiny_4L2H_d128_e5",
+    "biological_recall_score": 0.4788,
+    "matches": [
+        {
+            "known_motif": "Shine-Dalgarno",
+            "consensus": "AGGAGG",
+            "best_match_discovered": "CTGGATCGCCAGGATCTGCAGATGATG",
+            "score": 0.364
+        },
+        {
+            "known_motif": "Pribnow_Box",
+            "consensus": "TATAAT",
+            "best_match_discovered": "CTGGATCGCCAGGATCTGCAGATGATG",
+            "score": 0.364
+        },
+        {
+            "known_motif": "TTGACA_Box",
+            "consensus": "TTGACA",
+            "best_match_discovered": "GATCTGCTGCTGCTGGATCTGCTGACC",
+            "score": 0.303
+        },
+        {
+            "known_motif": "START_Codon",
+            "consensus": "ATG",
+            "best_match_discovered": "CTGGCGCTGCGCATGCTGGCGGCGCTG",
+            "score": 1.0
+        },
+        {
+            "known_motif": "Poly-U_Tract",
+            "consensus": "TTTTTT",
+            "best_match_discovered": "CTGCTGCTGCTGCTGCTGCTGCTGCTG",
+            "score": 0.364
+        }
+    ]
+}

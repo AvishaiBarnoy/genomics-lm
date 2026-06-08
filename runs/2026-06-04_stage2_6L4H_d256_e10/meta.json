@@ -1,0 +1,20 @@
+{
+  "checkpoint_path": "/Users/User/github/genomics-lm/outputs/checkpoints/2026-06-04_stage2_6L4H_d256_e10/best.pt",
+  "config_path": "/Users/User/github/genomics-lm/configs/stage2_long_context.yaml",
+  "model_spec": {
+    "block_size": 512,
+    "dropout": 0.1,
+    "label_smoothing": 0.05,
+    "model_type": "tiny_gpt",
+    "n_embd": 256,
+    "n_head": 4,
+    "n_layer": 6,
+    "use_checkpoint": true,
+    "vocab_size": 69
+  },
+  "out_dir": "/Users/User/github/genomics-lm/outputs/checkpoints",
+  "run_id": "2026-06-04_stage2_6L4H_d256_e10",
+  "token_count": 68,
+  "val_npz": "/Users/User/github/genomics-lm/data/processed/stage2_diverse/val_bs512.npz",
+  "val_ppl": 108.64571582919204
+}

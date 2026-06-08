@@ -132,6 +132,7 @@ def main() -> None:
     # Normalization option for GQS
     ap.add_argument("--gqs_normalize", choices=["none","len"], default="none",
                     help="Normalize GQS by reference length (truth length if available, else gen length)")
+    ap.add_argument("--ckpt", default="best.pt", help="Which checkpoint to use (e.g., best.pt or last.pt)")
     args = ap.parse_args()
 
     repo = Path(__file__).resolve().parents[1]
@@ -141,8 +142,22 @@ def main() -> None:
 
     # Load tokens + checkpoint
     itos, stoi = Q._load_vocab(run_dir)
-    state_dict, cfg = Q._load_checkpoint(run_dir)
-    model = Q.build_model_from_state(state_dict, cfg)
+    
+    # Custom loading for specific checkpoint
+    meta = json.loads((run_dir / "meta.json").read_text())
+    spec = meta["model_spec"]
+    
+    # Try looking in runs/ first, then fallback to outputs/checkpoints/
+    weights_path = run_dir / args.ckpt
+    if not weights_path.exists():
+        weights_path = repo / "outputs" / "checkpoints" / args.run_id / args.ckpt
+        if not weights_path.exists():
+            raise FileNotFoundError(f"Checkpoint not found in runs/ or outputs/checkpoints/: {args.ckpt}")
+    
+    ckpt = torch.load(weights_path, map_location=Q.dev())
+    state_dict = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
+    model = Q.build_model_from_state(state_dict, spec)
+    cfg = meta.get("cfg", ckpt.get("cfg", {})) if isinstance(ckpt, dict) else meta.get("cfg", {})
     device = Q.dev()
     model.to(device).eval()
     # Validate AA length constraints

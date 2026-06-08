@@ -127,6 +127,17 @@ Notes: Propensity analysis is heuristic/correlation‑level. For stronger labels
   - python -m scripts.calibration_metrics --ckpt outputs/checkpoints/<RUN_ID>/best.pt --npz data/processed/combined/<RUN_ID>/val_bs512.npz --out outputs/scores/<RUN_ID>/metrics.json
   - Reports ECE and Brier score (PAD tokens ignored).
 
+### Stage 2: Diversified Scaling & Transfer Learning
+
+- **Transfer Learning**: fine-tune a model from pre-trained weights without carrying over optimizer state.
+  - `python -m src.codonlm.train_codon_lm --config configs/stage2_diverse.yaml --transfer_from runs/<RUN_ID>/weights.pt`
+- **Biological Motif Benchmark**: grade discovered patterns against real-world biological signals.
+  - `python scripts/benchmark_motifs.py <RUN_ID>`
+  - Result: `runs/<RUN_ID>/motif_mining/biological_benchmark.json` (Includes 'Biological Recall Score').
+- **Plain English Summaries**: generate a human-readable interpretation of model results for non-experts.
+  - `python scripts/generate_plain_english_report.py <RUN_ID>`
+  - Result: `runs/<RUN_ID>/PLAIN_ENGLISH_SUMMARY.md`
+
 ## Protein Language Model (`protein_lm`)
 
 ### Overview

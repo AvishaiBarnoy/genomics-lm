@@ -42,6 +42,7 @@ python -m scripts.probe_linear          "${RUN_ID}"
 
 # Optional: summarize single-CDS TSV and export a compact LLM-ready JSON
 python -m scripts.summarize_one_cds     "${RUN_ID}" || true
+python -m scripts.analyze_mutation_maps --run_id "${RUN_ID}" || true
 python -m scripts.export_run_summary    "${RUN_ID}" || true
 
 # Additional evaluation and quality checks
