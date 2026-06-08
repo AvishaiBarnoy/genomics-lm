@@ -1,0 +1,32 @@
+{
+    "Shine-Dalgarno": {
+        "sequence": "AGGAGG",
+        "type": "ribosome_binding_site",
+        "description": "Recruits the ribosome to the mRNA for translation initiation.",
+        "location": "5-10 bp upstream of START"
+    },
+    "Pribnow_Box": {
+        "sequence": "TATAAT",
+        "type": "promoter_10",
+        "description": "Core promoter element (-10 box) that facilitates DNA melting.",
+        "location": "~10 bp upstream of Transcription Start"
+    },
+    "TTGACA_Box": {
+        "sequence": "TTGACA",
+        "type": "promoter_35",
+        "description": "Promoter element (-35 box) for initial RNA polymerase binding.",
+        "location": "~35 bp upstream of Transcription Start"
+    },
+    "START_Codon": {
+        "sequence": "ATG",
+        "type": "initiation",
+        "description": "The most common translation start signal.",
+        "location": "Start of CDS"
+    },
+    "Poly-U_Tract": {
+        "sequence": "TTTTTT",
+        "type": "terminator",
+        "description": "U-rich region involved in Rho-independent transcription termination.",
+        "location": "Downstream of STOP"
+    }
+}
