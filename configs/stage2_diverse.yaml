@@ -1,0 +1,37 @@
+# Stage 2: Diversified Bacterial Codon LM
+# Fine-tuning from Enterobacteriaceae pre-trained weights
+
+# Model Architecture (must match pre-trained weights)
+vocab_size: 69
+block_size: 256
+n_layer: 4
+n_head: 2
+n_embd: 128
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+
+# Transfer Learning
+transfer_from: "runs/2025-10-26_tiny_4L2H_d128_e5/weights.pt"
+
+# Data
+itos_path: "data/processed/itos_codon.txt"
+train_npz: "data/processed/stage2_diverse/train_bs256.npz"
+val_npz: "data/processed/stage2_diverse/val_bs256.npz"
+test_npz: "data/processed/stage2_diverse/test_bs256.npz"
+
+# Training
+batch_size: 16  # Keep small for 8GB RAM
+grad_accum_steps: 16
+epochs: 10
+lr: 0.0001        # Explicit float for fine-tuning
+min_lr: 0.00001
+weight_decay: 0.05
+warmup_steps: 100
+scheduler: "cosine"
+amp: true
+seed: 1337
+
+# Output
+out_dir: "outputs/checkpoints"
+scores_dir: "outputs/scores"

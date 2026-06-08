@@ -1,0 +1,39 @@
+# Stage 2.7: M2-MAX Genomic Architect (Contingency)
+# The absolute ceiling for 8GB RAM using Grouped-Query Attention (GQA)
+# To be deployed ONLY if Stage 2.5 Master fails the Termination Benchmark.
+
+# Model Architecture (Scale-up)
+vocab_size: 69
+block_size: 512
+n_layer: 10       # Increased from 6
+n_head: 8         # Increased from 4
+n_kv_head: 2      # GQA: 8 query heads, 2 KV heads (Saves massive RAM)
+n_embd: 384       # Increased from 256
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+use_sdpa: true
+
+# Transfer Learning (Fine-tuning from current Master results)
+transfer_from: "outputs/checkpoints/2026-06-05_stage2.5_6L4H_d256_e10/best.pt"
+
+# Data (Mixed Master Set)
+itos_path: "data/processed/itos_codon.txt"
+train_npz: "data/processed/stage2.5_master_pack/train_bs512.npz"
+val_npz: "data/processed/stage2.5_master_pack/val_bs512.npz"
+test_npz: "data/processed/stage2.5_master_pack/test_bs512.npz"
+
+# Training (High Precision / High Cost)
+batch_size: 2     # Mandatory small batch for 10-layers/8GB
+grad_accum_steps: 128
+epochs: 10
+lr: 0.00003
+min_lr: 0.000005
+weight_decay: 0.05
+warmup_steps: 200
+early_stop_patience: 5
+
+# Performance Profile
+# Memory: ~7.5GB peak (Wired)
+# Speed: ~3 hours per epoch
+# Goal: Break the 20% natural termination barrier.

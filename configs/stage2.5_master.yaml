@@ -1,0 +1,36 @@
+# Stage 2.5: Master Genomic Architect Codon LM
+# Optimized for M2/8GB RAM (Turbo Attention enabled)
+
+# Model Architecture
+vocab_size: 69
+block_size: 512
+n_layer: 6
+n_head: 4
+n_embd: 256
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+use_sdpa: true  # Re-enabled (isolated run should be stable)
+
+# Transfer Learning
+transfer_from: "outputs/checkpoints/2026-06-04_stage2_6L4H_d256_e10/best.pt"
+
+# Data
+itos_path: "data/processed/itos_codon.txt"
+train_npz: "data/processed/stage2.5_master_pack/train_bs512.npz"
+val_npz: "data/processed/stage2.5_master_pack/val_bs512.npz"
+test_npz: "data/processed/stage2.5_master_pack/test_bs512.npz"
+
+# Training
+batch_size: 4
+grad_accum_steps: 64
+epochs: 10
+lr: 0.00003
+min_lr: 0.000005
+weight_decay: 0.05
+warmup_steps: 100
+early_stop_patience: 5
+
+# Output
+out_dir: "outputs/checkpoints"
+scores_dir: "outputs/scores"

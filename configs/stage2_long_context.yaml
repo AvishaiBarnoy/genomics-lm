@@ -1,0 +1,35 @@
+# Stage 2: Long-Context Diversified Bacterial Codon LM
+# 512 Codons to capture entire genes and improve termination logic
+
+# Model Architecture
+vocab_size: 69
+block_size: 512  # Doubled from 256
+n_layer: 6
+n_head: 4
+n_embd: 256
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+
+# Data
+itos_path: "data/processed/itos_codon.txt"
+train_npz: "data/processed/stage2_diverse/train_bs512.npz"
+val_npz: "data/processed/stage2_diverse/val_bs512.npz"
+test_npz: "data/processed/stage2_diverse/test_bs512.npz"
+
+# Training
+batch_size: 4
+grad_accum_steps: 64
+epochs: 20       # Increased to allow for extended convergence
+lr: 0.00003      # Lowered for fine-tuning/polishing
+min_lr: 0.000005
+weight_decay: 0.05
+warmup_steps: 100
+early_stop_patience: 10 # Extended patience for noisy late-stage learning
+scheduler: "cosine"
+amp: true
+seed: 1337
+
+# Output
+out_dir: "outputs/checkpoints"
+scores_dir: "outputs/scores"

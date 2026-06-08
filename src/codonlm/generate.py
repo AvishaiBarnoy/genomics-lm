@@ -102,5 +102,92 @@ def generate_cds_constrained(
     return ids, info
 
 
-__all__ = ["generate_cds_constrained", "STOP_CODONS"]
+@torch.no_grad()
+def generate_cds_red(
+    model,
+    device: torch.device,
+    ctx_ids: List[int],
+    stoi: Dict[str, int],
+    itos: List[str],
+    target_codons: int,
+    hard_cap: int,
+    max_attempts: int = 5,
+    temperature: float = 1.0,
+    topk: int = 0,
+) -> Tuple[List[int], Dict[str, object]]:
+    """Simple ReD wrapper for a single prefix: retry until success or max_attempts."""
+    total_tokens = 0
+    last_ids = []
+    last_info = {}
+    for i in range(max_attempts):
+        ids, info = generate_cds_constrained(
+            model, device, ctx_ids, stoi, itos, target_codons, hard_cap,
+            require_terminal_stop=True, temperature=temperature, topk=topk
+        )
+        total_tokens += info["generated_codons"]
+        last_ids, last_info = ids, info
+        if info["had_terminal_stop"]:
+            last_info["attempts"] = i + 1
+            last_info["total_tokens_red"] = total_tokens
+            return ids, last_info
+    
+    last_info["attempts"] = max_attempts
+    last_info["total_tokens_red"] = total_tokens
+    return last_ids, last_info
+
+
+@torch.no_grad()
+def batch_red_sampler(
+    model,
+    device: torch.device,
+    contexts: List[List[int]],
+    stoi: Dict[str, int],
+    itos: List[str],
+    target_codons: int,
+    hard_cap: int,
+    global_token_budget: int,
+    temperature: float = 1.0,
+    topk: int = 0,
+) -> Tuple[Dict[int, Tuple[List[int], Dict]], List[int], int]:
+    """Perform Reset-and-Discard across multiple prefixes.
+    
+    Returns:
+        solved: Dict mapping original index to (ids, info)
+        remaining: List of original indices that never reached a terminal stop
+        total_tokens: Total tokens spent during the process
+    """
+    # active_tasks: list of (ids, original_index)
+    active_tasks = [(list(ctx), i) for i, ctx in enumerate(contexts)]
+    solved = {}
+    total_tokens = 0
+    
+    round_idx = 0
+    while active_tasks and total_tokens < global_token_budget:
+        round_idx += 1
+        next_active = []
+        for ctx, idx in active_tasks:
+            if total_tokens >= global_token_budget:
+                next_active.append((ctx, idx))
+                continue
+            
+            # One attempt (τ=1 is optimal per paper)
+            gen_ids, info = generate_cds_constrained(
+                model, device, ctx, stoi, itos, target_codons, hard_cap,
+                require_terminal_stop=True, temperature=temperature, topk=topk
+            )
+            spent = info["generated_codons"]
+            total_tokens += spent
+            
+            if info["had_terminal_stop"]:
+                info["round"] = round_idx
+                solved[idx] = (gen_ids, info)
+            else:
+                next_active.append((ctx, idx))
+        active_tasks = next_active
+        
+    remaining = [idx for _, idx in active_tasks]
+    return solved, remaining, total_tokens
+
+
+__all__ = ["generate_cds_constrained", "generate_cds_red", "batch_red_sampler", "STOP_CODONS"]
 

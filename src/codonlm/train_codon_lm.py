@@ -17,7 +17,7 @@ Config highlights:
   log_csv: where to append training curves (relative to scores_dir by default)
 """
 
-import argparse, yaml, math, csv, time, torch, numpy as np, json, os, logging
+import argparse, yaml, math, csv, time, torch, numpy as np, json, os, logging, shutil
 from pathlib import Path
 from typing import Optional, Tuple
 from torch.utils.data import DataLoader, Dataset
@@ -125,6 +125,7 @@ def main():
     ap.add_argument("--config", required=True)
     ap.add_argument("--run_id", default=None, help=f"Unique run id; falls back to ${RUN_ID_ENV} or config.run_id")
     ap.add_argument("--resume", default=None, help="Path to checkpoint to resume training from")
+    ap.add_argument("--transfer_from", default=None, help="Path to pre-trained weights to initialize model from (ignores optimizer/step state)")
     ap.add_argument("--train_npz", action="append", default=None, help="Training NPZ file (repeatable)")
     ap.add_argument("--val_npz", action="append", default=None, help="Validation NPZ file (repeatable)")
     ap.add_argument("--test_npz", action="append", default=None, help="Test NPZ file (repeatable)")
@@ -154,6 +155,10 @@ def main():
 
     if resume_path and not os.path.isfile(resume_path):
         raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
+    
+    transfer_path = args.transfer_from or cfg.pop("transfer_from", None)
+    if transfer_path and not os.path.isfile(transfer_path):
+        raise FileNotFoundError(f"Transfer weights not found: {transfer_path}")
 
     matmul_precision = cfg.get("matmul_precision")
     if matmul_precision:
@@ -332,6 +337,10 @@ def main():
     outdir = cfg["out_dir"]
     scores_base = cfg.get("scores_dir", "outputs/scores")
     ckpt_dir, scores_dir = _prepare_output_dirs(outdir, scores_base, run_id)
+    
+    # Save a copy of the config for reproducibility
+    shutil.copy2(args.config, ckpt_dir / "config.yaml")
+    
     log_csv_cfg = cfg.get("log_csv")
     if log_csv_cfg:
         log_csv_path = Path(log_csv_cfg)
@@ -346,6 +355,14 @@ def main():
     best = float("inf"); no_improve = 0
     step = 0
     best_epoch = None
+
+    if transfer_path:
+        print(f"[transfer] initializing model from {transfer_path}")
+        ckpt_transfer = torch.load(transfer_path, map_location=device)
+        sd = ckpt_transfer["model"] if isinstance(ckpt_transfer, dict) and "model" in ckpt_transfer else ckpt_transfer
+        missing, unexpected = model.load_state_dict(sd, strict=False)
+        if missing: print(f"[transfer] missing: {missing}")
+        if unexpected: print(f"[transfer] unexpected: {unexpected}")
 
     if resume_path:
         print(f"[resume] loading {resume_path}")
@@ -379,7 +396,12 @@ def main():
         total, n = 0.0, 0
         optim.zero_grad(set_to_none=True)
         skipped = 0
+        start_time = time.time()
         for xb, yb in loader:
+            if n > 0 and n % 200 == 0:
+                elapsed = time.time() - start_time
+                print(f"[{split}] progress: {n}/{len(loader)} speed: {n*xb.shape[0]/elapsed:.2f} seq/sec")
+            
             xb, yb = xb.to(device), yb.to(device)
             def fwd():
                 logits_, loss_ = model(xb, yb)
@@ -491,23 +513,36 @@ def main():
             print("[early-stopping] no improvement; stopping.")
             break
 
+    # Final meta and metrics collection
+    train_wall1 = time.perf_counter()
+    train_cpu1 = time.process_time()
+    total_time = train_wall1 - train_wall0
+    
+    meta = {
+        "run_id": run_id,
+        "train_wall_sec": round(total_time, 2),
+        "train_cpu_sec": round(train_cpu1 - train_cpu0, 2),
+        "best_epoch": best_epoch,
+        "best_val_loss": float(best) if best != float("inf") else None,
+        "status": "completed",
+        "model_spec": model.to_dict() if hasattr(model, "to_dict") else {}
+    }
+    
     if history:
-        metrics = {
-            "run_id": run_id,
-            "best_epoch": best_epoch,
-            "best_val_loss": best if best != float("inf") else None,
+        meta.update({
             "last_epoch": history[-1]["epoch"],
             "last_val_loss": history[-1]["val_loss"],
             "last_train_loss": history[-1]["train_loss"],
             "last_perplexity": history[-1]["perplexity"],
-        }
+        })
+        
+        # Also write the compact metrics.json for dashboard
         metrics_path = scores_dir / "metrics.json"
-        metrics_path.write_text(json.dumps(metrics, indent=2) + "\n")
+        metrics_path.write_text(json.dumps(meta, indent=2) + "\n")
 
-    # Overall training timing (wall vs CPU time)
-    train_wall1 = time.perf_counter()
-    train_cpu1 = time.process_time()
-    print(f"[timing] train_wall_sec={train_wall1-train_wall0:.2f} train_cpu_sec={train_cpu1-train_cpu0:.2f}")
+    write_meta(ckpt_dir, meta)
+    
+    print(f"[timing] train_wall_sec={total_time:.2f} train_cpu_sec={train_cpu1-train_cpu0:.2f}")
 
 if __name__ == "__main__":
     main()

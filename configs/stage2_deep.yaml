@@ -1,0 +1,34 @@
+# Stage 2: Deep Diversified Bacterial Codon LM
+# 6 Layers for higher capacity on diverse bacterial taxa
+
+# Model Architecture
+vocab_size: 69
+block_size: 256
+n_layer: 6       # Increased from 4
+n_head: 4        # Increased from 2
+n_embd: 256      # Increased from 128
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+
+# Data
+itos_path: "data/processed/itos_codon.txt"
+train_npz: "data/processed/stage2_diverse/train_bs256.npz"
+val_npz: "data/processed/stage2_diverse/val_bs256.npz"
+test_npz: "data/processed/stage2_diverse/test_bs256.npz"
+
+# Training
+batch_size: 8   # Smaller batch for 8GB RAM + Deeper model
+grad_accum_steps: 32
+epochs: 10
+lr: 0.0001
+min_lr: 0.00001
+weight_decay: 0.05
+warmup_steps: 200
+scheduler: "cosine"
+amp: true
+seed: 1337
+
+# Output
+out_dir: "outputs/checkpoints"
+scores_dir: "outputs/scores"

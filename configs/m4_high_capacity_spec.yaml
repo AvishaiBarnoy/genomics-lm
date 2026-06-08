@@ -1,0 +1,30 @@
+# Stage 3: High-Capacity Speculative Config
+# Optimized for 16GB Unified Memory (e.g. M4 Chip)
+
+# Model Architecture
+vocab_size: 69
+block_size: 2048  # 4x increase; captures full operons + promoters
+n_layer: 12       # 2x depth
+n_head: 8         # 2x attention heads
+n_embd: 512       # 2x width
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+
+# Data (Scaling to 100+ Genomes)
+train_npz: "data/processed/stage3_giant/train_bs2048.npz"
+val_npz: "data/processed/stage3_giant/val_bs2048.npz"
+
+# Training
+batch_size: 16    # Native batching with 16GB RAM
+grad_accum_steps: 16
+epochs: 30
+lr: 0.0003
+scheduler: "cosine"
+amp: true
+seed: 1337
+
+# Expected Outcome
+# 1. Biological Recall > 0.75
+# 2. Natural Termination Rate > 50%
+# 3. Successful Multi-Frame overprinting awareness.

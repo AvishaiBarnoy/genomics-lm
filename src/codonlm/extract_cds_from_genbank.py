@@ -26,7 +26,13 @@ def main():
     with open(args.out_txt,"w") as ft, open(args.out_meta,"w") as fm:
         fm.write("line_idx\tgenome\n")
         for gb in args.gbff:
-            genome_id = Path(gb).stem.split("_")[0]
+            # Capture GCF_000005845 or similar (first two parts)
+            parts = Path(gb).stem.split("_")
+            if len(parts) >= 2:
+                genome_id = "_".join(parts[:2])
+            else:
+                genome_id = parts[0]
+            
             for rec in SeqIO.parse(gb, "genbank"):
                 seq = str(rec.seq).upper()
                 for feat in rec.features:
