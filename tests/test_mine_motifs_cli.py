@@ -1,8 +1,5 @@
-import os
 import torch
 import numpy as np
-import pytest
-from pathlib import Path
 from scripts.mine_motifs import main as mine_main
 from scripts._shared import write_meta
 
@@ -39,7 +36,6 @@ def test_mine_motifs_cli(tmp_path):
     np.savez(data_path, X=X)
     
     # Run CLI (mocking args)
-    import sys
     from unittest.mock import patch
     
     # Patch RUNS_DIR in _shared to point to tmp_path/runs

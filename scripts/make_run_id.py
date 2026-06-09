@@ -8,6 +8,7 @@ Example: 2025-10-06_tiny_2L4H_d128_e5
 Usage:
   python -m scripts.make_run_id path/to/config.yaml
 """
+
 from __future__ import annotations
 
 import argparse

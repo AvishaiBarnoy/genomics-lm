@@ -42,7 +42,9 @@ def _load_top_frequencies(path: Path, top_n: int) -> List[Dict[str, object]]:
             freq = float(row["frequency"])
         except (KeyError, ValueError):
             continue
-        parsed.append({"token": row.get("token", ""), "count": count, "frequency": freq})
+        parsed.append(
+            {"token": row.get("token", ""), "count": count, "frequency": freq}
+        )
     parsed.sort(key=lambda x: x["count"], reverse=True)
     return parsed[:top_n]
 
@@ -57,7 +59,9 @@ def _load_nearest_neighbors(path: Path, top_n: int) -> List[Dict[str, object]]:
             tok = row.get(f"neighbor_{i}")
             prob = row.get(f"sim_{i}")
             if tok:
-                neighbors.append({"token": tok, "similarity": float(prob) if prob else None})
+                neighbors.append(
+                    {"token": tok, "similarity": float(prob) if prob else None}
+                )
         summary.append({"token": token, "neighbors": neighbors})
     return summary
 
@@ -87,7 +91,9 @@ def _load_saliency(path: Path, top_n: int) -> List[Dict[str, object]]:
         except (KeyError, ValueError):
             continue
         token = row.get("token", "")
-        parsed.append({"position": pos, "token": token, "saliency": val, "abs_saliency": abs(val)})
+        parsed.append(
+            {"position": pos, "token": token, "saliency": val, "abs_saliency": abs(val)}
+        )
     parsed.sort(key=lambda x: x["abs_saliency"], reverse=True)
     return [
         {"position": r["position"], "token": r["token"], "saliency": r["saliency"]}
@@ -210,11 +216,22 @@ def run_export(config: RunSummaryConfig) -> Path:
 
 
 def parse_args() -> RunSummaryConfig:
-    parser = argparse.ArgumentParser(description="Export run artifacts into a compact JSON summary.")
+    parser = argparse.ArgumentParser(
+        description="Export run artifacts into a compact JSON summary."
+    )
     parser.add_argument("run_id", nargs="?", help="Run identifier under runs/")
-    parser.add_argument("--run_dir", help="Alternative to run_id; path to runs/<RUN_ID>")
-    parser.add_argument("--top", type=int, default=10, help="Top-N items to keep from each table (default: 10)")
-    parser.add_argument("--output", type=str, default=None, help="Optional custom output path")
+    parser.add_argument(
+        "--run_dir", help="Alternative to run_id; path to runs/<RUN_ID>"
+    )
+    parser.add_argument(
+        "--top",
+        type=int,
+        default=10,
+        help="Top-N items to keep from each table (default: 10)",
+    )
+    parser.add_argument(
+        "--output", type=str, default=None, help="Optional custom output path"
+    )
     args = parser.parse_args()
 
     # resolve run_id if run_dir provided

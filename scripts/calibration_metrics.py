@@ -11,6 +11,7 @@ Notes:
   - ECE uses 15 bins on max-probability predictions.
   - Brier (multiclass) computed as mean sum_k (p_k - y_k)^2.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,10 +27,14 @@ from src.codonlm.model_tiny_gpt import TinyGPT
 
 def load_npz(path: Path) -> Tuple[np.ndarray, np.ndarray]:
     with np.load(path, allow_pickle=False) as blob:
-        return np.asarray(blob["X"], dtype=np.int64), np.asarray(blob["Y"], dtype=np.int64)
+        return np.asarray(blob["X"], dtype=np.int64), np.asarray(
+            blob["Y"], dtype=np.int64
+        )
 
 
-def ece_from_logits(logits: torch.Tensor, targets: torch.Tensor, ignore_index: int = 0, n_bins: int = 15) -> float:
+def ece_from_logits(
+    logits: torch.Tensor, targets: torch.Tensor, ignore_index: int = 0, n_bins: int = 15
+) -> float:
     # logits: (N, V), targets: (N,)
     mask = targets.ne(ignore_index)
     if mask.sum() == 0:
@@ -39,10 +44,10 @@ def ece_from_logits(logits: torch.Tensor, targets: torch.Tensor, ignore_index: i
     probs = torch.softmax(logits, dim=-1)
     conf, pred = probs.max(dim=-1)  # (N,)
     correct = pred.eq(targets).float()
-    bins = torch.linspace(0, 1, steps=n_bins+1, device=probs.device)
+    bins = torch.linspace(0, 1, steps=n_bins + 1, device=probs.device)
     ece = torch.zeros((), device=probs.device)
     for i in range(n_bins):
-        lo, hi = bins[i], bins[i+1]
+        lo, hi = bins[i], bins[i + 1]
         sel = (conf > lo) & (conf <= hi)
         n = sel.sum().item()
         if n == 0:
@@ -53,7 +58,9 @@ def ece_from_logits(logits: torch.Tensor, targets: torch.Tensor, ignore_index: i
     return float(ece.item())
 
 
-def brier_from_logits(logits: torch.Tensor, targets: torch.Tensor, ignore_index: int = 0) -> float:
+def brier_from_logits(
+    logits: torch.Tensor, targets: torch.Tensor, ignore_index: int = 0
+) -> float:
     mask = targets.ne(ignore_index)
     if mask.sum() == 0:
         return float("nan")
@@ -61,7 +68,7 @@ def brier_from_logits(logits: torch.Tensor, targets: torch.Tensor, ignore_index:
     targets = targets[mask]
     probs = torch.softmax(logits, dim=-1)
     # One-hot true labels
-    V = probs.size(-1)
+    probs.size(-1)
     y = torch.zeros_like(probs)
     y[torch.arange(y.size(0), device=y.device), targets] = 1.0
     brier = ((probs - y) ** 2).sum(dim=-1).mean()
@@ -75,7 +82,11 @@ def main() -> None:
     ap.add_argument("--out", required=True, help="metrics.json to merge into")
     args = ap.parse_args()
 
-    device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
+    device = (
+        torch.device("mps")
+        if torch.backends.mps.is_available()
+        else torch.device("cpu")
+    )
 
     # Load checkpoint
     state = torch.load(args.ckpt, map_location="cpu")
@@ -102,8 +113,8 @@ def main() -> None:
     ece_accum, brier_accum, count = 0.0, 0.0, 0
     with torch.no_grad():
         for i in range(0, X.shape[0], batch):
-            xb = torch.from_numpy(X[i:i+batch]).to(device)
-            yb = torch.from_numpy(Y[i:i+batch]).to(device)
+            xb = torch.from_numpy(X[i : i + batch]).to(device)
+            yb = torch.from_numpy(Y[i : i + batch]).to(device)
             logits, _ = model(xb, yb)
             # Flatten per-token
             logits_flat = logits.reshape(-1, logits.size(-1))
@@ -133,4 +144,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

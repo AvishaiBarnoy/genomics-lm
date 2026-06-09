@@ -1,4 +1,5 @@
 """Embedding analysis for TinyGPT runs."""
+
 from __future__ import annotations
 
 import argparse
@@ -12,7 +13,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ._shared import ArtifactError, ensure_run_layout, load_artifacts, load_token_list, resolve_run
+from ._shared import (
+    ArtifactError,
+    ensure_run_layout,
+    load_artifacts,
+    load_token_list,
+    resolve_run,
+)
 
 try:
     from sklearn.cluster import KMeans
@@ -28,11 +35,13 @@ def _compute_pca(embeddings: np.ndarray, k: int = 2) -> Tuple[np.ndarray, np.nda
     u, s, vh = np.linalg.svd(centered, full_matrices=False)
     components = vh[:k]
     transformed = centered @ components.T
-    explained = (s[:k] ** 2) / np.sum(s ** 2)
+    explained = (s[:k] ** 2) / np.sum(s**2)
     return transformed, explained
 
 
-def _nearest_neighbors(embeddings: np.ndarray, tokens: list[str], top_k: int = 5) -> list[tuple]:
+def _nearest_neighbors(
+    embeddings: np.ndarray, tokens: list[str], top_k: int = 5
+) -> list[tuple]:
     norm = np.linalg.norm(embeddings, axis=1, keepdims=True) + 1e-8
     normed = embeddings / norm
     sims = normed @ normed.T
@@ -102,7 +111,11 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
     nn_path = tables_dir / "nearest_neighbors.csv"
     with nn_path.open("w", newline="") as f:
         writer = csv.writer(f)
-        header = ["token"] + [f"neighbor_{i}" for i in range(1, 6)] + [f"sim_{i}" for i in range(1, 6)]
+        header = (
+            ["token"]
+            + [f"neighbor_{i}" for i in range(1, 6)]
+            + [f"sim_{i}" for i in range(1, 6)]
+        )
         writer.writerow(header)
         for token, neigh in neighbors:
             row = [token]

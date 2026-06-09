@@ -7,6 +7,7 @@ class MotifClusterer:
     Handles clustering of motif embeddings using various algorithms.
     """
     def __init__(self, method='kmeans', n_clusters=10, pca_components=None, random_state=42):
+        """Initializes the MotifClusterer with a clustering method and hyperparameters."""
         self.method = method
         self.n_clusters = n_clusters
         self.pca_components = pca_components
@@ -58,7 +59,9 @@ class MotifClusterer:
             centers = []
             unique_labels = sorted(set(self.labels))
             for label in unique_labels:
-                if label == -1: continue # Skip noise in HDBSCAN
+                if label == -1:
+                    continue # Skip noise in HDBSCAN
                 mask = (self.labels == label)
                 centers.append(embeddings[mask].mean(axis=0))
             return np.array(centers)
+

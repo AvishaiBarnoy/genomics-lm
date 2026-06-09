@@ -10,18 +10,18 @@ KPIs:
 
 Keeps runtime small by sampling at most N windows.
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import random
-from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 
 from src.codonlm.model_tiny_gpt import TinyGPT
 from src.codonlm.metrics_io import write_merge_metrics
@@ -29,19 +29,79 @@ from scripts._shared import resolve_run
 
 
 def dev() -> torch.device:
-    return torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
+    return (
+        torch.device("mps")
+        if torch.backends.mps.is_available()
+        else torch.device("cpu")
+    )
 
 
 CODON_TO_AA: Dict[str, str] = {
     # fmt: off
-    "TTT":"F","TTC":"F","TTA":"L","TTG":"L","TCT":"S","TCC":"S","TCA":"S","TCG":"S",
-    "TAT":"Y","TAC":"Y","TAA":"Stop","TAG":"Stop","TGT":"C","TGC":"C","TGA":"Stop","TGG":"W",
-    "CTT":"L","CTC":"L","CTA":"L","CTG":"L","CCT":"P","CCC":"P","CCA":"P","CCG":"P",
-    "CAT":"H","CAC":"H","CAA":"Q","CAG":"Q","CGT":"R","CGC":"R","CGA":"R","CGG":"R",
-    "ATT":"I","ATC":"I","ATA":"I","ATG":"M","ACT":"T","ACC":"T","ACA":"T","ACG":"T",
-    "AAT":"N","AAC":"N","AAA":"K","AAG":"K","AGT":"S","AGC":"S","AGA":"R","AGG":"R",
-    "GTT":"V","GTC":"V","GTA":"V","GTG":"V","GCT":"A","GCC":"A","GCA":"A","GCG":"A",
-    "GAT":"D","GAC":"D","GAA":"E","GAG":"E","GGT":"G","GGC":"G","GGA":"G","GGG":"G",
+    "TTT": "F",
+    "TTC": "F",
+    "TTA": "L",
+    "TTG": "L",
+    "TCT": "S",
+    "TCC": "S",
+    "TCA": "S",
+    "TCG": "S",
+    "TAT": "Y",
+    "TAC": "Y",
+    "TAA": "Stop",
+    "TAG": "Stop",
+    "TGT": "C",
+    "TGC": "C",
+    "TGA": "Stop",
+    "TGG": "W",
+    "CTT": "L",
+    "CTC": "L",
+    "CTA": "L",
+    "CTG": "L",
+    "CCT": "P",
+    "CCC": "P",
+    "CCA": "P",
+    "CCG": "P",
+    "CAT": "H",
+    "CAC": "H",
+    "CAA": "Q",
+    "CAG": "Q",
+    "CGT": "R",
+    "CGC": "R",
+    "CGA": "R",
+    "CGG": "R",
+    "ATT": "I",
+    "ATC": "I",
+    "ATA": "I",
+    "ATG": "M",
+    "ACT": "T",
+    "ACC": "T",
+    "ACA": "T",
+    "ACG": "T",
+    "AAT": "N",
+    "AAC": "N",
+    "AAA": "K",
+    "AAG": "K",
+    "AGT": "S",
+    "AGC": "S",
+    "AGA": "R",
+    "AGG": "R",
+    "GTT": "V",
+    "GTC": "V",
+    "GTA": "V",
+    "GTG": "V",
+    "GCT": "A",
+    "GCC": "A",
+    "GCA": "A",
+    "GCG": "A",
+    "GAT": "D",
+    "GAC": "D",
+    "GAA": "E",
+    "GAG": "E",
+    "GGT": "G",
+    "GGC": "G",
+    "GGA": "G",
+    "GGG": "G",
     # fmt: on
 }
 
@@ -72,21 +132,27 @@ class NPZ(Dataset):
         blob = np.load(path)
         self.X = torch.from_numpy(np.asarray(blob["X"]).astype(np.int64))
         self.Y = torch.from_numpy(np.asarray(blob["Y"]).astype(np.int64))
+
     def __len__(self):
         return self.X.shape[0]
+
     def __getitem__(self, i):
         return self.X[i], self.Y[i]
 
 
 def load_vocab(run_id: str, repo_root: Path) -> Tuple[List[str], Dict[str, int]]:
     itos_path = repo_root / "runs" / run_id / "itos.txt"
-    tokens = [line.strip() for line in itos_path.read_text().splitlines() if line.strip()]
+    tokens = [
+        line.strip() for line in itos_path.read_text().splitlines() if line.strip()
+    ]
     stoi = {tok: i for i, tok in enumerate(tokens)}
     return tokens, stoi
 
 
 @torch.no_grad()
-def batch_nll(model: TinyGPT, device: torch.device, xb: torch.Tensor, yb: torch.Tensor) -> float:
+def batch_nll(
+    model: TinyGPT, device: torch.device, xb: torch.Tensor, yb: torch.Tensor
+) -> float:
     xb = xb.to(device)
     yb = yb.to(device)
     logits, loss = model(xb, yb)
@@ -97,10 +163,19 @@ def batch_nll(model: TinyGPT, device: torch.device, xb: torch.Tensor, yb: torch.
 
 
 def codon_mask(itos: List[str]) -> np.ndarray:
-    return np.array([1 if (len(tok) == 3 and all(c in "ACGT" for c in tok)) else 0 for tok in itos], dtype=np.int32)
+    return np.array(
+        [1 if (len(tok) == 3 and all(c in "ACGT" for c in tok)) else 0 for tok in itos],
+        dtype=np.int32,
+    )
 
 
-def compute_kpis(model: TinyGPT, device: torch.device, test_npz: Path, itos: List[str], sample_windows: int = 200) -> Dict[str, float]:
+def compute_kpis(
+    model: TinyGPT,
+    device: torch.device,
+    test_npz: Path,
+    itos: List[str],
+    sample_windows: int = 200,
+) -> Dict[str, float]:
     ds = NPZ(test_npz)
     n = min(sample_windows, len(ds))
     idxs = np.linspace(0, len(ds) - 1, num=n, dtype=int)
@@ -163,11 +238,13 @@ def compute_kpis(model: TinyGPT, device: torch.device, test_npz: Path, itos: Lis
             xb_mut[i, p] = int(random.choice(pool))
             changed += 1
         if changed == 0:
-            return float('nan')
+            return float("nan")
         nll_m = batch_nll(model, device, xb_mut, y)
         return float((nll_m - nll_orig) / max(1, (y != 0).sum().item()))
 
-    start_delta = mutate_once(x.clone(), start_idx, non_start) if start_idx >= 0 else float("nan")
+    start_delta = (
+        mutate_once(x.clone(), start_idx, non_start) if start_idx >= 0 else float("nan")
+    )
     stop_delta = float("nan")
     if stop_set:
         # mutate if any stop present; pick a representative code to locate positions, then mutate to non-stop
@@ -204,21 +281,35 @@ def compute_kpis(model: TinyGPT, device: torch.device, test_npz: Path, itos: Lis
             if not aa or aa == "Stop":
                 continue
             # collect synonym ids
-            syn_ids = [j for j, t in enumerate(itos) if t in CODON_TO_AA and CODON_TO_AA[t] == aa and t != tok_str]
-            nonsyn_ids = [j for j, t in enumerate(itos) if t in CODON_TO_AA and CODON_TO_AA[t] != aa and t not in ("TAA","TAG","TGA")]
+            syn_ids = [
+                j
+                for j, t in enumerate(itos)
+                if t in CODON_TO_AA and CODON_TO_AA[t] == aa and t != tok_str
+            ]
+            nonsyn_ids = [
+                j
+                for j, t in enumerate(itos)
+                if t in CODON_TO_AA
+                and CODON_TO_AA[t] != aa
+                and t not in ("TAA", "TAG", "TGA")
+            ]
             if not syn_ids or not nonsyn_ids:
                 continue
             # mutate and measure per-position delta
-            row_syn = row.clone(); row_syn[p] = int(random.choice(syn_ids))
-            row_nsn = row.clone(); row_nsn[p] = int(random.choice(nonsyn_ids))
+            row_syn = row.clone()
+            row_syn[p] = int(random.choice(syn_ids))
+            row_nsn = row.clone()
+            row_nsn[p] = int(random.choice(nonsyn_ids))
             # batch both with same y context length adjust
             xb = torch.stack([row, row_syn, row_nsn], dim=0)
-            nlls = batch_nll(model, device, xb, y[i:i+1].repeat(3, 1))  # returns sum over tokens; but our helper expects batch; adjust helper? reuse as is
+            batch_nll(
+                model, device, xb, y[i : i + 1].repeat(3, 1)
+            )  # returns sum over tokens; but our helper expects batch; adjust helper? reuse as is
             # Since batch_nll returns sum over valid tokens for entire batch, get average per example by dividing by 3 and token count is same across
             # To keep simple, compute deltas via separate calls
-            nll0 = batch_nll(model, device, row.unsqueeze(0), y[i:i+1])
-            nllS = batch_nll(model, device, row_syn.unsqueeze(0), y[i:i+1])
-            nllN = batch_nll(model, device, row_nsn.unsqueeze(0), y[i:i+1])
+            nll0 = batch_nll(model, device, row.unsqueeze(0), y[i : i + 1])
+            nllS = batch_nll(model, device, row_syn.unsqueeze(0), y[i : i + 1])
+            nllN = batch_nll(model, device, row_nsn.unsqueeze(0), y[i : i + 1])
             syn_delta += float(nllS - nll0)
             nonsyn_delta += float(nllN - nll0)
             n_used += 1
@@ -244,7 +335,11 @@ def main() -> None:
     repo = Path(__file__).resolve().parents[1]
     # accept run_id or run_dir
     run_id, _ = resolve_run(args.run_id, args.run_dir)
-    run_dir = Path(args.run_dir) if args.run_dir else (repo / "outputs" / "checkpoints" / run_id)
+    run_dir = (
+        Path(args.run_dir)
+        if args.run_dir
+        else (repo / "outputs" / "checkpoints" / run_id)
+    )
 
     state_dict, cfg = _load_checkpoint(run_dir)
     model = _build_model_from_cfg(cfg)

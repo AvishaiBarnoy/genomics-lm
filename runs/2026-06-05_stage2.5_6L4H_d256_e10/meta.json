@@ -1,6 +1,6 @@
 {
   "checkpoint_path": "/Users/User/github/genomics-lm/outputs/checkpoints/2026-06-05_stage2.5_6L4H_d256_e10/best.pt",
-  "config_path": "/Users/User/github/genomics-lm/configs/stage2.5_master.yaml",
+  "config_path": "/Users/User/github/genomics-lm/configs/tiny_mps.yaml",
   "model_spec": {
     "block_size": 512,
     "dropout": 0.1,

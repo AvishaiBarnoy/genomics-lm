@@ -17,6 +17,7 @@ Notes:
   - This script does NOT generate labels; provide labels from an external SS tool or dataset.
   - If H is (N,T,D) and too large, consider subsampling or pooling before running.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -39,14 +40,20 @@ def load_npz(path: Path):
 def plot_confusion(y_true, y_pred, out_path: Path):
     labels = sorted(set(y_true) | set(y_pred))
     cm = confusion_matrix(y_true, y_pred, labels=labels, normalize="true")
-    fig, ax = plt.subplots(figsize=(4,4))
+    fig, ax = plt.subplots(figsize=(4, 4))
     im = ax.imshow(cm, cmap="Blues")
     ax.figure.colorbar(im, ax=ax)
-    ax.set_xlabel("Predicted"); ax.set_ylabel("True")
-    ax.set_xticks(range(len(labels))); ax.set_xticklabels(labels)
-    ax.set_yticks(range(len(labels))); ax.set_yticklabels(labels)
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("True")
+    ax.set_xticks(range(len(labels)))
+    ax.set_xticklabels(labels)
+    ax.set_yticks(range(len(labels)))
+    ax.set_yticklabels(labels)
     ax.set_title("SS confusion (normalized)")
-    plt.tight_layout(); out_path.parent.mkdir(parents=True, exist_ok=True); plt.savefig(out_path); plt.close(fig)
+    plt.tight_layout()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(out_path)
+    plt.close(fig)
 
 
 def main() -> None:
@@ -64,14 +71,16 @@ def main() -> None:
         M = np.ones_like(Y, dtype=np.int64)
 
     # Flatten masked tokens
-    mask = (M.reshape(-1) > 0)
+    mask = M.reshape(-1) > 0
     X = H.reshape(-1, H.shape[-1])[mask]
     y = Y.reshape(-1)[mask]
 
-    clf = Pipeline([
-        ("scaler", StandardScaler(with_mean=True)),
-        ("clf", LogisticRegression(max_iter=2000, n_jobs=-1, multi_class="ovr"))
-    ])
+    clf = Pipeline(
+        [
+            ("scaler", StandardScaler(with_mean=True)),
+            ("clf", LogisticRegression(max_iter=2000, n_jobs=-1, multi_class="ovr")),
+        ]
+    )
     clf.fit(X, y)
     y_pred = clf.predict(X)
     metrics = {
@@ -89,7 +98,8 @@ def main() -> None:
     except Exception:
         pass
 
-    out_dir = Path(args.out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2))
     plot_confusion(y, y_pred, out_dir / "confusion.png")
     joblib.dump(clf, out_dir / "probe.pkl")
@@ -98,4 +108,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

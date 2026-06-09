@@ -7,7 +7,6 @@ Moves beyond single-CDS extraction to capture operon logic and intergenic region
 import argparse
 from pathlib import Path
 from Bio import SeqIO
-import numpy as np
 
 def extract_tapes(gb_path, window_bp, stride_bp, out_f, out_m, genome_id):
     """

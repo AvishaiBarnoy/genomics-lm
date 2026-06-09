@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.utils.checkpoint import checkpoint
 from src.protein_lm.config import ProteinLMConfig, ProteinClassifierConfig
 from src.protein_lm.models import ProteinConditionalTransformer
 
@@ -48,12 +49,20 @@ class MultiTaskProteinClassifier(nn.Module):
 
         # Use non-causal attention for classification tasks (bidirectional)
         # Note: Standard TransformerEncoderLayer uses bidirectional attention by default if src_mask=None
-        for block in self.backbone.transformer_blocks:
-            x = block(x)
+        use_checkpoint = self.config.use_checkpoint if hasattr(self.config, "use_checkpoint") else False
+        if use_checkpoint and self.training:
+            for block in self.backbone.transformer_blocks:
+                try:
+                    # Pass use_reentrant=False to silence deprecation warnings in newer PyTorch
+                    x = checkpoint(block, x, use_reentrant=False)
+                except TypeError:
+                    x = checkpoint(block, x)
+        else:
+            for block in self.backbone.transformer_blocks:
+                x = block(x)
 
         # Global Average Pooling (better for functional classification than just BOS)
         # Or just use BOS for structural tasks.
-        bos_rep = x[:, 0, :]
         mean_rep = x.mean(dim=1)
         
         # Combine? Let's stick to mean-pooling for now.

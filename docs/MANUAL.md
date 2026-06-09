@@ -8,7 +8,7 @@ A compact codon‑level GPT‑style LM with a reproducible training + analysis p
 
 ### Quick Start
 
-- Setup: conda env create -f env/conda-environment.yml; conda activate codonlm
+- Setup: conda env create -f environment.yml; conda activate codonlm (or pip install -r requirements.txt)
 - Train (default config + auto RUN_ID):
   - ./main.sh
   - Outputs: checkpoints → outputs/checkpoints/<RUN_ID>/, curves/metrics → outputs/scores/<RUN_ID>/, full log → runs/<RUN_ID>/log.txt
@@ -196,6 +196,29 @@ This script will:
 5.  Log validation accuracy and F1 score.
 6.  Save checkpoints to `outputs/protein_classifier/<run_id>/`.
 
+#### Multi-Task Protein Critic Training
+
+The Multi-Task Protein Critic backbone (`src/protein_lm/train_multi_task.py`) trains a single model to simultaneously predict Pfam Family, EC Function Number, and Thermodynamic Stability.
+
+To train the Protein Critic, run:
+
+```bash
+python -m src.protein_lm.train_multi_task --config configs/protein_critic.yaml
+```
+
+**Training Specs:**
+- **Architecture:** 8 layers, 8 attention heads, 256 embedding dimension (`8L8H_d256`).
+- **Resilience:** Saves epoch-end training states to `outputs/checkpoints/protein_critic/last_critic.pt` and supports resumption via `--resume`.
+- **Outputs:** Saves the best evaluation checkpoint to `outputs/checkpoints/protein_critic/best_critic.pt`.
+
+**Current Top Model Performance:**
+
+| Task | Target Type | Number of Classes | Samples Evaluated | Model Accuracy | Random Baseline | Improvement Factor |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| **Stability** | Physical (MegaScale stability) | 2 | 138 | **76.81%** | 50.00% | **1.5x** |
+| **Family** | Identity (Pfam ID) | 1,000 | 553 | **6.15%** | 0.10% | **61.5x** |
+| **Function** | Biological (EC Number ID) | 500 | 200 | **5.50%** | 0.20% | **27.5x** |
+
 ### Testing
 
 The `protein_lm` module comes with a suite of tests to verify its functionality. To run the tests, use `pytest`:
@@ -227,4 +250,23 @@ self.condition_tokens = {
 
 The tokenizer will automatically update its vocabulary and token-to-ID mappings. You will also need to update your data preparation scripts to include the new labels in the JSONL files.
 
+## Web Dashboard & Model Playground
+
+The repository includes a Streamlit-based web dashboard that provides an interactive visualization interface for model runs, metrics, attention mapping, embedding exploration, and a live Model Playground (where you can run next-codon queries and sequence generation supervised on-the-fly by the multi-task Protein Critic).
+
+### Running the Dashboard
+
+To launch the local Streamlit dashboard, run the following command from the repository root:
+
+```bash
+streamlit run scripts/web_dashboard.py
 ```
+
+By default, the client will start a local server (typically at `http://localhost:8501`).
+
+### Features
+
+- **🏠 Run Overview & Metrics**: Browse all completed runs under `outputs/checkpoints/` and visualize their training/validation metrics.
+- **🧬 Saliency & Mutation Maps**: Audit model predictions and generate heatmaps of mutation probabilities.
+- **🧪 Model Playground**: Run causal generation queries on the CodonLM model (adjusting Temperature, Top-K, and Max Codons) and instantly translate the resulting DNA to amino acids.
+- **🛡️ Protein Critic Bridge**: The playground automatically translates generated DNA sequences and scores their predicted Pfam family, EC number function, and thermodynamic stability using the loaded Protein Critic model.

@@ -102,10 +102,20 @@ def _read_uniprot_tsv(path: Path) -> List[ProteinRecord]:
     records: List[ProteinRecord] = []
     with path.open("r", encoding="utf-8") as fh:
         reader = csv.DictReader(fh, delimiter="\t")
-        required = ["Entry", "Sequence", "Organism", "Length", "EC number", "Keywords", "Subcellular location [CC]"]
+        required = [
+            "Entry",
+            "Sequence",
+            "Organism",
+            "Length",
+            "EC number",
+            "Keywords",
+            "Subcellular location [CC]",
+        ]
         missing = [c for c in required if c not in reader.fieldnames]
         if missing:
-            raise SystemExit(f"[error] TSV missing columns {missing}, found {reader.fieldnames}")
+            raise SystemExit(
+                f"[error] TSV missing columns {missing}, found {reader.fieldnames}"
+            )
 
         for row in reader:
             try:
@@ -123,13 +133,17 @@ def _read_uniprot_tsv(path: Path) -> List[ProteinRecord]:
                     length=length,
                     ec_number=(row.get("EC number") or "").strip(),
                     keywords=(row.get("Keywords") or "").strip(),
-                    subcellular_location=(row.get("Subcellular location [CC]") or "").strip(),
+                    subcellular_location=(
+                        row.get("Subcellular location [CC]") or ""
+                    ).strip(),
                 )
             )
     return records
 
 
-def _split_records(records: List[ProteinRecord], val_frac: float, seed: int) -> Tuple[List[ProteinRecord], List[ProteinRecord]]:
+def _split_records(
+    records: List[ProteinRecord], val_frac: float, seed: int
+) -> Tuple[List[ProteinRecord], List[ProteinRecord]]:
     """
     Randomly split records into train and validation sets.
     """
@@ -174,10 +188,24 @@ def _write_jsonl(path: Path, records: List[ProteinRecord]) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Prepare JSONL datasets for protein_lm from UniProt TSV.")
-    ap.add_argument("--tsv", type=Path, default=TSV_PATH_DEFAULT, help="Input UniProt TSV path.")
-    ap.add_argument("--out-dir", type=Path, default=Path("data/processed/protein_lm"), help="Output directory for JSONL files.")
-    ap.add_argument("--val-frac", type=float, default=0.1, help="Fraction of data to use for validation.")
+    ap = argparse.ArgumentParser(
+        description="Prepare JSONL datasets for protein_lm from UniProt TSV."
+    )
+    ap.add_argument(
+        "--tsv", type=Path, default=TSV_PATH_DEFAULT, help="Input UniProt TSV path."
+    )
+    ap.add_argument(
+        "--out-dir",
+        type=Path,
+        default=Path("data/processed/protein_lm"),
+        help="Output directory for JSONL files.",
+    )
+    ap.add_argument(
+        "--val-frac",
+        type=float,
+        default=0.1,
+        help="Fraction of data to use for validation.",
+    )
     ap.add_argument("--seed", type=int, default=13, help="Random seed for shuffling.")
     args = ap.parse_args()
 
@@ -200,7 +228,9 @@ def main() -> None:
     _write_jsonl(train_cls_path, train_records)
     _write_jsonl(val_cls_path, val_records)
 
-    print(f"[protein_lm_data_preparer] wrote {len(train_records)} train and {len(val_records)} val records")
+    print(
+        f"[protein_lm_data_preparer] wrote {len(train_records)} train and {len(val_records)} val records"
+    )
     print(f"  LM train:        {train_path}")
     print(f"  LM val:          {val_path}")
     print(f"  classifier train:{train_cls_path}")
@@ -209,4 +239,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

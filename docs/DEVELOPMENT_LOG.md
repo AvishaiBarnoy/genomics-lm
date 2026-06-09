@@ -50,17 +50,34 @@ While architectural changes improved the model's *capacity* to stop, we discover
 
 ---
 
-## 4. Stage 3: The Hierarchical Supervisor (Drafted)
+## 4. Stage 3: The Hierarchical Supervisor (Implemented & Trained)
 **Goal:** Bridge the gap between DNA Syntax (CodonLM) and Protein Semantics (ProteinLM).
 *   **The Flaw of Causal LMs:** A CodonLM predicts left-to-right. It doesn't know if the *global* protein structure will physically collapse until it reaches the end.
 *   **The Solution:** We designed a **"Generator-Critic"** loop. CodonLM generates DNA; `scripts/protein_critic_bridge.py` translates it to Amino Acids and feeds it to ProteinLM.
-*   **The Multi-Task Expert Panel:** We drafted `src/protein_lm/train_multi_task.py` to train a single ProteinLM backbone to simultaneously predict:
-    1.  **Pfam Family (Identity):** Using 50,000 labels mapped via the UniProt API.
-    2.  **Thermodynamic Stability (Physics):** Using 1,200 experimental labels from the MegaScale dataset.
-    3.  **EC Number (Function).**
+*   **The Multi-Task Expert Panel:** We trained the `MultiTaskProteinClassifier` (`src/protein_lm/train_multi_task.py`) on a combined multi-task dataset (Pfam ID, EC ID, MegaScale Stability ID).
+*   **Model Configuration (`configs/protein_critic.yaml`):**
+    *   **Architecture:** 8 layers, 8 attention heads, 256 embedding dimension (`8L8H_d256`).
+    *   **Parameters:** ~6M parameters.
+    *   **Training parameters:** batch size 4, learning rate 1e-4, 50 epochs on Apple Silicon GPU (`mps`).
+*   **Model Performance (Validation Set):**
+    *   **Stability (Binary Classification):** **76.81% accuracy** (vs. 50% random guessing).
+    *   **Pfam Family (1,000 Classes):** **6.15% top-1 accuracy** (61x improvement over 0.1% random guessing baseline).
+    *   **EC Function (500 Classes):** **5.50% top-1 accuracy** (27x improvement over 0.2% random guessing baseline).
+
+
+**The Model Playground UI (Usability & Inference Automation):**
+We consolidated and abstracted the disjointed querying CLI scripts into a reusable backend module [inference_playground.py](file:///Users/User/github/genomics-lm/src/eval/inference_playground.py). We integrated this backend into our Streamlit web dashboard [web_dashboard.py](file:///Users/User/github/genomics-lm/scripts/web_dashboard.py), adding a dedicated "Model Playground" tab. This tab enables users to interactively:
+1. Predict next-codon probabilities (visualized as bar charts).
+2. Generate coding sequences with customized temperature/top-k sampling parameters, styled with high-contrast biological highlights (Start and Stop codons highlighted in green/red).
+3. Query the Multi-Task Protein Critic on raw amino acid sequences, displaying predicted Pfam Family, EC Function Class, and Stability category alongside top classification probabilities.
+We also added a new unit test suite [test_inference_playground.py](file:///Users/User/github/genomics-lm/tests/test_inference_playground.py) to guarantee regression-free playground updates.
+
+**Code Quality & PEP8 Maintenance:**
+We resolved stylistic formatting issues (such as semicolon-separated statements) and eliminated unused variables/imports across the entire source package. We verified that every single function in `src/` now possesses a clear, descriptive docstring.
 
 **The Future (Multi-Scale Modeling):**
 To solve "Overprinted Genes" (where genes overlap in different reading frames), we outlined the need to move beyond codons to a **Nucleotide-Level LM**. While computationally expensive ($O(N^2)$ attention on 3x more tokens), this is the necessary next step to master the true, dense physical reality of viral and bacterial genomes.
 
 ---
 *End of Log*
+

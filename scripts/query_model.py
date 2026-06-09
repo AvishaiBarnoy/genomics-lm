@@ -10,6 +10,7 @@ Examples:
 
 Loads runs/<RUN_ID>/weights.pt and runs/<RUN_ID>/itos.txt (written by collect_artifacts_yaml).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -24,18 +25,35 @@ from src.codonlm.model_tiny_gpt import TinyGPT
 
 
 def dev() -> torch.device:
-    return torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
+    return (
+        torch.device("mps")
+        if torch.backends.mps.is_available()
+        else torch.device("cpu")
+    )
 
 
 def _load_checkpoint(run_dir: Path) -> Tuple[Dict, Dict]:
-    ckpt_path = run_dir / "weights.pt"
+    # Try consolidated layout checkpoints path first
+    ckpt_path = run_dir / "checkpoints" / "best.pt"
     if not ckpt_path.exists():
-        # fallback to outputs layout
+        ckpt_path = run_dir / "checkpoints" / "weights.pt"
+    if not ckpt_path.exists():
+        ckpt_path = run_dir / "checkpoints" / "best_critic.pt"
+
+    # Try legacy run_dir base path
+    if not ckpt_path.exists():
+        ckpt_path = run_dir / "weights.pt"
+
+    # Try old outputs/checkpoints fallback
+    if not ckpt_path.exists():
         alt = Path("outputs/checkpoints") / run_dir.name / "best.pt"
         if alt.exists():
             ckpt_path = alt
+
     if not ckpt_path.exists():
-        raise FileNotFoundError(f"Checkpoint not found under {run_dir} (weights.pt) or outputs/checkpoints/{run_dir.name}/best.pt")
+        raise FileNotFoundError(
+            f"Checkpoint not found under {run_dir} or legacy outputs/checkpoints/{run_dir.name}/best.pt"
+        )
     state = torch.load(ckpt_path, map_location="cpu")
     if isinstance(state, dict) and "model" in state:
         return state["model"], state.get("cfg", {})
@@ -45,8 +63,12 @@ def _load_checkpoint(run_dir: Path) -> Tuple[Dict, Dict]:
 def _load_vocab(run_dir: Path) -> Tuple[List[str], Dict[str, int]]:
     itos_path = run_dir / "itos.txt"
     if not itos_path.exists():
-        raise FileNotFoundError(f"Missing itos.txt at {itos_path}. Run analysis/post_process first or provide labels.")
-    tokens = [line.strip() for line in itos_path.read_text().splitlines() if line.strip()]
+        raise FileNotFoundError(
+            f"Missing itos.txt at {itos_path}. Run analysis/post_process first or provide labels."
+        )
+    tokens = [
+        line.strip() for line in itos_path.read_text().splitlines() if line.strip()
+    ]
     stoi = {tok: i for i, tok in enumerate(tokens)}
     return tokens, stoi
 
@@ -98,7 +120,9 @@ def build_model_from_state(state_dict: Dict, cfg: Dict) -> TinyGPT:
 
 
 @torch.no_grad()
-def next_token(model: TinyGPT, device: torch.device, ctx_ids: List[int]) -> torch.Tensor:
+def next_token(
+    model: TinyGPT, device: torch.device, ctx_ids: List[int]
+) -> torch.Tensor:
     max_T = getattr(model, "block_size", None)
     ids = ctx_ids[-max_T:] if max_T is not None else ctx_ids
     x = torch.tensor(ids, dtype=torch.long, device=device).unsqueeze(0)  # (1, T)
@@ -107,7 +131,15 @@ def next_token(model: TinyGPT, device: torch.device, ctx_ids: List[int]) -> torc
 
 
 @torch.no_grad()
-def generate(model: TinyGPT, device: torch.device, ctx_ids: List[int], max_new: int, temperature: float = 1.0, topk: int = 0, eos_idx: int | None = None) -> List[int]:
+def generate(
+    model: TinyGPT,
+    device: torch.device,
+    ctx_ids: List[int],
+    max_new: int,
+    temperature: float = 1.0,
+    topk: int = 0,
+    eos_idx: int | None = None,
+) -> List[int]:
     ids = list(ctx_ids)
     max_T = getattr(model, "block_size", None)
     for _ in range(max_new):
@@ -130,7 +162,9 @@ def generate(model: TinyGPT, device: torch.device, ctx_ids: List[int], max_new: 
 
 
 @torch.no_grad()
-def score_sequence(model: TinyGPT, device: torch.device, ids: List[int]) -> Dict[str, float]:
+def score_sequence(
+    model: TinyGPT, device: torch.device, ids: List[int]
+) -> Dict[str, float]:
     x = torch.tensor(ids[:-1], dtype=torch.long, device=device).unsqueeze(0)
     y = torch.tensor(ids[1:], dtype=torch.long, device=device).unsqueeze(0)
     logits, loss = model(x, y)
@@ -170,7 +204,14 @@ def run_once(args) -> Dict:
         return _answer(args.dna, args, itos, stoi, model, device)
 
 
-def _answer(dna: str, args, itos: List[str], stoi: Dict[str, int], model: TinyGPT, device: torch.device) -> Dict:
+def _answer(
+    dna: str,
+    args,
+    itos: List[str],
+    stoi: Dict[str, int],
+    model: TinyGPT,
+    device: torch.device,
+) -> Dict:
     ids = dna_to_ids(dna, stoi)
     if not ids:
         return {"error": "prompt too short (<3 nt)"}
@@ -184,7 +225,15 @@ def _answer(dna: str, args, itos: List[str], stoi: Dict[str, int], model: TinyGP
             out.append({"token": itos[i], "prob": float(p)})
         return {"prompt": dna, "topk": out}
     elif args.mode == "generate":
-        gen_ids = generate(model, device, ids, max_new=args.max_new, temperature=args.temperature, topk=args.topk if args.topk>0 else 0, eos_idx=eos_idx)
+        gen_ids = generate(
+            model,
+            device,
+            ids,
+            max_new=args.max_new,
+            temperature=args.temperature,
+            topk=args.topk if args.topk > 0 else 0,
+            eos_idx=eos_idx,
+        )
         gen_toks = ids_to_codons(gen_ids, itos)
         return {"prompt": dna, "tokens": gen_toks}
     elif args.mode == "score":
@@ -194,9 +243,18 @@ def _answer(dna: str, args, itos: List[str], stoi: Dict[str, int], model: TinyGP
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Query a trained codon LM by run_id or run_dir.")
-    ap.add_argument("run_id", nargs="?", help="Run identifier under runs/<RUN_ID> (mutually exclusive with --run_dir)")
-    ap.add_argument("--run_dir", help="Alternative to run_id; path to outputs/checkpoints/<RUN_ID> or runs/<RUN_ID>")
+    ap = argparse.ArgumentParser(
+        description="Query a trained codon LM by run_id or run_dir."
+    )
+    ap.add_argument(
+        "run_id",
+        nargs="?",
+        help="Run identifier under runs/<RUN_ID> (mutually exclusive with --run_dir)",
+    )
+    ap.add_argument(
+        "--run_dir",
+        help="Alternative to run_id; path to outputs/checkpoints/<RUN_ID> or runs/<RUN_ID>",
+    )
     ap.add_argument("--mode", choices=["next", "generate", "score"], default="next")
     ap.add_argument("--dna", help="DNA prompt (uppercase ACGT)")
     ap.add_argument("--topk", type=int, default=5)
@@ -215,7 +273,8 @@ def main() -> None:
 
     result = run_once(args)
     if args.out:
-        outp = Path(args.out); outp.parent.mkdir(parents=True, exist_ok=True)
+        outp = Path(args.out)
+        outp.parent.mkdir(parents=True, exist_ok=True)
         outp.write_text(json.dumps(result, indent=2) + "\n")
     elif result:
         print(json.dumps(result, indent=2))

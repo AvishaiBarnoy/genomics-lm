@@ -1,0 +1,19 @@
+# Stage 3/5: Deeper and Wider Multi-Task Protein-Critic
+# Trains a single ProteinLM 12L8H backbone to classify Family, Function, and Stability
+
+# Data
+train_data: "data/processed/protein_lm/multitask/train.jsonl"
+val_data: "data/processed/protein_lm/multitask/val.jsonl"
+
+# Architecture
+block_size: 512
+n_layer: 12
+n_head: 8
+n_embd: 384
+dropout: 0.1
+
+# Training
+batch_size: 4
+epochs: 50
+lr: 0.0001
+out_dir: "runs/protein_critic_12L8H/checkpoints"

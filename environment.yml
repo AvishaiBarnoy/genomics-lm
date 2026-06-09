@@ -1,0 +1,22 @@
+name: codonlm
+channels: [conda-forge, pytorch]
+dependencies:
+  - python=3.11
+  - pytorch::pytorch
+  - pytorch::torchaudio
+  - pytorch::torchvision
+  - pandas
+  - numpy<2
+  - biopython
+  - scikit-learn
+  - pyyaml
+  - tqdm
+  - pip
+  - pip:
+      - matplotlib
+      - streamlit
+      - joblib
+      - tabulate
+      - jinja2
+      - pytest-cov
+      - ruff

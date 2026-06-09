@@ -6,13 +6,13 @@ scripts stay small and consistent. All functions are intentionally
 side-effect free (other than simple path creation) so they can be reused
 across command-line tools.
 """
+
 from __future__ import annotations
 
 import json
-import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
@@ -80,6 +80,7 @@ class ModelSpec:
 
 # ----- filesystem helpers -------------------------------------------------
 
+
 def ensure_run_layout(run_id: str) -> Dict[str, Path]:
     """Ensure that the standard directory layout for a run exists."""
 
@@ -91,7 +92,9 @@ def ensure_run_layout(run_id: str) -> Dict[str, Path]:
     return {"run": run_dir, "charts": charts_dir, "tables": tables_dir}
 
 
-def resolve_run(run_id: Optional[str] = None, run_dir: Optional[str | Path] = None) -> Tuple[str, Path]:
+def resolve_run(
+    run_id: Optional[str] = None, run_dir: Optional[str | Path] = None
+) -> Tuple[str, Path]:
     """Accept either a run_id or a run_dir and return (run_id, run_dir_path).
 
     If both are provided, run_dir wins and run_id is inferred from its basename.
@@ -135,7 +138,9 @@ def load_token_list(run_dir: Path) -> List[str]:
     tok_path = run_dir / "itos.txt"
     if not tok_path.exists():
         raise ArtifactError(f"itos.txt missing under {run_dir}")
-    tokens = [line.strip() for line in tok_path.read_text().splitlines() if line.strip()]
+    tokens = [
+        line.strip() for line in tok_path.read_text().splitlines() if line.strip()
+    ]
     if not tokens:
         raise ArtifactError(f"itos.txt at {tok_path} is empty")
     return tokens
@@ -146,6 +151,7 @@ def stoi(tokens: Sequence[str]) -> Dict[str, int]:
 
 
 # ----- model reconstruction ------------------------------------------------
+
 
 def build_model(spec: ModelSpec) -> torch.nn.Module:
     from src.codonlm.model_tiny_gpt import TinyGPT
@@ -164,14 +170,24 @@ def build_model(spec: ModelSpec) -> torch.nn.Module:
     return model
 
 
-def load_model(run_dir: Path, device: torch.device | str = "cpu", ckpt_name: str = "weights.pt") -> Tuple[torch.nn.Module, ModelSpec]:
+def load_model(
+    run_dir: Path, device: torch.device | str = "cpu", ckpt_name: str = "weights.pt"
+) -> Tuple[torch.nn.Module, ModelSpec]:
     meta = read_meta(run_dir)
     spec = ModelSpec.from_dict(meta["model_spec"])
-    weights_path = run_dir / ckpt_name
+
+    # Try consolidated checkpoints layout first
+    weights_path = run_dir / "checkpoints" / ckpt_name
+    if not weights_path.exists():
+        # Fallback to base run directory
+        weights_path = run_dir / ckpt_name
+
     if not weights_path.exists():
         raise ArtifactError(f"{ckpt_name} missing under {run_dir}")
     ckpt = torch.load(weights_path, map_location=device)
-    state_dict = ckpt["model"] if isinstance(ckpt, Mapping) and "model" in ckpt else ckpt
+    state_dict = (
+        ckpt["model"] if isinstance(ckpt, Mapping) and "model" in ckpt else ckpt
+    )
     model = build_model(spec)
     model.load_state_dict(state_dict, strict=False)
     model.to(device)

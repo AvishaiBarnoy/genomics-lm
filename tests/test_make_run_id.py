@@ -1,5 +1,4 @@
 import datetime as _dt
-from pathlib import Path
 
 from scripts.make_run_id import make_run_id
 

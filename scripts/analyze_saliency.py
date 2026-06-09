@@ -1,4 +1,5 @@
 """Compute gradient × input saliency for a validation sequence."""
+
 from __future__ import annotations
 
 import argparse
@@ -9,7 +10,13 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from ._shared import ensure_run_layout, load_artifacts, load_model, load_token_list, resolve_run
+from ._shared import (
+    ensure_run_layout,
+    load_artifacts,
+    load_model,
+    load_token_list,
+    resolve_run,
+)
 
 
 def main(argv: Optional[Iterable[str]] = None) -> None:

@@ -1,4 +1,3 @@
-import pytest
 import numpy as np
 from scripts.probe_structural_awareness import get_theoretical_shape
 

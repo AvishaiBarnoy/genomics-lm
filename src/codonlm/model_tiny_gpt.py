@@ -1,6 +1,9 @@
 """Compact GPT-style causal language model with optional checkpointing."""
 
-import math, torch, torch.nn as nn, torch.nn.functional as F
+import math
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 class CausalSelfAttention(nn.Module):

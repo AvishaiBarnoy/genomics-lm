@@ -1,14 +1,22 @@
 """Visualize attention maps for a collected run."""
+
 from __future__ import annotations
 
 import argparse
+import numpy as np
 from typing import Iterable, Optional
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from ._shared import ArtifactError, ensure_run_layout, load_artifacts, load_token_list, resolve_run
+from ._shared import (
+    ArtifactError,
+    ensure_run_layout,
+    load_artifacts,
+    load_token_list,
+    resolve_run,
+)
 
 
 def _plot_attention(attn: np.ndarray, tokens: list[str], out_path) -> None:

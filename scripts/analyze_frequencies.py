@@ -1,4 +1,5 @@
 """Frequency analysis for a collected run."""
+
 from __future__ import annotations
 
 import argparse
@@ -11,7 +12,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ._shared import ArtifactError, ensure_run_layout, load_artifacts, load_token_list, resolve_run
+from ._shared import (
+    ArtifactError,
+    ensure_run_layout,
+    load_artifacts,
+    load_token_list,
+    resolve_run,
+)
 
 
 def _top_k_indices(counts: np.ndarray, k: int = 20) -> np.ndarray:

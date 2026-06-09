@@ -13,6 +13,7 @@ CLI:
   python -m scripts.eval_generation_prefix --run_id <RUN_ID> \
     --k_list 1,3,5,10 --samples 5 --max_genes 50 --max_new 300 --temperature 0.8 --topk 5
 """
+
 from __future__ import annotations
 
 import argparse
@@ -33,14 +34,70 @@ from src.codonlm.generate import generate_cds_constrained
 # --- Biology helpers ---
 CODON_TO_AA: Dict[str, str] = {
     # fmt: off
-    "TTT":"F","TTC":"F","TTA":"L","TTG":"L","TCT":"S","TCC":"S","TCA":"S","TCG":"S",
-    "TAT":"Y","TAC":"Y","TAA":"Stop","TAG":"Stop","TGT":"C","TGC":"C","TGA":"Stop","TGG":"W",
-    "CTT":"L","CTC":"L","CTA":"L","CTG":"L","CCT":"P","CCC":"P","CCA":"P","CCG":"P",
-    "CAT":"H","CAC":"H","CAA":"Q","CAG":"Q","CGT":"R","CGC":"R","CGA":"R","CGG":"R",
-    "ATT":"I","ATC":"I","ATA":"I","ATG":"M","ACT":"T","ACC":"T","ACA":"T","ACG":"T",
-    "AAT":"N","AAC":"N","AAA":"K","AAG":"K","AGT":"S","AGC":"S","AGA":"R","AGG":"R",
-    "GTT":"V","GTC":"V","GTA":"V","GTG":"V","GCT":"A","GCC":"A","GCA":"A","GCG":"A",
-    "GAT":"D","GAC":"D","GAA":"E","GAG":"E","GGT":"G","GGC":"G","GGA":"G","GGG":"G",
+    "TTT": "F",
+    "TTC": "F",
+    "TTA": "L",
+    "TTG": "L",
+    "TCT": "S",
+    "TCC": "S",
+    "TCA": "S",
+    "TCG": "S",
+    "TAT": "Y",
+    "TAC": "Y",
+    "TAA": "Stop",
+    "TAG": "Stop",
+    "TGT": "C",
+    "TGC": "C",
+    "TGA": "Stop",
+    "TGG": "W",
+    "CTT": "L",
+    "CTC": "L",
+    "CTA": "L",
+    "CTG": "L",
+    "CCT": "P",
+    "CCC": "P",
+    "CCA": "P",
+    "CCG": "P",
+    "CAT": "H",
+    "CAC": "H",
+    "CAA": "Q",
+    "CAG": "Q",
+    "CGT": "R",
+    "CGC": "R",
+    "CGA": "R",
+    "CGG": "R",
+    "ATT": "I",
+    "ATC": "I",
+    "ATA": "I",
+    "ATG": "M",
+    "ACT": "T",
+    "ACC": "T",
+    "ACA": "T",
+    "ACG": "T",
+    "AAT": "N",
+    "AAC": "N",
+    "AAA": "K",
+    "AAG": "K",
+    "AGT": "S",
+    "AGC": "S",
+    "AGA": "R",
+    "AGG": "R",
+    "GTT": "V",
+    "GTC": "V",
+    "GTA": "V",
+    "GTG": "V",
+    "GCT": "A",
+    "GCC": "A",
+    "GCA": "A",
+    "GCG": "A",
+    "GAT": "D",
+    "GAC": "D",
+    "GAA": "E",
+    "GAG": "E",
+    "GGT": "G",
+    "GGC": "G",
+    "GGA": "G",
+    "GGG": "G",
     # fmt: on
 }
 
@@ -66,7 +123,9 @@ def _ngram_repeat_ratio(tokens: List[str], n: int = 3) -> float:
     return 1.0 - (uniq / total) if total else 0.0
 
 
-def _score_stop_behavior(gen_codons: List[str], truth_len_codons: int) -> Tuple[float, bool, bool]:
+def _score_stop_behavior(
+    gen_codons: List[str], truth_len_codons: int
+) -> Tuple[float, bool, bool]:
     """Return (StopScore, valid_end_stop, early_stop_flag).
 
     StopScore = 1 if ends with canonical stop and <eog> present; else decays with normalized
@@ -130,34 +189,48 @@ def main() -> None:
     ap.add_argument("--require_terminal_stop", action="store_true", default=False)
     ap.add_argument("--special_margin", type=int, default=6)
     # Normalization option for GQS
-    ap.add_argument("--gqs_normalize", choices=["none","len"], default="none",
-                    help="Normalize GQS by reference length (truth length if available, else gen length)")
-    ap.add_argument("--ckpt", default="best.pt", help="Which checkpoint to use (e.g., best.pt or last.pt)")
+    ap.add_argument(
+        "--gqs_normalize",
+        choices=["none", "len"],
+        default="none",
+        help="Normalize GQS by reference length (truth length if available, else gen length)",
+    )
+    ap.add_argument(
+        "--ckpt",
+        default="best.pt",
+        help="Which checkpoint to use (e.g., best.pt or last.pt)",
+    )
     args = ap.parse_args()
 
     repo = Path(__file__).resolve().parents[1]
     run_dir = repo / "runs" / args.run_id
-    out_dir = repo / "outputs" / "scores" / args.run_id / "gen_prefix"
+    out_dir = repo / "runs" / args.run_id / "scores" / "gen_prefix"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Load tokens + checkpoint
     itos, stoi = Q._load_vocab(run_dir)
-    
+
     # Custom loading for specific checkpoint
     meta = json.loads((run_dir / "meta.json").read_text())
     spec = meta["model_spec"]
-    
-    # Try looking in runs/ first, then fallback to outputs/checkpoints/
-    weights_path = run_dir / args.ckpt
+
+    # Try looking in consolidated layout first, then runs/ base, then legacy fallback
+    weights_path = run_dir / "checkpoints" / args.ckpt
+    if not weights_path.exists():
+        weights_path = run_dir / args.ckpt
     if not weights_path.exists():
         weights_path = repo / "outputs" / "checkpoints" / args.run_id / args.ckpt
         if not weights_path.exists():
-            raise FileNotFoundError(f"Checkpoint not found in runs/ or outputs/checkpoints/: {args.ckpt}")
-    
+            raise FileNotFoundError(f"Checkpoint not found: {args.ckpt}")
+
     ckpt = torch.load(weights_path, map_location=Q.dev())
     state_dict = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
     model = Q.build_model_from_state(state_dict, spec)
-    cfg = meta.get("cfg", ckpt.get("cfg", {})) if isinstance(ckpt, dict) else meta.get("cfg", {})
+    cfg = (
+        meta.get("cfg", ckpt.get("cfg", {}))
+        if isinstance(ckpt, dict)
+        else meta.get("cfg", {})
+    )
     device = Q.dev()
     model.to(device).eval()
     # Validate AA length constraints
@@ -174,19 +247,24 @@ def main() -> None:
             if not dna_path.is_absolute():
                 dna_path = repo / dna_path
     if dna_path is None or not dna_path.exists():
-        raise SystemExit("[gen-prefix] could not locate a CDS dna file via combined_manifest.json")
+        raise SystemExit(
+            "[gen-prefix] could not locate a CDS dna file via combined_manifest.json"
+        )
 
     # Build reference corpus codon unigram from test manifest if present (fallback: from dna file)
-    codon_mask = np.array([1 if (len(t) == 3 and all(c in "ACGT" for c in t)) else 0 for t in itos], dtype=np.int32)
+    codon_mask = np.array(
+        [1 if (len(t) == 3 and all(c in "ACGT" for c in t)) else 0 for t in itos],
+        dtype=np.int32,
+    )
     unigram = np.zeros((len(itos),), dtype=np.float64)
     # quick pass over dna file
     lines = 0
     with open(dna_path) as f:
         for line in f:
-            seq = line.strip().upper().replace("U","T")
+            seq = line.strip().upper().replace("U", "T")
             L = (len(seq) // 3) * 3
             for i in range(0, L, 3):
-                tok = seq[i:i+3]
+                tok = seq[i : i + 3]
                 j = stoi.get(tok, None)
                 if j is not None:
                     unigram[j] += 1
@@ -202,7 +280,7 @@ def main() -> None:
     cds: List[str] = []
     with open(dna_path) as f:
         for line in f:
-            s = line.strip().upper().replace("U","T")
+            s = line.strip().upper().replace("U", "T")
             if len(s) >= 9:
                 cds.append(s)
             if len(cds) >= args.max_genes:
@@ -234,7 +312,10 @@ def main() -> None:
         with torch.no_grad():
             logits, _ = model(x, y)
             loss_all = torch.nn.functional.cross_entropy(
-                logits.view(-1, logits.size(-1)), y.view(-1), ignore_index=0, reduction="none"
+                logits.view(-1, logits.size(-1)),
+                y.view(-1),
+                ignore_index=0,
+                reduction="none",
             ).view(1, -1)
         # first/last window
         w = min(10, loss_all.shape[1] // 4)
@@ -263,14 +344,22 @@ def main() -> None:
         return 1.0 if ok else 0.0
 
     def gqs(stop_score, aaid, syn, stab, norep, usage, frame) -> float:
-        return 100.0 * (0.30 * stop_score + 0.20 * aaid + 0.15 * syn + 0.10 * stab + 0.10 * norep + 0.10 * usage + 0.05 * frame)
+        return 100.0 * (
+            0.30 * stop_score
+            + 0.20 * aaid
+            + 0.15 * syn
+            + 0.10 * stab
+            + 0.10 * norep
+            + 0.10 * usage
+            + 0.05 * frame
+        )
 
     rows: List[SampleResult] = []
     k_list = [int(x) for x in args.k_list.split(",") if x]
 
     block_size = int(cfg.get("block_size", getattr(model, "block_size", 512)))
     for gene_idx, dna in enumerate(cds):
-        truth_codons = [dna[i:i+3] for i in range(0, (len(dna)//3)*3, 3)]
+        truth_codons = [dna[i : i + 3] for i in range(0, (len(dna) // 3) * 3, 3)]
         truth_aa = _aa_seq(truth_codons)
         for k in k_list:
             prefix = dna[: 3 * min(k, len(truth_codons))]
@@ -295,7 +384,7 @@ def main() -> None:
                     hard_cap=hard_cap,
                     require_terminal_stop=bool(args.require_terminal_stop),
                     temperature=float(args.temperature),
-                    topk=int(args.topk) if args.topk>0 else 0,
+                    topk=int(args.topk) if args.topk > 0 else 0,
                 )
                 gen_toks = Q.ids_to_codons(gen_ids, itos)
                 # strip BOS and anything before first codon
@@ -307,18 +396,37 @@ def main() -> None:
                 # metrics
                 aaid = aa_identity(truth_aa[k:], gen_cont_aa)
                 syn = syn_rate(truth_codons[k:], gen_cont_cod)
-                stop_score, valid_end, early = _score_stop_behavior(codons, truth_len_codons=len(truth_codons))
+                stop_score, valid_end, early = _score_stop_behavior(
+                    codons, truth_len_codons=len(truth_codons)
+                )
                 stab = ppl_stability([stoi.get(c, 0) for c in codons])
                 norep = 1.0 - _ngram_repeat_ratio(codons, n=3)
                 usage = usage_agree(gen_cont_ids)
                 frame = frame_integrity_ok(codons)
                 score = gqs(stop_score, aaid, syn, stab, norep, usage, frame)
-                rows.append(SampleResult(
-                    args.run_id, gene_idx, k, sidx, aaid, syn, stop_score, frame, stab, norep, usage, score,
-                    len(codons), valid_end, early,
-                    gen_len_codons=len(codons), had_terminal_stop=bool(info.get("had_terminal_stop", False)),
-                    hit_hard_cap=bool(info.get("hit_hard_cap", False)), target_codons=int(target_codons)
-                ))
+                rows.append(
+                    SampleResult(
+                        args.run_id,
+                        gene_idx,
+                        k,
+                        sidx,
+                        aaid,
+                        syn,
+                        stop_score,
+                        frame,
+                        stab,
+                        norep,
+                        usage,
+                        score,
+                        len(codons),
+                        valid_end,
+                        early,
+                        gen_len_codons=len(codons),
+                        had_terminal_stop=bool(info.get("had_terminal_stop", False)),
+                        hit_hard_cap=bool(info.get("hit_hard_cap", False)),
+                        target_codons=int(target_codons),
+                    )
+                )
 
     # write samples.csv
     samples_csv = out_dir / "samples.csv"
@@ -326,11 +434,14 @@ def main() -> None:
         writer = csv.writer(f)
         writer.writerow([c for c in SampleResult.__annotations__.keys()])
         for r in rows:
-            writer.writerow([getattr(r, c) for c in SampleResult.__annotations__.keys()])
+            writer.writerow(
+                [getattr(r, c) for c in SampleResult.__annotations__.keys()]
+            )
     print(f"[gen-prefix] wrote {samples_csv}")
 
     # summary per k
     import statistics as stats
+
     summary = []
     for k in k_list:
         rks = [r for r in rows if r.k == k]
@@ -357,29 +468,49 @@ def main() -> None:
             if norms:
                 mean_gqs_norm = float(sum(norms) / len(norms))
                 median_gqs_norm = float(stats.median(norms))
-        summary.append({
-            "k": k,
-            "termination_rate": term_rate,
-            "early_stop_rate": early_rate,
-            "median_gqs": median_gqs,
-            "mean_aa_identity": mean_aa,
-            "best_aa_identity": best_aa,
-            "mean_aa_len": mean_len,
-            "median_aa_len": median_len,
-            "terminal_stop_rate": stop_rate,
-            "hard_cap_rate": hard_cap_rate,
-            **({"mean_gqs_norm": mean_gqs_norm, "median_gqs_norm": median_gqs_norm} if args.gqs_normalize == "len" else {}),
-            "n": len(rks),
-        })
+        summary.append(
+            {
+                "k": k,
+                "termination_rate": term_rate,
+                "early_stop_rate": early_rate,
+                "median_gqs": median_gqs,
+                "mean_aa_identity": mean_aa,
+                "best_aa_identity": best_aa,
+                "mean_aa_len": mean_len,
+                "median_aa_len": median_len,
+                "terminal_stop_rate": stop_rate,
+                "hard_cap_rate": hard_cap_rate,
+                **(
+                    {"mean_gqs_norm": mean_gqs_norm, "median_gqs_norm": median_gqs_norm}
+                    if args.gqs_normalize == "len"
+                    else {}
+                ),
+                "n": len(rks),
+            }
+        )
     summary_csv = out_dir / "summary.csv"
     with summary_csv.open("w", newline="") as f:
         base_cols = [
-            "k","termination_rate","early_stop_rate","median_gqs","mean_aa_identity","best_aa_identity",
-            "mean_aa_len","median_aa_len","terminal_stop_rate","hard_cap_rate","n"
+            "k",
+            "termination_rate",
+            "early_stop_rate",
+            "median_gqs",
+            "mean_aa_identity",
+            "best_aa_identity",
+            "mean_aa_len",
+            "median_aa_len",
+            "terminal_stop_rate",
+            "hard_cap_rate",
+            "n",
         ]
-        extra = ["mean_gqs_norm","median_gqs_norm"] if any("mean_gqs_norm" in s for s in summary) else []
+        extra = (
+            ["mean_gqs_norm", "median_gqs_norm"]
+            if any("mean_gqs_norm" in s for s in summary)
+            else []
+        )
         writer = csv.DictWriter(f, fieldnames=base_cols + extra)
-        writer.writeheader(); writer.writerows(summary)
+        writer.writeheader()
+        writer.writerows(summary)
     print(f"[gen-prefix] wrote {summary_csv}")
 
     # simple plots
@@ -388,16 +519,42 @@ def main() -> None:
         tr = [s["termination_rate"] for s in summary]
         gq = [s["median_gqs"] for s in summary]
         aa = [s["mean_aa_identity"] for s in summary]
-        plt.figure(); plt.plot(ks, tr, marker='o'); plt.xlabel('k'); plt.ylabel('termination_rate'); plt.title('Termination vs k'); plt.tight_layout(); plt.savefig(out_dir/"termination_vs_k.png"); plt.close()
-        plt.figure(); plt.plot(ks, gq, marker='o'); plt.xlabel('k'); plt.ylabel('median_gqs'); plt.title('GQS vs k'); plt.tight_layout(); plt.savefig(out_dir/"gqs_vs_k.png"); plt.close()
-        plt.figure(); plt.plot(ks, aa, marker='o'); plt.xlabel('k'); plt.ylabel('mean_aa_identity'); plt.title('AA identity vs k'); plt.tight_layout(); plt.savefig(out_dir/"aa_vs_k.png"); plt.close()
+        plt.figure()
+        plt.plot(ks, tr, marker="o")
+        plt.xlabel("k")
+        plt.ylabel("termination_rate")
+        plt.title("Termination vs k")
+        plt.tight_layout()
+        plt.savefig(out_dir / "termination_vs_k.png")
+        plt.close()
+        plt.figure()
+        plt.plot(ks, gq, marker="o")
+        plt.xlabel("k")
+        plt.ylabel("median_gqs")
+        plt.title("GQS vs k")
+        plt.tight_layout()
+        plt.savefig(out_dir / "gqs_vs_k.png")
+        plt.close()
+        plt.figure()
+        plt.plot(ks, aa, marker="o")
+        plt.xlabel("k")
+        plt.ylabel("mean_aa_identity")
+        plt.title("AA identity vs k")
+        plt.tight_layout()
+        plt.savefig(out_dir / "aa_vs_k.png")
+        plt.close()
         ml = [s["mean_aa_len"] for s in summary]
-        plt.figure(); plt.plot(ks, ml, marker='o'); plt.xlabel('k'); plt.ylabel('mean_aa_len'); plt.title('AA length vs k'); plt.tight_layout();
-        plt.savefig(out_dir/"aa_len_vs_k.png");
+        plt.figure()
+        plt.plot(ks, ml, marker="o")
+        plt.xlabel("k")
+        plt.ylabel("mean_aa_len")
+        plt.title("AA length vs k")
+        plt.tight_layout()
+        plt.savefig(out_dir / "aa_len_vs_k.png")
         try:
             figs_root = Path(__file__).resolve().parents[1] / "outputs" / "figs"
             figs_root.mkdir(parents=True, exist_ok=True)
-            plt.savefig(figs_root/"aa_len_vs_k.png")
+            plt.savefig(figs_root / "aa_len_vs_k.png")
         except Exception:
             pass
         plt.close()

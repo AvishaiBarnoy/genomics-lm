@@ -41,6 +41,7 @@ for alias, canonical in ALIASES.items():
     stoi[alias] = stoi[canonical]
 
 def to_ids(dna: str) -> list[int]:
+    """Converts a DNA sequence string into a list of token IDs, wrapping it in BOS and EOS tokens."""
     dna = dna.strip().upper().replace("U", "T")
     if len(dna) < 3:
         return []
@@ -63,7 +64,9 @@ def to_ids(dna: str) -> list[int]:
     ids.append(stoi["<EOS_CDS>"])
     return ids
 
+
 def main():
+    """Reads CDS DNA lines, tokenizes them to codon IDs, and writes tokenized text and vocabulary mapping files."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--inp", default="data/processed/cds_dna.txt")
     ap.add_argument("--out_ids", default="data/processed/codon_ids.txt")
@@ -71,8 +74,10 @@ def main():
     ap.add_argument("--out_itos", default="data/processed/itos_codon.txt")
     args = ap.parse_args()
 
-    ids_path = Path(args.out_ids); ids_path.parent.mkdir(parents=True, exist_ok=True)
+    ids_path = Path(args.out_ids)
+    ids_path.parent.mkdir(parents=True, exist_ok=True)
     with open(args.inp) as fin, open(args.out_ids, "w") as fout:
+
         n=0
         for line in fin:
             arr = to_ids(line)

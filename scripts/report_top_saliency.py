@@ -7,6 +7,7 @@ mass for the first captured sample).
 
 Outputs: runs/<RUN_ID>/tables/top_saliency_segments.csv
 """
+
 from __future__ import annotations
 
 import argparse
@@ -16,7 +17,14 @@ from typing import Iterable, Optional
 import numpy as np
 import torch
 
-from ._shared import ensure_run_layout, load_artifacts, load_token_list, load_model, stoi, resolve_run
+from ._shared import (
+    ensure_run_layout,
+    load_artifacts,
+    load_token_list,
+    load_model,
+    stoi,
+    resolve_run,
+)
 
 
 def main(argv: Optional[Iterable[str]] = None) -> None:
@@ -38,7 +46,7 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         return
     pos, token, sal = [], [], []
     with sal_path.open("r") as fh:
-        header = fh.readline()
+        fh.readline()
         for line in fh:
             parts = line.strip().split(",")
             if len(parts) < 3:
@@ -46,10 +54,13 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
             if len(parts) < 3:
                 continue
             try:
-                p = int(parts[0]); s = float(parts[2])
+                p = int(parts[0])
+                s = float(parts[2])
             except Exception:
                 continue
-            pos.append(p); token.append(parts[1]); sal.append(s)
+            pos.append(p)
+            token.append(parts[1])
+            sal.append(s)
     if not sal:
         print("[top-saliency] empty saliency; aborting")
         return
@@ -63,7 +74,9 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         return
 
     # Compute summed saliency over sliding windows
-    sums = np.array([sal_arr[i:i+w].sum() for i in range(0, T - w + 1)], dtype=np.float32)
+    sums = np.array(
+        [sal_arr[i : i + w].sum() for i in range(0, T - w + 1)], dtype=np.float32
+    )
     order = np.argsort(-sums)[: int(args.top)]
 
     # Try to load attention
@@ -128,19 +141,23 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
                     cluster_dist = f"{float(dists[nearest]):.6f}"
             except Exception as exc:
                 print(f"[top-saliency] failed cluster match: {exc}")
-        rows.append((i, "-".join(tok_span), f"{score:.6f}", att_score, cluster_id, cluster_dist))
+        rows.append(
+            (i, "-".join(tok_span), f"{score:.6f}", att_score, cluster_id, cluster_dist)
+        )
 
     out_path = tables_dir / "top_saliency_segments.csv"
     with out_path.open("w", newline="") as fh:
         wtr = csv.writer(fh)
-        wtr.writerow([
-            "start_pos",
-            "tokens",
-            "saliency_sum",
-            "mean_attn_in_window",
-            "nearest_cluster",
-            "cluster_distance",
-        ])
+        wtr.writerow(
+            [
+                "start_pos",
+                "tokens",
+                "saliency_sum",
+                "mean_attn_in_window",
+                "nearest_cluster",
+                "cluster_distance",
+            ]
+        )
         for r in rows:
             wtr.writerow(r)
 

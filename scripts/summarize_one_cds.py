@@ -1,4 +1,5 @@
 """Summarize one_cds__best.tsv if present."""
+
 from __future__ import annotations
 
 import argparse

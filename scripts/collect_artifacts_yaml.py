@@ -9,6 +9,7 @@ symlinks the weights into ``runs/<run_id>/weights.pt`` and saves a compact
 statistics, logits, probabilities, and attention tensors. Optional files
 (``motif_clusters.npz`` and ``one_cds__best.tsv``) are copied when present.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -16,7 +17,7 @@ import json
 import math
 import shutil
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import Dict, Iterable, Mapping, Optional, Tuple
 
 import numpy as np
 import torch
@@ -28,7 +29,6 @@ import os
 from ._shared import (
     ArtifactError,
     ModelSpec,
-    RUNS_DIR,
     build_model,
     compute_bincount,
     ensure_run_layout,
@@ -41,6 +41,7 @@ ATTN_DTYPE = np.float32
 
 REPO_MARKERS = {".git", "pyproject.toml", "setup.cfg", "setup.py"}
 
+
 def _find_repo_root(start: Path) -> Path:
     cur = start
     while True:
@@ -50,6 +51,7 @@ def _find_repo_root(start: Path) -> Path:
             # Fallback: if we never found a marker, assume configs/ is directly under root
             return start.parent
         cur = cur.parent
+
 
 def _resolve_from(base: Path, maybe_path: Optional[str]) -> Optional[Path]:
     """Expand ~ and $VARS, then make relative to base."""
@@ -79,7 +81,11 @@ def _extract_positional_embeddings(model: torch.nn.Module) -> np.ndarray:
         if torch.is_tensor(pe):
             return ensure_numpy(pe).astype(np.float32)
         # Case 2: nn.Embedding or anything with a .weight Tensor
-        if isinstance(pe, nn.Module) and hasattr(pe, "weight") and torch.is_tensor(pe.weight):
+        if (
+            isinstance(pe, nn.Module)
+            and hasattr(pe, "weight")
+            and torch.is_tensor(pe.weight)
+        ):
             return ensure_numpy(pe.weight).astype(np.float32)
     # Nothing found
     return np.zeros((0,), dtype=np.float32)
@@ -94,7 +100,10 @@ def _load_yaml(yaml_path: Path) -> Mapping[str, object]:
         raise ValueError(f"Config at {yaml_path} is not a mapping")
     return cfg
 
-def _find_checkpoint(check_dir: Path, run_id: Optional[str] = None, target_name: str = "best.pt") -> Path:
+
+def _find_checkpoint(
+    check_dir: Path, run_id: Optional[str] = None, target_name: str = "best.pt"
+) -> Path:
     """
     Look for best.pt/last.pt in either:
     - check_dir (flat layout), or
@@ -111,17 +120,30 @@ def _find_checkpoint(check_dir: Path, run_id: Optional[str] = None, target_name:
     alt_dirs = []
     # Variants with provided run_id
     if run_id:
-        alt_dirs.extend([
-            check_dir.parent / f"{check_dir.name}_{run_id}",              # e.g., outputs/checkpoints_<RUN_ID>
-            check_dir.parent / f"{check_dir.name}_tiny" / run_id,        # e.g., outputs/checkpoints_tiny/<RUN_ID>
-            Path("outputs") / f"{check_dir.name}" / run_id,             # e.g., outputs/checkpoints/<RUN_ID>
-            Path("outputs") / f"{check_dir.name}_tiny" / run_id,        # e.g., outputs/checkpoints_tiny/<RUN_ID>
-        ])
+        alt_dirs.extend(
+            [
+                check_dir.parent
+                / f"{check_dir.name}_{run_id}",  # e.g., outputs/checkpoints_<RUN_ID>
+                check_dir.parent
+                / f"{check_dir.name}_tiny"
+                / run_id,  # e.g., outputs/checkpoints_tiny/<RUN_ID>
+                Path("outputs")
+                / f"{check_dir.name}"
+                / run_id,  # e.g., outputs/checkpoints/<RUN_ID>
+                Path("outputs")
+                / f"{check_dir.name}_tiny"
+                / run_id,  # e.g., outputs/checkpoints_tiny/<RUN_ID>
+            ]
+        )
     # Flat directories without run_id (v1 layout like outputs/checkpoints_tiny/best.pt)
-    alt_dirs.extend([
-        check_dir.parent / f"{check_dir.name}_tiny",                      # e.g., outputs/checkpoints_tiny
-        Path("outputs") / f"{check_dir.name}_tiny",                     # e.g., outputs/checkpoints_tiny
-    ])
+    alt_dirs.extend(
+        [
+            check_dir.parent
+            / f"{check_dir.name}_tiny",  # e.g., outputs/checkpoints_tiny
+            Path("outputs")
+            / f"{check_dir.name}_tiny",  # e.g., outputs/checkpoints_tiny
+        ]
+    )
     for alt in alt_dirs:
         if alt.exists() and alt not in search_roots:
             search_roots.append(alt)
@@ -133,7 +155,9 @@ def _find_checkpoint(check_dir: Path, run_id: Optional[str] = None, target_name:
                 return cand.resolve()
 
     places = ", ".join(str(r) for r in search_roots)
-    raise FileNotFoundError(f"No checkpoint found (looked for best.pt/last.pt) under: {places}")
+    raise FileNotFoundError(
+        f"No checkpoint found (looked for best.pt/last.pt) under: {places}"
+    )
 
 
 def _maybe_copy(src: Path, dst: Path) -> None:
@@ -141,7 +165,12 @@ def _maybe_copy(src: Path, dst: Path) -> None:
         shutil.copy2(src, dst)
 
 
-def _find_token_file(out_dir: Path, repo_root: Path, cfg: Mapping[str, object], run_dir: Optional[Path] = None) -> Optional[Path]:
+def _find_token_file(
+    out_dir: Path,
+    repo_root: Path,
+    cfg: Mapping[str, object],
+    run_dir: Optional[Path] = None,
+) -> Optional[Path]:
     candidate_keys = ["itos_path", "tokenizer_path", "token_map", "token_file"]
     for key in candidate_keys:
         val = cfg.get(key)
@@ -208,7 +237,9 @@ def _load_npz_dataset(npz_path: Path) -> Dict[str, np.ndarray]:
     return arrays
 
 
-def _infer_spec_from_state(cfg: Mapping[str, object], state_dict: Mapping[str, torch.Tensor]) -> ModelSpec:
+def _infer_spec_from_state(
+    cfg: Mapping[str, object], state_dict: Mapping[str, torch.Tensor]
+) -> ModelSpec:
     model_type = cfg.get("model_type", "tiny_gpt")
     required_keys = ["vocab_size", "block_size", "n_layer", "n_head", "n_embd"]
     missing = [k for k in required_keys if k not in cfg]
@@ -228,12 +259,18 @@ def _infer_spec_from_state(cfg: Mapping[str, object], state_dict: Mapping[str, t
     return spec
 
 
-def _capture_attention(model: torch.nn.Module, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+def _capture_attention(
+    model: torch.nn.Module, inputs: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor]:
     attn_maps: Dict[int, torch.Tensor] = {}
     handles = []
 
     def make_hook(layer_idx: int):
-        def _hook(module: torch.nn.Module, module_inputs: Tuple[torch.Tensor, ...], module_output: torch.Tensor):
+        def _hook(
+            module: torch.nn.Module,
+            module_inputs: Tuple[torch.Tensor, ...],
+            module_output: torch.Tensor,
+        ):
             x = module_inputs[0]
             with torch.no_grad():
                 if hasattr(module, "qkv"):
@@ -257,7 +294,9 @@ def _capture_attention(model: torch.nn.Module, inputs: torch.Tensor) -> Tuple[to
                     att = att.masked_fill(mask == 0, float("-inf"))
                     att = torch.softmax(att, dim=-1)
                 else:
-                    raise RuntimeError("Unknown attention module; cannot capture attention map")
+                    raise RuntimeError(
+                        "Unknown attention module; cannot capture attention map"
+                    )
             attn_maps[layer_idx] = att.detach().cpu()
 
         return _hook
@@ -283,7 +322,9 @@ def _capture_attention(model: torch.nn.Module, inputs: torch.Tensor) -> Tuple[to
     return logits, attn_tensor
 
 
-def _evaluate_perplexity(model: torch.nn.Module, inputs: np.ndarray, targets: np.ndarray, vocab: int) -> Optional[float]:
+def _evaluate_perplexity(
+    model: torch.nn.Module, inputs: np.ndarray, targets: np.ndarray, vocab: int
+) -> Optional[float]:
     if inputs.size == 0 or targets.size == 0:
         return None
     device = next(model.parameters()).device
@@ -306,7 +347,7 @@ def _evaluate_perplexity(model: torch.nn.Module, inputs: np.ndarray, targets: np
             else:
                 raise RuntimeError("Unexpected model output during evaluation")
         total_loss += float(loss.item()) * (end - start)
-        total_tokens += (end - start)
+        total_tokens += end - start
     if total_tokens == 0:
         return None
     mean_loss = total_loss / total_tokens
@@ -322,7 +363,11 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("run_id")
     ap.add_argument("config")
-    ap.add_argument("--ckpt", default="best.pt", help="Which checkpoint to use (e.g., best.pt or last.pt)")
+    ap.add_argument(
+        "--ckpt",
+        default="best.pt",
+        help="Which checkpoint to use (e.g., best.pt or last.pt)",
+    )
     args = ap.parse_args(argv)
 
     run_paths = ensure_run_layout(args.run_id)
@@ -332,12 +377,16 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
     yaml_dir = yaml_path.parent
     repo_root = _find_repo_root(yaml_dir)
 
-    out_dir_cfg = cfg.get("out_dir") or cfg.get("checkpoints_dir") or "outputs/checkpoints"
+    out_dir_cfg = (
+        cfg.get("out_dir") or cfg.get("checkpoints_dir") or "outputs/checkpoints"
+    )
     out_dir = _resolve_from(repo_root, str(out_dir_cfg))
     if out_dir is None or not out_dir.exists():
         raise FileNotFoundError(f"Output directory not found: {out_dir}")
 
-    checkpoint_path = _find_checkpoint(out_dir, run_id=args.run_id, target_name=args.ckpt)
+    checkpoint_path = _find_checkpoint(
+        out_dir, run_id=args.run_id, target_name=args.ckpt
+    )
 
     weights_dst = run_dir / "weights.pt"
     if weights_dst.exists() or weights_dst.is_symlink():
@@ -353,7 +402,9 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
     token_path = _find_token_file(out_dir, repo_root, cfg, run_dir)
     vocab_size = int(cfg.get("vocab_size", 0) or 0)
     if token_path and token_path.exists():
-        tokens = [line.strip() for line in token_path.read_text().splitlines() if line.strip()]
+        tokens = [
+            line.strip() for line in token_path.read_text().splitlines() if line.strip()
+        ]
     else:
         tokens = [f"tok_{i}" for i in range(vocab_size)]
     (run_dir / "itos.txt").write_text("\n".join(tokens) + "\n")
@@ -361,7 +412,11 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
     if isinstance(checkpoint, Mapping) and "model" in checkpoint:
         state_dict = checkpoint["model"]
-        ckpt_cfg = checkpoint.get("cfg", {}) if isinstance(checkpoint.get("cfg"), Mapping) else {}
+        ckpt_cfg = (
+            checkpoint.get("cfg", {})
+            if isinstance(checkpoint.get("cfg"), Mapping)
+            else {}
+        )
     else:
         state_dict = checkpoint
         ckpt_cfg = {}
@@ -386,13 +441,23 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
             val_inputs = np.asarray(data["X"], dtype=np.int64)
             token_counts = compute_bincount(val_inputs, spec.vocab_size)
             if val_inputs.size > 0:
-                first_token_counts = compute_bincount(val_inputs[:, :1], spec.vocab_size)
+                first_token_counts = compute_bincount(
+                    val_inputs[:, :1], spec.vocab_size
+                )
         if "Y" in data:
             val_targets = np.asarray(data["Y"], dtype=np.int64)
         if val_targets is None and val_inputs is not None:
             val_targets = np.roll(val_inputs, -1, axis=1)
-        arrays["val_inputs"] = val_inputs[:32].copy() if val_inputs is not None else np.zeros((0,), dtype=np.int64)
-        arrays["val_targets"] = val_targets[:32].copy() if val_targets is not None else np.zeros((0,), dtype=np.int64)
+        arrays["val_inputs"] = (
+            val_inputs[:32].copy()
+            if val_inputs is not None
+            else np.zeros((0,), dtype=np.int64)
+        )
+        arrays["val_targets"] = (
+            val_targets[:32].copy()
+            if val_targets is not None
+            else np.zeros((0,), dtype=np.int64)
+        )
     else:
         arrays["val_inputs"] = np.zeros((0,), dtype=np.int64)
         arrays["val_targets"] = np.zeros((0,), dtype=np.int64)
@@ -417,8 +482,12 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
             "logits": logits_arr,
             "probs": probs_arr,
             "attn": attn_arr,
-            "token_counts": token_counts if token_counts is not None else np.zeros((vocab_size,), dtype=np.int64),
-            "first_token_counts": first_token_counts if first_token_counts is not None else np.zeros((vocab_size,), dtype=np.int64),
+            "token_counts": token_counts
+            if token_counts is not None
+            else np.zeros((vocab_size,), dtype=np.int64),
+            "first_token_counts": first_token_counts
+            if first_token_counts is not None
+            else np.zeros((vocab_size,), dtype=np.int64),
         }
     )
 

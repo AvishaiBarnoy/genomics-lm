@@ -1,6 +1,3 @@
-import pytest
-import numpy as np
-from pathlib import Path
 from src.codonlm.extract_genomic_tape import extract_tapes
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord

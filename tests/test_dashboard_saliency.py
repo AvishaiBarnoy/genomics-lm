@@ -1,7 +1,5 @@
 import pytest
-import pandas as pd
 import io
-import os
 from unittest.mock import Mock, patch
 from src.eval.visualizer import Visualizer
 from src.eval.aggregator import ResultsAggregator

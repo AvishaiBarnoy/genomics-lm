@@ -3,7 +3,7 @@
 ## Core
 - **Programming Language:** Python
 - **ML Framework:** PyTorch (used for model architecture, training, and inference)
-- **Environment:** Conda (environment defined in `env/conda-environment.yml`)
+- **Environment:** Conda (environment defined in `environment.yml` or root `requirements.txt`)
 
 ## Data & Configuration
 - **Configuration:** YAML (experiment parameters and model definitions)

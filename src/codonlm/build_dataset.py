@@ -10,14 +10,19 @@ Args:
 """
 
 from pathlib import Path
-import argparse, numpy as np, random, collections
+import argparse
+import numpy as np
+import random
 from typing import List
 
 def load_lines(path):
+    """Loads whitespace-separated integers from each line of a file."""
     with open(path) as f:
-        for line in f: yield [int(x) for x in line.strip().split()]
+        for line in f:
+            yield [int(x) for x in line.strip().split()]
 
 def main():
+    """Builds and splits datasets by genome groups into train/val/test NPZ files."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--ids", default="data/processed/codon_ids.txt")
     ap.add_argument("--group_meta", default="data/processed/cds_meta.tsv")
@@ -30,7 +35,8 @@ def main():
                     help="'multi': pack multiple CDS per window with <SEP>; 'single': one CDS per window")
     ap.add_argument("--seed", type=int, default=1337)
     args = ap.parse_args()
-    rng = random.Random(args.seed); np.random.seed(args.seed)
+    rng = random.Random(args.seed)
+    np.random.seed(args.seed)
 
     # load sequences
     seqs = list(load_lines(args.ids))
@@ -50,21 +56,18 @@ def main():
     buckets = {"train": [], "val": [], "test": []}
 
     if len(uniq) < 3:
-        # Fallback: not enough distinct genomes to form 3 splits.
-        idx = list(range(len(seqs)))
-        rng.shuffle(idx)
-        n_total = len(idx)
-        n_test_seq = max(1, int(n_total * args.test_frac)) if n_total > 2 else (1 if n_total > 0 else 0)
-        n_val_seq = max(1, int((n_total - n_test_seq) * args.val_frac)) if (n_total - n_test_seq) > 1 else 0
-        test_idx = set(idx[:n_test_seq])
-        val_idx = set(idx[n_test_seq:n_test_seq + n_val_seq])
+        # fallback to sequence-level split
+        indices = list(range(len(seqs)))
+        rng.shuffle(indices)
+        n_test = max(1, int(len(seqs) * args.test_frac))
+        n_val = max(1, int(len(seqs) * args.val_frac))
+        
+        test_idx = set(indices[:n_test])
+        val_idx = set(indices[n_test:n_test + n_val])
+        
         for i, arr in enumerate(seqs):
-            if i in test_idx:
-                buckets["test"].append(arr)
-            elif i in val_idx:
-                buckets["val"].append(arr)
-            else:
-                buckets["train"].append(arr)
+            key = "val" if i in val_idx else "test" if i in test_idx else "train"
+            buckets[key].append(arr)
     else:
         n_test = max(1, int(len(uniq) * args.test_frac))
         n_val = max(1, int(len(uniq) * args.val_frac))
@@ -75,7 +78,6 @@ def main():
             if n_test + n_val >= len(uniq):
                 n_test = max(0, len(uniq) - 1)
 
-        test_groups = set(uniq[:n_test])
         val_groups = set(uniq[n_test:n_test + n_val])
         train_groups = set(uniq[n_test + n_val:])
 
@@ -93,6 +95,7 @@ def main():
           - Insert <SEP> (id=3) between CDS segments when space permits.
           - If a CDS overflows the remaining space, truncate and carry remainder to the next window.
         """
+        print(f"[build] packing multi: {name} (subset size={len(subset)})")
         SEP_ID = 3  # matches codon_tokenize.py SPECIALS order
         PAD_ID = 0
 
@@ -113,7 +116,6 @@ def main():
         # Create an index queue we can shuffle each pass
         indices = list(range(len(seqs)))
         offsets = [0] * len(seqs)
-        cur_ptr = 0
 
         made = 0
         for _ in range(windows_goal):
@@ -177,6 +179,7 @@ def main():
         print(f"[pack-stats] {name}: avg_cds_per_window={avg_cds:.2f} sep_pct={sep_pct:.3f} pad_pct={pad_pct:.3f}")
 
     def pack_single(name, subset):
+        """Packs each sequence independently into windows (one CDS per window, padded or cropped)."""
         Xs, Ys = [], []
         for arr in subset:
             if len(arr) <= 2:

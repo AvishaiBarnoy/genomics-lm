@@ -1,4 +1,3 @@
-import pytest
 import pandas as pd
 import numpy as np
 from scripts.web_dashboard import prepare_pca_dataframe

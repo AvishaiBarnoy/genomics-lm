@@ -1,0 +1,15 @@
+torch
+pandas
+numpy<2
+biopython
+scikit-learn
+pyyaml
+tqdm
+matplotlib
+pytest
+pytest-cov
+ruff
+streamlit
+joblib
+tabulate
+jinja2

@@ -1,6 +1,4 @@
 import torch
-import numpy as np
-import pytest
 from src.codonlm.model_tiny_gpt import TinyGPT
 from src.eval.motif_extractor import MotifExtractor
 

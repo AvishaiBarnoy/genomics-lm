@@ -3,26 +3,36 @@
 Compute validation perplexity for a saved checkpoint on the packed val set.
 """
 
-import argparse, math, torch, numpy as np
-from torch.utils.data import DataLoader, Dataset
+import argparse
+import torch
+import numpy as np
+from torch.utils.data import Dataset
 from .model_tiny_gpt import TinyGPT
 
 
-def dev():
-    return "mps" if torch.backends.mps.is_available() else "cpu"
-
 class PackedDataset(Dataset):
+    """PyTorch dataset that loads inputs (X) and targets (Y) from a compressed NPZ file."""
     def __init__(self, npz_path):
+        """Initializes PackedDataset by loading numpy arrays."""
         d = np.load(npz_path)
         self.X = torch.from_numpy(d["X"]).long()
         self.Y = torch.from_numpy(d["Y"]).long()
-    def __len__(self): return self.X.shape[0]
-    def __getitem__(self, i): return self.X[i], self.Y[i]
+
+    def __len__(self):
+        """Returns the number of samples in the dataset."""
+        return self.X.shape[0]
+
+    def __getitem__(self, i):
+        """Gets a tuple of (input_seq, target_seq) at index i."""
+        return self.X[i], self.Y[i]
 
 def dev():
+    """Returns the torch device to use, preferring mps (metal performance shaders) if available."""
     return torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
 
 def main():
+    """Computes validation perplexity for a saved checkpoint on the val set."""
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", required=True)
     ap.add_argument("--val_npz", required=True)

@@ -1,16 +1,14 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-import pandas as pd
+import time
 import json
 import argparse
 import yaml
-import math
 from pathlib import Path
 from src.protein_lm.tokenizer import ProteinTokenizer
 from src.protein_lm.models_multi import MultiTaskProteinClassifier
-from src.protein_lm.config import ProteinClassifierConfig, load_config
-from scripts._shared import ensure_run_layout, write_meta
+from src.protein_lm.config import ProteinClassifierConfig
 
 class MultiTaskProteinDataset(Dataset):
     def __init__(self, jsonl_path, tokenizer, max_length=512):
@@ -44,7 +42,7 @@ class MultiTaskProteinDataset(Dataset):
             "stability": torch.tensor(s.get("stability_id", -1), dtype=torch.long)
         }
 
-def train_multi_task(config_path):
+def train_multi_task(config_path, resume_path=None):
     with open(config_path, 'r') as f:
         cfg = yaml.safe_load(f)
         
@@ -73,13 +71,14 @@ def train_multi_task(config_path):
         n_head=cfg.get("n_head", 4),
         n_embd=cfg.get("n_embd", 128),
         dropout=cfg.get("dropout", 0.1),
-        num_classes=0 # Dummy value for multi-task backbone
+        num_classes=0, # Dummy value for multi-task backbone
+        use_checkpoint=cfg.get("use_checkpoint", False)
     )
 
-    print(f"[*] Building model...")
+    print("[*] Building model...")
     model = MultiTaskProteinClassifier(model_cfg, task_dims).to(device)
     
-    print(f"[*] Loading datasets...")
+    print("[*] Loading datasets...")
     train_ds = MultiTaskProteinDataset(cfg["train_data"], tokenizer, max_length=model_cfg.block_size)
     val_ds = MultiTaskProteinDataset(cfg["val_data"], tokenizer, max_length=model_cfg.block_size)
     
@@ -91,22 +90,43 @@ def train_multi_task(config_path):
     # CrossEntropyLoss with ignore_index=-1 handles the missing labels
     criterion = nn.CrossEntropyLoss(ignore_index=-1)
 
-    print(f"[*] Starting Multi-Task Training...")
-    
     best_val_loss = float('inf')
+    start_epoch = 0
+    if resume_path and Path(resume_path).exists():
+        print(f"[*] Resuming from checkpoint: {resume_path}")
+        checkpoint = torch.load(resume_path, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_epoch = checkpoint['epoch'] + 1
+        best_val_loss = checkpoint.get('best_val_loss', float('inf'))
+        print(f"[*] Resumed checkpoint. Next epoch: {start_epoch + 1} with best val loss: {best_val_loss:.4f}")
+
+    print("[*] Starting Multi-Task Training...")
     epochs = cfg.get("epochs", 5)
+    grad_accum_steps = cfg.get("grad_accum_steps", 1)
+    print(f"[*] Gradient accumulation steps: {grad_accum_steps}")
     
-    out_dir = Path(cfg.get("out_dir", "outputs/checkpoints/protein_critic"))
+    max_time_minutes = cfg.get("max_time_minutes", None)
+    max_time_seconds = max_time_minutes * 60 if max_time_minutes else None
+    if max_time_minutes:
+        print(f"[*] Wall-time limit configured: {max_time_minutes} minutes")
+    
+    start_time = time.time()
+    
+    out_dir = Path(cfg.get("out_dir", "runs/protein_critic/checkpoints"))
     out_dir.mkdir(parents=True, exist_ok=True)
     
-    for epoch in range(epochs):
+    time_limit_reached = False
+    for epoch in range(start_epoch, epochs):
+        if time_limit_reached:
+            break
         model.train()
         train_loss = 0.0
+        optimizer.zero_grad()
         
-        for batch in train_loader:
+        for step, batch in enumerate(train_loader):
             input_ids = batch["input_ids"].to(device)
             
-            optimizer.zero_grad()
             logits_dict = model(input_ids)
             
             loss = 0
@@ -119,13 +139,36 @@ def train_multi_task(config_path):
                     tasks_added += 1
             
             if tasks_added > 0:
+                loss = loss / grad_accum_steps
                 loss.backward()
+                train_loss += loss.item() * grad_accum_steps
+            
+            if (step + 1) % grad_accum_steps == 0 or (step + 1) == len(train_loader):
                 optimizer.step()
-                train_loss += loss.item()
-            else:
-                optimizer.step() # Still step optimizer to avoid potential stale grads? Or just skip.
+                optimizer.zero_grad()
+                
+                if device.type == "mps":
+                    torch.mps.empty_cache()
+            elif (step + 1) % 250 == 0 and device.type == "mps":
+                torch.mps.empty_cache()
+
+            # Check wall-time limit at the end of every step
+            if max_time_seconds and (time.time() - start_time) > max_time_seconds:
+                print(f"\n[info] Wall-time limit of {max_time_minutes} minutes reached mid-epoch.")
+                checkpoint = {
+                    'epoch': epoch,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'best_val_loss': best_val_loss,
+                }
+                torch.save(checkpoint, out_dir / "last_critic.pt")
+                print(f"[success] Gracefully saved checkpoint to {out_dir / 'last_critic.pt'}. Exiting.")
+                time_limit_reached = True
+                break
             
         train_loss /= len(train_loader)
+        if device.type == "mps":
+            torch.mps.empty_cache()
         
         model.eval()
         val_loss = 0.0
@@ -149,15 +192,27 @@ def train_multi_task(config_path):
         
         if val_tasks_total > 0:
             val_loss /= val_tasks_total
+        if device.type == "mps":
+            torch.mps.empty_cache()
         print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
         
+        # Save last checkpoint for resilience
+        checkpoint = {
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'best_val_loss': best_val_loss,
+        }
+        torch.save(checkpoint, out_dir / "last_critic.pt")
+
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             torch.save(model.state_dict(), out_dir / "best_critic.pt")
-            print(f"  -> Saved new best model.")
+            print("  -> Saved new best model.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True, help="Path to YAML config")
+    parser.add_argument("--resume", default=None, help="Path to checkpoint file to resume from")
     args = parser.parse_args()
-    train_multi_task(args.config)
+    train_multi_task(args.config, args.resume)

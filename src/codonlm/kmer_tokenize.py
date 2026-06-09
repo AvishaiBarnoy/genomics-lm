@@ -8,7 +8,6 @@ Outputs:
   data/processed/vocab_kmer.txt
 """
 from itertools import product
-import argparse
 
 def build_vocab(k):
     alphabet = "ACGT"

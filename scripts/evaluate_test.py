@@ -6,6 +6,7 @@ Usage:
   python -m scripts.evaluate_test --run_dir outputs/checkpoints/<RUN_ID>
   python -m scripts.evaluate_test --run_dir outputs/checkpoints/<RUN_ID> --data_dir data/processed/combined/<RUN_ID>
 """
+
 from __future__ import annotations
 
 import argparse
@@ -24,7 +25,11 @@ from src.codonlm.metrics_io import write_merge_metrics
 
 
 def dev() -> torch.device:
-    return torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
+    return (
+        torch.device("mps")
+        if torch.backends.mps.is_available()
+        else torch.device("cpu")
+    )
 
 
 def _infer_run_id(run_dir: Path) -> str:
@@ -58,7 +63,9 @@ def _build_model_from_cfg(cfg: dict) -> TinyGPT:
     )
 
 
-def _find_test_npz(run_id: str, cfg: dict, repo_root: Path, data_dir_opt: Optional[Path]) -> Path:
+def _find_test_npz(
+    run_id: str, cfg: dict, repo_root: Path, data_dir_opt: Optional[Path]
+) -> Path:
     if data_dir_opt is not None:
         return data_dir_opt / f"test_bs{cfg['block_size']}.npz"
     # prefer combined manifest under data/processed/combined/<RUN_ID>
@@ -85,7 +92,9 @@ class PackedDataset(torch.utils.data.Dataset):
 
 
 @torch.no_grad()
-def evaluate(model: TinyGPT, device: torch.device, loader: DataLoader) -> tuple[float, float]:
+def evaluate(
+    model: TinyGPT, device: torch.device, loader: DataLoader
+) -> tuple[float, float]:
     total_loss = 0.0
     total_tokens = 0
     for xb, yb in loader:
@@ -107,12 +116,16 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run_dir", help="outputs/checkpoints/<RUN_ID>")
     ap.add_argument("--run_id", help="Run id (alternative to --run_dir)")
-    ap.add_argument("--data_dir", help="override test NPZ directory (contains test_bs*.npz)")
+    ap.add_argument(
+        "--data_dir", help="override test NPZ directory (contains test_bs*.npz)"
+    )
     args = ap.parse_args()
 
     # accept run_id or run_dir
     run_id, _ = resolve_run(args.run_id, None)
-    run_dir = Path(args.run_dir) if args.run_dir else (Path("outputs/checkpoints") / run_id)
+    run_dir = (
+        Path(args.run_dir) if args.run_dir else (Path("outputs/checkpoints") / run_id)
+    )
     if not run_dir.exists():
         raise FileNotFoundError(run_dir)
     repo_root = Path(__file__).resolve().parents[1]
@@ -131,11 +144,14 @@ def main() -> None:
     print(f"[test] loss={nll:.4f} ppl={ppl:.2f}")
 
     metrics_path = repo_root / "outputs/scores" / run_id / "metrics.json"
-    write_merge_metrics(metrics_path, {
-        "test_loss": float(nll),
-        "test_ppl": float(ppl),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    })
+    write_merge_metrics(
+        metrics_path,
+        {
+            "test_loss": float(nll),
+            "test_ppl": float(ppl),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    )
     print(f"[metrics] updated {metrics_path}")
 
 

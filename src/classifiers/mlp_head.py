@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Dict
 
 import numpy as np
 import torch
@@ -13,7 +13,9 @@ from .probes import compute_metrics
 
 
 class MLP(nn.Module):
+    """Multi-layer Perceptron (MLP) module for sequence classification heads."""
     def __init__(self, d_in: int, n_classes: int, hidden: int = 128, depth: int = 1, dropout: float = 0.1):
+        """Initializes the MLP with input dimension, output classes, hidden dimension, depth, and dropout."""
         super().__init__()
         layers = []
         last = d_in
@@ -24,11 +26,13 @@ class MLP(nn.Module):
         self.net = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass of the MLP classifier head."""
         return self.net(x)
 
 
 @dataclass
 class MLPResult:
+    """A dataclass wrapping the trained MLP model, its predictions, and evaluated metrics."""
     model: MLP
     metrics: Dict[str, float]
     y_pred: np.ndarray
@@ -36,6 +40,7 @@ class MLPResult:
 
 
 def fit_mlp(X: np.ndarray, y: np.ndarray, epochs: int = 20, lr: float = 1e-3, batch_size: int = 64, hidden: int = 128, depth: int = 1, dropout: float = 0.1, device: str = "auto") -> MLPResult:
+    """Fits an MLP classifier model on the provided training features (X) and labels (y)."""
     X = X.astype(np.float32)
     n_classes = int(np.max(y)) + 1
     d_in = X.shape[1]
@@ -48,10 +53,13 @@ def fit_mlp(X: np.ndarray, y: np.ndarray, epochs: int = 20, lr: float = 1e-3, ba
     model.train()
     for _ in range(epochs):
         for xb, yb in dl:
-            xb = xb.to(dev); yb = yb.to(dev)
+            xb = xb.to(dev)
+            yb = yb.to(dev)
             logits = model(xb)
             loss = criterion(logits, yb)
-            optimizer.zero_grad(); loss.backward(); optimizer.step()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
     # Evaluate on training set
     model.eval()
     with torch.no_grad():
@@ -61,4 +69,5 @@ def fit_mlp(X: np.ndarray, y: np.ndarray, epochs: int = 20, lr: float = 1e-3, ba
         y_proba = torch.softmax(logits, dim=1).cpu().numpy()
     metrics = compute_metrics(y, y_pred, y_proba)
     return MLPResult(model, metrics, y_pred, y_proba)
+
 

@@ -1,4 +1,3 @@
-import pytest
 import sys
 from scripts.dashboard import format_metrics_table
 
@@ -17,7 +16,6 @@ def test_format_metrics_table():
     assert "40" in table
 
 def test_cli_parsing(monkeypatch):
-    from scripts.dashboard import main
     # Mocking argv to test parsing
     # Note: main() calls sys.exit(1) on failure, which we want to avoid or catch
     monkeypatch.setattr(sys, "argv", ["scripts/dashboard.py", "--runs", "run_a,run_b"])

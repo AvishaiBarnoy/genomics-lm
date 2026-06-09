@@ -1,4 +1,5 @@
 """Probe next-token predictions for fixed genomic prefixes."""
+
 from __future__ import annotations
 
 import argparse
@@ -7,7 +8,14 @@ from typing import Iterable, Optional
 
 import torch
 
-from ._shared import ensure_run_layout, load_model, load_token_list, stoi, softmax, resolve_run
+from ._shared import (
+    ensure_run_layout,
+    load_model,
+    load_token_list,
+    stoi,
+    softmax,
+    resolve_run,
+)
 
 PREFIXES = ["ATG", "ATG-AAA", "ATG-GAA", "TAA"]
 TOP_K = 5
@@ -52,7 +60,9 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
             next_logits = logits[0, -1]
             probs = softmax(next_logits, dim=-1)
             values, idx = torch.topk(probs, k=min(TOP_K, probs.size(0)))
-        pred_tokens = [tokens[i] if i < len(tokens) else f"tok_{i}" for i in idx.tolist()]
+        pred_tokens = [
+            tokens[i] if i < len(tokens) else f"tok_{i}" for i in idx.tolist()
+        ]
         pred_probs = [f"{p:.4f}" for p in values.tolist()]
         row = [prefix]
         for tok, prob in zip(pred_tokens, pred_probs):

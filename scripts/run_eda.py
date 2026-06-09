@@ -11,6 +11,7 @@ This wrapper:
 Usage:
   python -m scripts.run_eda <RUN_ID> [--config CONFIG] [--k 9] [--samples 20000]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -30,7 +31,9 @@ def main() -> None:
     ap.add_argument("--config", default="configs/tiny_mps.yaml")
     ap.add_argument("--k", type=int, default=9)
     ap.add_argument("--samples", type=int, default=20000)
-    ap.add_argument("--stub", action="store_true", help="also emit a small text EDA summary")
+    ap.add_argument(
+        "--stub", action="store_true", help="also emit a small text EDA summary"
+    )
     args = ap.parse_args()
 
     repo = Path(__file__).resolve().parents[1]
@@ -63,14 +66,22 @@ def main() -> None:
     if clusters_file and train_npz:
         motifs_out = eda_dir / "motifs"
         motifs_out.mkdir(parents=True, exist_ok=True)
-        _call([
-            "python", str(repo / "exploratory" / "inspect_motifs.py"),
-            "--clusters_npz", clusters_file,
-            "--train_npz", train_npz,
-            "--k", str(args.k),
-            "--samples", str(args.samples),
-            "--outdir", str(motifs_out),
-        ])
+        _call(
+            [
+                "python",
+                str(repo / "exploratory" / "inspect_motifs.py"),
+                "--clusters_npz",
+                clusters_file,
+                "--train_npz",
+                train_npz,
+                "--k",
+                str(args.k),
+                "--samples",
+                str(args.samples),
+                "--outdir",
+                str(motifs_out),
+            ]
+        )
     else:
         if not clusters_file:
             print("[eda] skip motifs: motif_clusters.npz not found")
@@ -82,25 +93,38 @@ def main() -> None:
     if one_out.exists():
         scores_out = eda_dir / "one_cds"
         scores_out.mkdir(parents=True, exist_ok=True)
-        _call([
-            "python", str(repo / "exploratory" / "summarize_scores.py"),
-            "--tsv", str(one_out),
-            "--outdir", str(scores_out),
-        ])
+        _call(
+            [
+                "python",
+                str(repo / "exploratory" / "summarize_scores.py"),
+                "--tsv",
+                str(one_out),
+                "--outdir",
+                str(scores_out),
+            ]
+        )
         if args.stub:
             # Also write quick text summary using the stub
             txt = scores_out / "eda_quick.txt"
             with txt.open("w") as fh:
-                subprocess.run([
-                    "python", str(repo / "exploratory" / "eda_stub.py"),
-                    "--tsv", str(one_out),
-                ], check=True, stdout=fh)
+                subprocess.run(
+                    [
+                        "python",
+                        str(repo / "exploratory" / "eda_stub.py"),
+                        "--tsv",
+                        str(one_out),
+                    ],
+                    check=True,
+                    stdout=fh,
+                )
     else:
-        print("[eda] skip summarize_scores: one_cds__best.tsv not found under outputs/scores/", args.run_id)
+        print(
+            "[eda] skip summarize_scores: one_cds__best.tsv not found under outputs/scores/",
+            args.run_id,
+        )
 
     print(f"[eda] results in {eda_dir}")
 
 
 if __name__ == "__main__":
     main()
-

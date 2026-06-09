@@ -1,0 +1,32 @@
+# Stage 2.5: Resume to 30 Epochs (10 + 12 + 8)
+# Deep Polishing: Lower LR, Extended Patience, Epoch Checkpoints Enabled
+
+vocab_size: 69
+block_size: 512
+n_layer: 6
+n_head: 4
+n_embd: 256
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+use_sdpa: false
+
+transfer_from: "outputs/checkpoints/2026-06-06_stage2.5_6L4H_d256_e20/last.pt"
+
+itos_path: "data/processed/itos_codon.txt"
+train_npz: "data/processed/stage2.5_master_pack/train_bs512.npz"
+val_npz: "data/processed/stage2.5_master_pack/val_bs512.npz"
+test_npz: "data/processed/stage2.5_master_pack/test_bs512.npz"
+
+batch_size: 4
+grad_accum_steps: 64
+epochs: 8
+lr: 0.000005
+min_lr: 0.000001
+weight_decay: 0.05
+warmup_steps: 50
+early_stop_patience: 10
+save_epochs: true
+
+out_dir: "outputs/checkpoints"
+scores_dir: "outputs/scores"

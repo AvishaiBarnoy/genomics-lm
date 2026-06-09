@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 from src.eval.motif_clusterer import MotifClusterer
 
 def test_kmeans_clustering():

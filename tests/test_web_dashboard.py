@@ -1,6 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
-import sys
+from unittest.mock import patch
 
 @pytest.fixture
 def mock_streamlit():

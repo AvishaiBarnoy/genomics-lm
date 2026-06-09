@@ -15,6 +15,7 @@ CLI:
 
 Notes: If you maintain multiple datasets, run once per organism name.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -24,14 +25,14 @@ from pathlib import Path
 from typing import Dict, Iterable, List
 
 
-CODONS = [a+b+c for a in "ACGT" for b in "ACGT" for c in "ACGT"]
+CODONS = [a + b + c for a in "ACGT" for b in "ACGT" for c in "ACGT"]
 
 
 def read_cds(path: Path) -> List[str]:
     seqs = []
     with path.open() as f:
         for line in f:
-            s = line.strip().upper().replace("U","T")
+            s = line.strip().upper().replace("U", "T")
             if len(s) >= 9:
                 seqs.append(s)
     return seqs
@@ -41,9 +42,9 @@ def codon_usage(seqs: Iterable[str]) -> Dict[str, float]:
     cnt = Counter()
     total = 0
     for dna in seqs:
-        L = (len(dna)//3)*3
+        L = (len(dna) // 3) * 3
         for i in range(0, L, 3):
-            cod = dna[i:i+3]
+            cod = dna[i : i + 3]
             if len(cod) == 3:
                 cnt[cod] += 1
                 total += 1
@@ -54,14 +55,70 @@ def codon_usage(seqs: Iterable[str]) -> Dict[str, float]:
 
 def derive_cai_weights_from_usage(usage: Dict[str, float]) -> Dict[str, float]:
     genetic = {
-        "TTT":"F","TTC":"F","TTA":"L","TTG":"L","TCT":"S","TCC":"S","TCA":"S","TCG":"S",
-        "TAT":"Y","TAC":"Y","TAA":"*","TAG":"*","TGT":"C","TGC":"C","TGA":"*","TGG":"W",
-        "CTT":"L","CTC":"L","CTA":"L","CTG":"L","CCT":"P","CCC":"P","CCA":"P","CCG":"P",
-        "CAT":"H","CAC":"H","CAA":"Q","CAG":"Q","CGT":"R","CGC":"R","CGA":"R","CGG":"R",
-        "ATT":"I","ATC":"I","ATA":"I","ATG":"M","ACT":"T","ACC":"T","ACA":"T","ACG":"T",
-        "AAT":"N","AAC":"N","AAA":"K","AAG":"K","AGT":"S","AGC":"S","AGA":"R","AGG":"R",
-        "GTT":"V","GTC":"V","GTA":"V","GTG":"V","GCT":"A","GCC":"A","GCA":"A","GCG":"A",
-        "GAT":"D","GAC":"D","GAA":"E","GAG":"E","GGT":"G","GGC":"G","GGA":"G","GGG":"G",
+        "TTT": "F",
+        "TTC": "F",
+        "TTA": "L",
+        "TTG": "L",
+        "TCT": "S",
+        "TCC": "S",
+        "TCA": "S",
+        "TCG": "S",
+        "TAT": "Y",
+        "TAC": "Y",
+        "TAA": "*",
+        "TAG": "*",
+        "TGT": "C",
+        "TGC": "C",
+        "TGA": "*",
+        "TGG": "W",
+        "CTT": "L",
+        "CTC": "L",
+        "CTA": "L",
+        "CTG": "L",
+        "CCT": "P",
+        "CCC": "P",
+        "CCA": "P",
+        "CCG": "P",
+        "CAT": "H",
+        "CAC": "H",
+        "CAA": "Q",
+        "CAG": "Q",
+        "CGT": "R",
+        "CGC": "R",
+        "CGA": "R",
+        "CGG": "R",
+        "ATT": "I",
+        "ATC": "I",
+        "ATA": "I",
+        "ATG": "M",
+        "ACT": "T",
+        "ACC": "T",
+        "ACA": "T",
+        "ACG": "T",
+        "AAT": "N",
+        "AAC": "N",
+        "AAA": "K",
+        "AAG": "K",
+        "AGT": "S",
+        "AGC": "S",
+        "AGA": "R",
+        "AGG": "R",
+        "GTT": "V",
+        "GTC": "V",
+        "GTA": "V",
+        "GTG": "V",
+        "GCT": "A",
+        "GCC": "A",
+        "GCA": "A",
+        "GCG": "A",
+        "GAT": "D",
+        "GAC": "D",
+        "GAA": "E",
+        "GAG": "E",
+        "GGT": "G",
+        "GGC": "G",
+        "GGA": "G",
+        "GGG": "G",
     }
     AA = defaultdict(list)
     for cod, f in usage.items():
@@ -82,9 +139,15 @@ def derive_cai_weights_from_usage(usage: Dict[str, float]) -> Dict[str, float]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--name", required=True, help="Organism/dataset name (folder under data/reference)")
+    ap.add_argument(
+        "--name",
+        required=True,
+        help="Organism/dataset name (folder under data/reference)",
+    )
     ap.add_argument("--cds", help="Path to CDS DNA file (one per line)")
-    ap.add_argument("--run_id", help="Resolve CDS from runs/<RUN_ID>/pipeline_prepare.json")
+    ap.add_argument(
+        "--run_id", help="Resolve CDS from runs/<RUN_ID>/pipeline_prepare.json"
+    )
     args = ap.parse_args()
 
     repo = Path(__file__).resolve().parents[1]
@@ -109,11 +172,18 @@ def main() -> None:
 
     out_dir = repo / "data" / "reference" / args.name
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "codon_usage.tsv").write_text("\n".join(f"{c}\t{usage.get(c,0.0):.8f}" for c in CODONS) + "\n")
-    (out_dir / "cai_weights.tsv").write_text("\n".join(f"{c}\t{weights.get(c,0.0):.8f}" for c in CODONS) + "\n")
-    print(f"[build-ref] wrote {out_dir}/codon_usage.tsv and {out_dir}/cai_weights.tsv from {cds_path}")
+    (out_dir / "codon_usage.tsv").write_text(
+        "\n".join(f"{c}\t{usage.get(c, 0.0):.8f}" for c in CODONS) + "\n"
+    )
+    (out_dir / "cai_weights.tsv").write_text(
+        "\n".join(f"{c}\t{weights.get(c, 0.0):.8f}" for c in CODONS) + "\n"
+    )
+    print(
+        f"[build-ref] wrote {out_dir}/codon_usage.tsv and {out_dir}/cai_weights.tsv from {cds_path}"
+    )
 
 
 if __name__ == "__main__":
     import json
+
     main()

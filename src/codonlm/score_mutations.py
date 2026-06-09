@@ -6,13 +6,15 @@ Output: TSV with per-position WT codon and 64 mutant log-probs
 Use: identify sensitive sites (proxy for conservation/importance).
 """
 
-import argparse, torch, math, os
+import argparse
+import torch
+import os
 from pathlib import Path
-import torch.nn.functional as F
 from .model_tiny_gpt import TinyGPT
 from .codon_tokenize import CODONS, VOCAB as TOK_VOCAB, stoi as TOK_STOI, itos as TOK_ITOS
 
 def dna_to_ids(dna):
+    """Converts a DNA sequence string into a list of codon token IDs."""
     dna = dna.strip().upper().replace("U","T")
     L = (len(dna)//3)*3
     ids = [TOK_STOI["<BOS_CDS>"]]
@@ -25,9 +27,11 @@ def dna_to_ids(dna):
     return ids
 
 def dev():
+    """Returns the torch device to use, preferring mps (metal performance shaders) if available."""
     return torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
 
 def main():
+    """Computes mutation scores (delta log-probabilities) for a single CDS."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", required=True)
     ap.add_argument('--dna', required=True, help='DNA string (ACGT...) or path to file (raw or FASTA)')
@@ -70,7 +74,8 @@ def main():
     if len(args.dna) <= 80 and all(c in "ACGTUacgtu" for c in args.dna):
         dna = args.dna
     else:
-        with open(args.dna) as f: dna = f.read().strip()
+        with open(args.dna) as f:
+            dna = f.read().strip()
 
     ids = dna_to_ids(dna)
     x = torch.tensor([ids], device=dev()).long()
@@ -107,7 +112,8 @@ def main():
     if print_codons:
         print("pos\twt\t" + "\t".join(CODONS))
         for pos in range(1, len(ids)-1):
-            wt_id = ids[pos]; wt = TOK_ITOS[wt_id]
+            wt_id = ids[pos]
+            wt = TOK_ITOS[wt_id]
             baseline = float(logp_pred[pos-1, wt_id]) if wt_id < logp_pred.size(-1) else 0.0
             row = [f"{pos}\t{wt}"]
             for cod in CODONS:
@@ -138,7 +144,8 @@ def main():
         w = csv.writer(f, delimiter="\t")
         w.writerow(["pos","wt"] + CODONS)
         for pos in range(1, len(ids)-1):
-            wt_id = ids[pos]; wt = TOK_ITOS[wt_id]
+            wt_id = ids[pos]
+            wt = TOK_ITOS[wt_id]
             baseline = float(logp_pred[pos-1, wt_id]) if wt_id < logp_pred.size(-1) else 0.0
             row = [pos, wt]
             for c in CODONS:
@@ -150,6 +157,7 @@ def main():
                     row.append("-inf")
             w.writerow(row)
     print(f"[save] {output_path}")
+
 
 if __name__ == "__main__":
     main()

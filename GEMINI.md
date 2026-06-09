@@ -12,7 +12,7 @@ The project emphasizes reproducibility, analysis (embeddings, attention, probing
 ## Tech Stack
 *   **Language:** Python
 *   **Framework:** PyTorch (inferred from model architecture and checkpointing references)
-*   **Environment:** Conda (managed via `env/conda-environment.yml`)
+*   **Environment:** Conda (managed via `environment.yml` or root `requirements.txt`)
 *   **Configuration:** YAML
 *   **Testing:** `pytest`
 
@@ -26,7 +26,7 @@ The codebase is structured into source modules and executable scripts:
 *   **`eval/`**: Evaluation metrics and logic.
 
 ### Conceptual Architecture (Agents)
-The project is conceptually divided into "agents" (modules) as defined in `agents.md`:
+The project is conceptually divided into "agents" (modules) as defined in `docs/agents.md`:
 1.  **Data Extraction**: `src/codonlm/extract_cds_from_genbank.py`
 2.  **Tokenization**: `src/codonlm/tokenizer.py`
 3.  **LM Training**: `src/codonlm/train_lm.py`
@@ -52,7 +52,7 @@ All experiments are driven by YAML configuration files, defining model hyperpara
 ### 1. Setup
 Create the conda environment:
 ```bash
-conda env create -f env/conda-environment.yml
+conda env create -f environment.yml
 conda activate codonlm
 ```
 

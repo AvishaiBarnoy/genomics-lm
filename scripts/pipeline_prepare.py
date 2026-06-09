@@ -35,7 +35,9 @@ def _load_config(path: Path) -> Dict:
 def _parse_extra_dataset(spec: str) -> Dict[str, object]:
     parts = spec.split(",")
     if len(parts) < 2:
-        raise SystemExit(f"[error] Bad --extra-dataset spec (need name,gbff[,min_len]): {spec}")
+        raise SystemExit(
+            f"[error] Bad --extra-dataset spec (need name,gbff[,min_len]): {spec}"
+        )
     name, gbff = parts[0], parts[1]
     entry: Dict[str, object] = {"name": name, "gbff": gbff}
     if len(parts) > 2:
@@ -65,7 +67,14 @@ def _make_dataset_entry(entry: Dict[str, object], block_size: int) -> Dict[str, 
     }
 
 
-def _ensure_dataset(entry: Dict[str, str], windows_per_seq: int, val_frac: float, test_frac: float, block_size: int, force: bool) -> None:
+def _ensure_dataset(
+    entry: Dict[str, str],
+    windows_per_seq: int,
+    val_frac: float,
+    test_frac: float,
+    block_size: int,
+    force: bool,
+) -> None:
     """Run extraction/tokenization/build for a dataset."""
     dna = Path(entry["dna"])
     meta = Path(entry["meta"])
@@ -78,37 +87,62 @@ def _ensure_dataset(entry: Dict[str, str], windows_per_seq: int, val_frac: float
 
     cmds: List[List[str]] = []
     if force or not (dna.exists() and meta.exists()):
-        cmds.append([
-            "python", "-m", "src.codonlm.extract_cds_from_genbank",
-            "--gbff", entry["gbff"],
-            "--out_txt", str(dna),
-            "--out_meta", str(meta),
-            "--min_len", str(entry["min_len"]),
-        ])
+        cmds.append(
+            [
+                "python",
+                "-m",
+                "src.codonlm.extract_cds_from_genbank",
+                "--gbff",
+                entry["gbff"],
+                "--out_txt",
+                str(dna),
+                "--out_meta",
+                str(meta),
+                "--min_len",
+                str(entry["min_len"]),
+            ]
+        )
     else:
         print(f"[prepare] skip extract {entry['name']}")
 
     if force or not ids.exists():
-        cmds.append([
-            "python", "-m", "src.codonlm.codon_tokenize",
-            "--inp", str(dna),
-            "--out_ids", str(ids),
-            "--out_vocab", str(vocab),
-            "--out_itos", str(itos),
-        ])
+        cmds.append(
+            [
+                "python",
+                "-m",
+                "src.codonlm.codon_tokenize",
+                "--inp",
+                str(dna),
+                "--out_ids",
+                str(ids),
+                "--out_vocab",
+                str(vocab),
+                "--out_itos",
+                str(itos),
+            ]
+        )
     else:
         print(f"[prepare] skip tokenize {entry['name']}")
 
     if force or not (train.exists() and val.exists() and test.exists()):
         cmd = [
-            "python", "-m", "src.codonlm.build_dataset",
-            "--ids", str(ids),
-            "--group_meta", str(meta),
-            "--block_size", str(block_size),
-            "--windows_per_seq", str(windows_per_seq),
-            "--val_frac", str(val_frac),
-            "--test_frac", str(test_frac),
-            "--out_dir", str(train.parent),
+            "python",
+            "-m",
+            "src.codonlm.build_dataset",
+            "--ids",
+            str(ids),
+            "--group_meta",
+            str(meta),
+            "--block_size",
+            str(block_size),
+            "--windows_per_seq",
+            str(windows_per_seq),
+            "--val_frac",
+            str(val_frac),
+            "--test_frac",
+            str(test_frac),
+            "--out_dir",
+            str(train.parent),
         ]
         # optional packing mode (single|multi)
         try:
@@ -148,7 +182,11 @@ def _stack_npz(paths: List[str], out_path: Path) -> None:
             total += X.shape[0]
 
     if total == 0:
-        np.savez_compressed(out_path, X=np.zeros((0,) + x_tail, dtype=x_dtype), Y=np.zeros((0,) + y_tail, dtype=y_dtype))
+        np.savez_compressed(
+            out_path,
+            X=np.zeros((0,) + x_tail, dtype=x_dtype),
+            Y=np.zeros((0,) + y_tail, dtype=y_dtype),
+        )
         return
 
     X_out = np.empty((total,) + x_tail, dtype=x_dtype)
@@ -161,14 +199,22 @@ def _stack_npz(paths: List[str], out_path: Path) -> None:
             X = np.asarray(blob["X"])
             Y = np.asarray(blob["Y"])
             rows = X.shape[0]
-            X_out[offset:offset + rows] = X
-            Y_out[offset:offset + rows] = Y
+            X_out[offset : offset + rows] = X
+            Y_out[offset : offset + rows] = Y
             offset += rows
 
     np.savez_compressed(out_path, X=X_out, Y=Y_out)
 
 
-def _write_manifest(run_dir: Path, datasets: List[Dict[str, str]], block_size: int, windows_per_seq: int, val_frac: float, test_frac: float, force: bool) -> Path:
+def _write_manifest(
+    run_dir: Path,
+    datasets: List[Dict[str, str]],
+    block_size: int,
+    windows_per_seq: int,
+    val_frac: float,
+    test_frac: float,
+    force: bool,
+) -> Path:
     manifest = {
         "datasets": datasets,
         "block_size": block_size,
@@ -183,12 +229,16 @@ def _write_manifest(run_dir: Path, datasets: List[Dict[str, str]], block_size: i
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Prepare datasets for main.sh (data prep phase)")
+    ap = argparse.ArgumentParser(
+        description="Prepare datasets for main.sh (data prep phase)"
+    )
     ap.add_argument("--config", required=True)
     ap.add_argument("--run-id", required=True)
     ap.add_argument("--run-dir", required=True)
     ap.add_argument("--force", action="store_true")
-    ap.add_argument("--extra-dataset", action="append", default=[], help="NAME,GBFF[,MIN_LEN]")
+    ap.add_argument(
+        "--extra-dataset", action="append", default=[], help="NAME,GBFF[,MIN_LEN]"
+    )
     args = ap.parse_args()
 
     config_path = Path(args.config)
@@ -201,9 +251,13 @@ def main() -> None:
     try:
         windows_per_seq = int(float(windows_raw))
     except (TypeError, ValueError):
-        raise SystemExit(f"[error] windows_per_seq must be numeric, got {windows_raw!r}")
+        raise SystemExit(
+            f"[error] windows_per_seq must be numeric, got {windows_raw!r}"
+        )
     if windows_per_seq <= 0:
-        raise SystemExit(f"[error] windows_per_seq must be positive, got {windows_per_seq}")
+        raise SystemExit(
+            f"[error] windows_per_seq must be positive, got {windows_per_seq}"
+        )
     val_frac = float(cfg.get("val_frac", 0.1))
     test_frac = float(cfg.get("test_frac", 0.1))
 
@@ -226,7 +280,9 @@ def main() -> None:
     if not datasets:
         raise SystemExit("[error] No datasets specified (config + CLI empty).")
 
-    _write_manifest(run_dir, datasets, block_size, windows_per_seq, val_frac, test_frac, args.force)
+    _write_manifest(
+        run_dir, datasets, block_size, windows_per_seq, val_frac, test_frac, args.force
+    )
 
     # Consistency scan: if mixing tokenization states across datasets, or if any itos
     # looks incompatible with the current tokenizer (expecting <PAD>, <BOS_CDS>, <EOS_CDS>, <SEP>),
@@ -261,14 +317,25 @@ def main() -> None:
     force_retokenize = args.force or mixed_state or bad_specials or inconsistent_itos
 
     if mixed_state:
-        print("[prepare] detected mixed tokenization state across datasets; re-tokenizing all")
+        print(
+            "[prepare] detected mixed tokenization state across datasets; re-tokenizing all"
+        )
     if bad_specials:
-        print("[prepare] detected legacy or incompatible itos specials; re-tokenizing all")
+        print(
+            "[prepare] detected legacy or incompatible itos specials; re-tokenizing all"
+        )
     if inconsistent_itos:
         print("[prepare] detected inconsistent itos across datasets; re-tokenizing all")
 
     for ds in datasets:
-        _ensure_dataset(ds, windows_per_seq, val_frac, test_frac, block_size, bool(args.force or force_retokenize))
+        _ensure_dataset(
+            ds,
+            windows_per_seq,
+            val_frac,
+            test_frac,
+            block_size,
+            bool(args.force or force_retokenize),
+        )
 
     combined_dir = Path("data/processed/combined") / args.run_id
     combined_dir.mkdir(parents=True, exist_ok=True)
@@ -289,7 +356,9 @@ def main() -> None:
     }
     combined_manifest_path = combined_dir / "manifest.json"
     combined_manifest_path.write_text(json.dumps(combined_manifest, indent=2))
-    (run_dir / "combined_manifest.json").write_text(json.dumps(combined_manifest, indent=2))
+    (run_dir / "combined_manifest.json").write_text(
+        json.dumps(combined_manifest, indent=2)
+    )
 
     result = {
         "train_npz": str(train_out),

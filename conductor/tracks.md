@@ -18,3 +18,12 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [x] **Track: Shabbat 26-Hour Automated Workflow**
 *Link: [./tracks/shabbat_workflow_20260605/](./tracks/shabbat_workflow_20260605/)*
+
+- [ ] **Track: Data Organization Consolidation**
+*Link: [./tracks/data_organization_20260608/](./tracks/data_organization_20260608/)*
+
+- [ ] **Track: NoProp Algorithm Integration**
+*Link: [./tracks/noprop_integration_20260608/](./tracks/noprop_integration_20260608/)*
+
+- [x] **Track: Model Querying Streamlit UI**
+*Link: [./tracks/querying_ui_20260608/](./tracks/querying_ui_20260608/)*

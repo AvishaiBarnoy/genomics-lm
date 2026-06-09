@@ -10,23 +10,32 @@ CLI examples:
   python -m scripts.eval_classifier --kind kmer --model outputs/reports/e1/model.pkl \
     --vectorizer outputs/reports/e1/vectorizer.pkl --seqs data/test_seqs.csv --labels data/labels/test.csv --out outputs/reports/e1
 """
+
 from __future__ import annotations
 
 import argparse
 import csv
 from pathlib import Path
-import json
 import joblib
 import numpy as np
 
-from src.classifiers.probes import ensure_dir, load_npz, save_json, compute_metrics, plot_confusion, plot_calibration
+from src.classifiers.probes import (
+    ensure_dir,
+    load_npz,
+    save_json,
+    compute_metrics,
+    plot_confusion,
+    plot_calibration,
+)
 
 
 def _read_labels_csv(path: Path) -> dict:
     lab = {}
     with path.open("r", newline="") as f:
         for row in csv.DictReader(f):
-            lab[row["id"]] = int(row["label"]) if row["label"].isdigit() else row["label"]
+            lab[row["id"]] = (
+                int(row["label"]) if row["label"].isdigit() else row["label"]
+            )
     return lab
 
 
@@ -39,7 +48,8 @@ def _align_embeddings(npz_path: Path, labels_path: Path):
     keep = []
     for i, sid in enumerate(ids):
         if sid in lab_map:
-            y.append(lab_map[sid]); keep.append(i)
+            y.append(lab_map[sid])
+            keep.append(i)
     X2 = X[np.array(keep)]
     uniq = sorted(set(y))
     map_to_int = {v: i for i, v in enumerate(uniq)}
@@ -51,7 +61,8 @@ def _read_seqs_csv(path: Path):
     ids, seqs = [], []
     with path.open("r", newline="") as f:
         for row in csv.DictReader(f):
-            ids.append(row["id"]); seqs.append(row["seq"])
+            ids.append(row["id"])
+            seqs.append(row["seq"])
     return ids, seqs
 
 
@@ -72,11 +83,13 @@ def main() -> None:
         if args.kind == "mlp":
             import torch
             from src.classifiers.mlp_head import MLP
+
             state = torch.load(args.model, map_location="cpu")
             n_classes = int(np.max(y)) + 1
             d_in = X.shape[1]
             model = MLP(d_in, n_classes)
-            model.load_state_dict(state); model.eval()
+            model.load_state_dict(state)
+            model.eval()
             with torch.no_grad():
                 logits = model(torch.from_numpy(X.astype(np.float32)))
                 y_pred = torch.argmax(logits, dim=1).cpu().numpy()
@@ -100,7 +113,8 @@ def main() -> None:
         y_map = _read_labels_csv(Path(args.labels))
         ids, _ = _read_seqs_csv(Path(args.seqs))
         y = np.array([y_map[i] for i in ids], dtype=object)
-        uniq = sorted(set(y)); map_to_int = {v: i for i, v in enumerate(uniq)}
+        uniq = sorted(set(y))
+        map_to_int = {v: i for i, v in enumerate(uniq)}
         y = np.array([map_to_int[v] for v in y], dtype=np.int64)
         y_pred = model.predict(X)
         y_proba = None
@@ -122,4 +136,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

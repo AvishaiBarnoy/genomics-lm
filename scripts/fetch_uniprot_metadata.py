@@ -13,7 +13,6 @@ import json
 import time
 import requests
 import pandas as pd
-from pathlib import Path
 
 API_URL = "https://rest.uniprot.org"
 # Mapping from NCBI RefSeq Protein to UniProt Accession
@@ -24,6 +23,7 @@ TO_DB = "UniProtKB"
 # See: https://www.uniprot.org/help/return_fields
 FIELDS = "accession,id,xref_pfam,go,ec,length,gene_names"
 
+
 def submit_id_mapping(ids):
     response = requests.post(
         f"{API_URL}/idmapping/run",
@@ -32,6 +32,7 @@ def submit_id_mapping(ids):
     response.raise_for_status()
     return response.json()["jobId"]
 
+
 def check_id_mapping_status(job_id):
     while True:
         response = requests.get(f"{API_URL}/idmapping/status/{job_id}")
@@ -39,11 +40,12 @@ def check_id_mapping_status(job_id):
         data = response.json()
         if "results" in data or "jobStatus" not in data:
             return data
-        
+
         # Job still running
         status = data.get("jobStatus", "RUNNING")
         print(f"[*] Job {job_id} is {status}. Waiting 5 seconds...")
         time.sleep(5)
+
 
 def get_next_link(headers):
     if "Link" in headers:
@@ -52,45 +54,49 @@ def get_next_link(headers):
             return parts[0].strip("<>")
     return None
 
+
 def fetch_results(job_id):
     # For ID mapping with enrichment, UniProt provides a specific endpoint
     # that allows us to get columns for the TARGET entries (UniProtKB).
     url = f"{API_URL}/idmapping/uniprotkb/results/{job_id}"
     tsv_fields = "accession,id,xref_pfam,go,ec,length"
     params = {"fields": tsv_fields, "format": "tsv", "size": 500}
-    
+
     all_lines = []
     print(f"[*] Fetching enriched results from {url}...")
     while url:
         response = requests.get(url, params=params if "?" not in url else None)
         response.raise_for_status()
-        
+
         lines = response.text.strip().split("\n")
         if not lines or len(lines) < 1:
             break
 
         if not all_lines:
-            all_lines.extend(lines) # Include header
+            all_lines.extend(lines)  # Include header
         else:
             if len(lines) > 1:
-                all_lines.extend(lines[1:]) # Skip header
-            
+                all_lines.extend(lines[1:])  # Skip header
+
         url = get_next_link(response.headers)
         if url:
-            print(f"[*] Fetching next page: {len(all_results)} results so far...")
-            
+            print(f"[*] Fetching next page: {len(all_lines)} results so far...")
+
     return all_lines
+
 
 def parse_uniprot_results(results_lines):
     """Parses TSV lines into a clean flat list."""
-    if not results_lines: return []
-    
+    if not results_lines:
+        return []
+
     import io
     import csv
+
     # Use csv module to handle the TSV
     f = io.StringIO("\n".join(results_lines))
     reader = csv.DictReader(f, delimiter="\t")
-    
+
     parsed = []
     # Log the headers once for debugging
     headers = reader.fieldnames
@@ -99,16 +105,19 @@ def parse_uniprot_results(results_lines):
     for row in reader:
         # Map the TSV columns to our clean output format
         # In ID mapping TSV: 'From' is the source NCBI ID, 'Entry' is UniProt AC
-        parsed.append({
-            "ncbi_id": row.get("From"),
-            "uniprot_ac": row.get("Entry") or row.get("Entry"),
-            "entry_name": row.get("Entry Name") or row.get("Entry name"),
-            "length": row.get("Length"),
-            "pfam": row.get("Cross-reference (Pfam)") or row.get("Pfam"),
-            "go": row.get("Gene Ontology (GO)") or row.get("Gene ontology (GO)"),
-            "ec": row.get("EC number") or row.get("EC Number")
-        })
+        parsed.append(
+            {
+                "ncbi_id": row.get("From"),
+                "uniprot_ac": row.get("Entry") or row.get("Entry"),
+                "entry_name": row.get("Entry Name") or row.get("Entry name"),
+                "length": row.get("Length"),
+                "pfam": row.get("Cross-reference (Pfam)") or row.get("Pfam"),
+                "go": row.get("Gene Ontology (GO)") or row.get("Gene ontology (GO)"),
+                "ec": row.get("EC number") or row.get("EC Number"),
+            }
+        )
     return parsed
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -121,20 +130,38 @@ def main():
     # 1. Load IDs
     with open(args.input, "r") as f:
         id_map = json.load(f)
-    
+
     all_ids = list(id_map.keys())
-    if args.limit:
-        all_ids = all_ids[:args.limit]
     
-    print(f"[*] Starting metadata fetch for {len(all_ids)} IDs in batches of {args.batch_size}...")
+    # Filter out already mapped IDs to avoid duplicate network calls
+    import os
+    existing_ids = set()
+    if os.path.exists(args.output):
+        try:
+            df_existing = pd.read_csv(args.output)
+            if "ncbi_id" in df_existing.columns:
+                existing_ids = set(df_existing["ncbi_id"].dropna().astype(str).tolist())
+                print(f"[*] Found {len(existing_ids)} existing mapped IDs in {args.output}.")
+        except Exception as e:
+            print(f"[!] Error loading existing mappings: {e}. Starting fresh.")
+            
+    all_ids = [x for x in all_ids if x not in existing_ids]
+    print(f"[*] Mappings remaining to fetch: {len(all_ids)}")
+
+    if args.limit:
+        all_ids = all_ids[: args.limit]
+
+    print(
+        f"[*] Starting metadata fetch for {len(all_ids)} IDs in batches of {args.batch_size}..."
+    )
 
     final_parsed = []
-    
+
     # 2. Process in Batches
     for i in range(0, len(all_ids), args.batch_size):
-        batch = all_ids[i:i+args.batch_size]
-        print(f"\n[Batch {i//args.batch_size + 1}] Processing {len(batch)} IDs...")
-        
+        batch = all_ids[i : i + args.batch_size]
+        print(f"\n[Batch {i // args.batch_size + 1}] Processing {len(batch)} IDs...")
+
         try:
             job_id = submit_id_mapping(batch)
             check_id_mapping_status(job_id)
@@ -142,16 +169,25 @@ def main():
             parsed = parse_uniprot_results(results)
             final_parsed.extend(parsed)
             print(f"[success] Captured {len(parsed)} mappings for this batch.")
-            
-            # Incremental Save
-            df = pd.DataFrame(final_parsed)
-            df.to_csv(args.output, index=False)
-            
+
+            # Incremental Save - merge with existing if present
+            df_new = pd.DataFrame(final_parsed)
+            if os.path.exists(args.output) and len(existing_ids) > 0:
+                try:
+                    df_existing = pd.read_csv(args.output)
+                    df_combined = pd.concat([df_existing, df_new], ignore_index=True).drop_duplicates(subset=["ncbi_id"])
+                except Exception:
+                    df_combined = df_new
+            else:
+                df_combined = df_new
+            df_combined.to_csv(args.output, index=False)
+
         except Exception as e:
             print(f"[!] Error in batch {i}: {e}")
             continue
 
-    print(f"\n[DONE] Saved total {len(final_parsed)} protein records to {args.output}")
+    print(f"\n[DONE] Saved mappings to {args.output}")
+
 
 if __name__ == "__main__":
     main()

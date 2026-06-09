@@ -1,11 +1,12 @@
-import numpy as np
 import torch
 
 from src.codonlm.generate import generate_cds_constrained, STOP_CODONS
 
 
 class DummyModel(torch.nn.Module):
+    """Dummy model for simulating logits during text generation length tests."""
     def __init__(self, vocab_size: int, stop_id: int, prefer_id: int, stop_after: int, block_size: int = 512):
+        """Initializes the DummyModel with mock vocabulary and stop conditions."""
         super().__init__()
         self.vocab_size = vocab_size
         self.stop_id = stop_id
@@ -15,6 +16,7 @@ class DummyModel(torch.nn.Module):
         self.calls = 0
 
     def forward(self, x, y=None):
+        """Forward pass that returns mock logits preferring a target token based on call count."""
         # x: (1, T)
         self.calls += 1
         T = x.shape[1]
@@ -27,10 +29,12 @@ class DummyModel(torch.nn.Module):
 
 
 def test_constrained_generation_long_protein():
+    """Tests the constrained CDS generation function to ensure sequence length constraints work."""
     # Build tiny vocab: 0:<PAD>,1:<BOS_CDS>,2:<EOS_CDS>,3:<SEP>,4:"AAA",5:"TAA"
     itos = ["<PAD>", "<BOS_CDS>", "<EOS_CDS>", "<SEP>", "AAA", "TAA"]
     stoi = {t: i for i, t in enumerate(itos)}
-    prefer_id = stoi["AAA"]; stop_id = stoi["TAA"]
+    prefer_id = stoi["AAA"]
+    stop_id = stoi["TAA"]
     model = DummyModel(vocab_size=len(itos), stop_id=stop_id, prefer_id=prefer_id, stop_after=360, block_size=512)
     device = torch.device("cpu")
     # ctx_ids: BOS + 20-codon prefix (simulate k=20)
@@ -57,4 +61,5 @@ def test_constrained_generation_long_protein():
     # require terminal stop means either last is stop or we hit hard cap
     last_codon = codons[-1] if codons else ""
     assert (last_codon in STOP_CODONS) or bool(info.get("hit_hard_cap"))
+
 

@@ -1,5 +1,4 @@
 import pytest
-import os
 import json
 import numpy as np
 from src.eval.aggregator import ResultsAggregator
@@ -58,4 +57,25 @@ def test_aggregator_invalid_run(mock_run_dirs):
     # Should now return an empty dict instead of raising FileNotFoundError
     metrics = agg.load_metrics()
     assert metrics == {}
+
+
+def test_aggregator_load_metrics_consolidated(tmp_path):
+    # Create consolidated mock run directories under runs/
+    run_c_dir = tmp_path / "runs" / "run_c"
+    run_c_scores = run_c_dir / "scores"
+    run_c_scores.mkdir(parents=True)
+    
+    metrics_c = {"run_id": "run_c", "val_loss": 0.1}
+    with open(run_c_scores / "metrics.json", "w") as f:
+        json.dump(metrics_c, f)
+        
+    agg = ResultsAggregator(
+        run_ids=["run_c"],
+        scores_base_dir=str(tmp_path / "outputs" / "scores"),
+        runs_base_dir=str(tmp_path / "runs")
+    )
+    metrics = agg.load_metrics()
+    assert "run_c" in metrics
+    assert metrics["run_c"]["val_loss"] == 0.1
+
 

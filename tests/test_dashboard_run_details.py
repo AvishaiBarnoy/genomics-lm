@@ -1,5 +1,4 @@
 import pytest
-import os
 import json
 from src.eval.aggregator import ResultsAggregator
 

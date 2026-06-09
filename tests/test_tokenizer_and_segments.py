@@ -3,12 +3,14 @@ import torch
 
 
 def test_vocab_specials_once():
+    """Verifies that special tokens appear exactly once in the vocabulary."""
     specials = ["<PAD>", "<BOS_CDS>", "<EOS_CDS>", "<SEP>"]
     for s in specials:
         assert list(VOCAB).count(s) == 1
 
 
 def test_to_ids_roundtrip_minimal():
+    """Tests roundtrip tokenization of a simple coding sequence."""
     seq = "ATGAAATGA"  # ATG AAA TGA
     ids = to_ids(seq)
     toks = [itos[i] for i in ids]
@@ -19,10 +21,12 @@ def test_to_ids_roundtrip_minimal():
 
 
 def test_segment_mask_blocking():
+    """Simulates multi-segment input with <SEP> and verifies causal block masking across segments."""
     # Simulate indices with a <SEP> boundary and verify block across segments
     sep_id = stoi["<SEP>"]
     bos = stoi["<BOS_CDS>"]
-    a = stoi["ATG"]; b = stoi["GCT"]
+    a = stoi["ATG"]
+    b = stoi["GCT"]
     # [BOS a b SEP BOS a]
     idx = torch.tensor([[bos, a, b, sep_id, bos, a]])
     sep = (idx == sep_id)
@@ -32,4 +36,5 @@ def test_segment_mask_blocking():
     assert mask[0, 1, 2]  # within same left segment
     assert not mask[0, 1, 4]  # across SEP
     assert mask[0, 4, 5]  # within right segment
+
 

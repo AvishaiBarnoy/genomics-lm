@@ -6,6 +6,7 @@ This document tracks notable changes to the project. We follow a simple date‑b
 
 - **Stage 2.5: Genomic Tapes & Anchored Operons**: `src/codonlm/extract_genomic_tape.py` and `extract_anchored_operons.py` enable training on contiguous chromosomal data and targeted gene-boundary transitions.
 - **Structural DNA Probing**: `scripts/probe_structural_awareness.py` validates model physics by mapping hidden states to Roll, EP, and MGW using DNAshape heuristics.
+- **Stage 3: Multi-Task Protein Critic Implemented & Trained**: Completed training of the `MultiTaskProteinClassifier` (`configs/protein_critic.yaml` with an 8L8H_d256 architecture) over 50 epochs on Apple Silicon GPU (`mps`), achieving 76.81% validation accuracy on thermodynamic stability, 6.15% on Pfam (1,000 classes), and 5.50% on EC function (500 classes). Added full train-resumption features (`--resume`) and automatic epoch-end checkpoints (`last_critic.pt`).
 - **Stage 3 Preparations**: `scripts/fetch_uniprot_metadata.py` and `scripts/build_multitask_dataset.py` introduced to create unified Pfam/Stability datasets for the Protein-Critic.
 - **Hardware Optimization**: Re-enabled SDPA (Flash-like attention) in `model_tiny_gpt.py` providing a 3x speedup on Apple Silicon, alongside gradient accumulation fixes to respect 8GB RAM ceilings.
 - **Dashboard Automation**: `scripts/web_dashboard.py` upgraded with retroactive Analysis execution, Structural Audit views, and Plain English biological summaries.

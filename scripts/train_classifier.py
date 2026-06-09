@@ -36,6 +36,7 @@ Outputs:
   - confusion.png and calibration.png
   - model.pkl (sklearn) or model.pt (MLP) and vectorizer.pkl for k-mer
 """
+
 from __future__ import annotations
 
 import argparse
@@ -47,7 +48,15 @@ from typing import Dict, Tuple
 import joblib
 import numpy as np
 
-from src.classifiers.probes import ensure_dir, load_yaml, save_json, load_npz, compute_metrics, plot_confusion, plot_calibration
+from src.classifiers.probes import (
+    ensure_dir,
+    load_yaml,
+    save_json,
+    load_npz,
+    compute_metrics,
+    plot_confusion,
+    plot_calibration,
+)
 from src.classifiers.linear_probe import fit_linear_svm, fit_logreg
 from src.classifiers.mlp_head import fit_mlp
 from src.classifiers.kmer_baselines import fit_kmer_logreg, fit_kmer_svm, fit_kmer_xgb
@@ -57,11 +66,15 @@ def _read_labels_csv(path: Path) -> Dict[str, int]:
     lab = {}
     with path.open("r", newline="") as f:
         for row in csv.DictReader(f):
-            lab[row["id"]] = int(row["label"]) if row["label"].isdigit() else row["label"]
+            lab[row["id"]] = (
+                int(row["label"]) if row["label"].isdigit() else row["label"]
+            )
     return lab
 
 
-def _align_embeddings(npz_path: Path, labels_path: Path) -> Tuple[np.ndarray, np.ndarray]:
+def _align_embeddings(
+    npz_path: Path, labels_path: Path
+) -> Tuple[np.ndarray, np.ndarray]:
     data = load_npz(npz_path)
     X = np.asarray(data["X"])  # (N, D)
     ids = [str(x) for x in data.get("ids", [str(i) for i in range(X.shape[0])])]
@@ -70,7 +83,8 @@ def _align_embeddings(npz_path: Path, labels_path: Path) -> Tuple[np.ndarray, np
     keep = []
     for i, sid in enumerate(ids):
         if sid in lab_map:
-            y.append(lab_map[sid]); keep.append(i)
+            y.append(lab_map[sid])
+            keep.append(i)
     X2 = X[np.array(keep)]
     # normalize labels to integer classes if strings
     uniq = sorted(set(y))
@@ -83,7 +97,8 @@ def _read_seqs_csv(path: Path) -> Tuple[list, list]:
     ids, seqs = [], []
     with path.open("r", newline="") as f:
         for row in csv.DictReader(f):
-            ids.append(row["id"]); seqs.append(row["seq"])
+            ids.append(row["id"])
+            seqs.append(row["seq"])
     return ids, seqs
 
 
@@ -94,23 +109,31 @@ def main() -> None:
     cfg = load_yaml(args.config)
 
     out_dir = ensure_dir(cfg.get("out_dir", "outputs/reports/exp"))
-    proto = str(cfg.get("protocol", "std")).upper()
+    str(cfg.get("protocol", "std")).upper()
     clf_kind = str(cfg.get("classifier", {}).get("kind", "probe_logreg"))
 
     if clf_kind.startswith("probe") or clf_kind == "mlp":
-        train_X, train_y = _align_embeddings(Path(cfg["data"]["train_embeddings"]), Path(cfg["data"]["train_labels"]))
-        test_X, test_y = _align_embeddings(Path(cfg["data"]["test_embeddings"]), Path(cfg["data"]["test_labels"]))
+        train_X, train_y = _align_embeddings(
+            Path(cfg["data"]["train_embeddings"]), Path(cfg["data"]["train_labels"])
+        )
+        test_X, test_y = _align_embeddings(
+            Path(cfg["data"]["test_embeddings"]), Path(cfg["data"]["test_labels"])
+        )
         if clf_kind == "probe_logreg":
             res = fit_logreg(train_X, train_y, C=float(cfg["classifier"].get("C", 1.0)))
-            model = res.model; y_pred = model.predict(test_X)
+            model = res.model
+            y_pred = model.predict(test_X)
             y_proba = None
             try:
                 y_proba = model.predict_proba(test_X)
             except Exception:
                 pass
         elif clf_kind == "probe_svm":
-            res = fit_linear_svm(train_X, train_y, C=float(cfg["classifier"].get("C", 1.0)))
-            model = res.model; y_pred = model.predict(test_X)
+            res = fit_linear_svm(
+                train_X, train_y, C=float(cfg["classifier"].get("C", 1.0))
+            )
+            model = res.model
+            y_pred = model.predict(test_X)
             y_proba = None
             try:
                 y_proba = model.decision_function(test_X)
@@ -118,7 +141,8 @@ def main() -> None:
                 pass
         else:  # mlp
             res = fit_mlp(
-                train_X, train_y,
+                train_X,
+                train_y,
                 epochs=int(cfg["classifier"].get("epochs", 20)),
                 lr=float(cfg["classifier"].get("lr", 1e-3)),
                 batch_size=int(cfg["classifier"].get("batch_size", 64)),
@@ -128,6 +152,7 @@ def main() -> None:
             )
             model = res.model
             import torch
+
             with torch.no_grad():
                 logits = model(torch.from_numpy(test_X.astype(np.float32)))
                 y_pred = torch.argmax(logits, dim=1).cpu().numpy()
@@ -140,6 +165,7 @@ def main() -> None:
         # save model
         if clf_kind == "mlp":
             import torch
+
             torch.save(model.state_dict(), out_dir / "model.pt")
         else:
             joblib.dump(model, out_dir / "model.pkl")
@@ -162,7 +188,8 @@ def main() -> None:
         y_train_i = np.array([mapping[v] for v in y_train], dtype=np.int64)
         y_test_i = np.array([mapping[v] for v in y_test], dtype=np.int64)
 
-        k = int(cfg["classifier"].get("k", 3)); tfidf = bool(cfg["classifier"].get("tfidf", True))
+        k = int(cfg["classifier"].get("k", 3))
+        tfidf = bool(cfg["classifier"].get("tfidf", True))
         if clf_kind == "kmer_logreg":
             res = fit_kmer_logreg(train_seqs, y_train_i, k=k, tfidf=tfidf)
             vectorizer, model = res.vectorizer, res.model
@@ -195,10 +222,10 @@ def main() -> None:
         plot_confusion(y_test_i, y_pred, out_dir / "confusion.png")
         if y_proba is not None:
             plot_calibration(y_test_i, y_proba, out_dir / "calibration.png")
-        joblib.dump(model, out_dir / "model.pkl"); joblib.dump(vectorizer, out_dir / "vectorizer.pkl")
+        joblib.dump(model, out_dir / "model.pkl")
+        joblib.dump(vectorizer, out_dir / "vectorizer.pkl")
         print(f"[train-clf] {clf_kind} → {out_dir}; metrics={json.dumps(metrics)}")
 
 
 if __name__ == "__main__":
     main()
-

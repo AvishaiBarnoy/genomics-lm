@@ -39,24 +39,51 @@ STANDARD_GENETIC_CODE: Dict[str, str] = {
 
 POLARITY_CLASS: Dict[str, str] = {
     # nonpolar (hydrophobic, uncharged)
-    "A": "nonpolar", "V": "nonpolar", "L": "nonpolar", "I": "nonpolar",
-    "M": "nonpolar", "F": "nonpolar", "W": "nonpolar", "P": "nonpolar",
+    "A": "nonpolar",
+    "V": "nonpolar",
+    "L": "nonpolar",
+    "I": "nonpolar",
+    "M": "nonpolar",
+    "F": "nonpolar",
+    "W": "nonpolar",
+    "P": "nonpolar",
     "G": "nonpolar",
     # polar (uncharged)
-    "S": "polar", "T": "polar", "Y": "polar", "N": "polar", "Q": "polar",
+    "S": "polar",
+    "T": "polar",
+    "Y": "polar",
+    "N": "polar",
+    "Q": "polar",
     "C": "polar",
     # charged
-    "K": "positive", "R": "positive", "H": "positive",
-    "D": "negative", "E": "negative",
+    "K": "positive",
+    "R": "positive",
+    "H": "positive",
+    "D": "negative",
+    "E": "negative",
 }
 
 HYDROPATHY_CLASS: Dict[str, str] = {
-    "A": "hydrophobic", "V": "hydrophobic", "L": "hydrophobic", "I": "hydrophobic",
-    "M": "hydrophobic", "F": "hydrophobic", "W": "hydrophobic", "P": "hydrophobic",
-    "G": "hydrophobic", "C": "hydrophobic", "Y": "hydrophobic",
-    "S": "hydrophilic", "T": "hydrophilic", "N": "hydrophilic", "Q": "hydrophilic",
-    "K": "hydrophilic", "R": "hydrophilic", "H": "hydrophilic",
-    "D": "hydrophilic", "E": "hydrophilic",
+    "A": "hydrophobic",
+    "V": "hydrophobic",
+    "L": "hydrophobic",
+    "I": "hydrophobic",
+    "M": "hydrophobic",
+    "F": "hydrophobic",
+    "W": "hydrophobic",
+    "P": "hydrophobic",
+    "G": "hydrophobic",
+    "C": "hydrophobic",
+    "Y": "hydrophobic",
+    "S": "hydrophilic",
+    "T": "hydrophilic",
+    "N": "hydrophilic",
+    "Q": "hydrophilic",
+    "K": "hydrophilic",
+    "R": "hydrophilic",
+    "H": "hydrophilic",
+    "D": "hydrophilic",
+    "E": "hydrophilic",
 }
 
 START_CODONS = {"ATG", "GTG", "TTG"}  # canonical + common bacterial alternatives
@@ -89,7 +116,9 @@ def load_tokens(run_dir: Path) -> list[str]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate probe labels for a run.")
     parser.add_argument("run_id", nargs="?", help="Run identifier under runs/")
-    parser.add_argument("--run_dir", help="Alternative to run_id; path to runs/<RUN_ID>")
+    parser.add_argument(
+        "--run_dir", help="Alternative to run_id; path to runs/<RUN_ID>"
+    )
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir) if args.run_dir else (RUNS_DIR / str(args.run_id))
@@ -101,7 +130,9 @@ def main() -> None:
     out_path = run_dir / "probe_labels.csv"
     with out_path.open("w", newline="") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["token", "aa", "polarity", "hydropathy", "is_stop", "is_start"])
+        writer.writerow(
+            ["token", "aa", "polarity", "hydropathy", "is_stop", "is_start"]
+        )
         for token in tokens:
             codon = token.upper()
             if len(codon) == 3 and codon.isalpha():

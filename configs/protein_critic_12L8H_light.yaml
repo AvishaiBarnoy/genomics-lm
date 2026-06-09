@@ -1,0 +1,26 @@
+# Memory-Efficient Deeper Multi-Task Protein-Critic (GPU Checkpointed Run)
+# Trains a single ProteinLM 12L8H (n_embd=256) backbone on MPS GPU
+# Uses activation checkpointing (use_checkpoint=True) to keep memory footprint extremely small
+# Simulates batch size of 64 using physical batch_size=4 and grad_accum_steps=16
+
+# Device configuration
+device: mps
+
+# Data
+train_data: "data/processed/protein_lm/multitask/train.jsonl"
+val_data: "data/processed/protein_lm/multitask/val.jsonl"
+
+# Architecture
+block_size: 512
+n_layer: 12
+n_head: 8
+n_embd: 256
+dropout: 0.1
+use_checkpoint: true
+
+# Training
+batch_size: 4
+grad_accum_steps: 16
+epochs: 12
+lr: 0.0001
+out_dir: "runs/protein_critic_12L8H/checkpoints"

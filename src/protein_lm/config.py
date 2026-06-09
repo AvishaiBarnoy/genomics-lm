@@ -21,6 +21,7 @@ class ProteinClassifierConfig:
     block_size: int
     dropout: float
     num_classes: int
+    use_checkpoint: bool = False
 
 def load_config(path: str, config_class):
     """

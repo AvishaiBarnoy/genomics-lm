@@ -10,10 +10,12 @@ import argparse
 from Bio import SeqIO
 
 def reverse_complement(s):
+    """Computes the reverse complement of a nucleotide sequence."""
     comp = str.maketrans("ACGTacgtnN","TGCAtgcann")
     return s.translate(comp)[::-1]
 
 def main():
+    """Extracts coding sequences (CDS) from GenBank files and writes them to text and metadata files."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--gbff", nargs="+", required=True)
     ap.add_argument("--out_txt", default="data/processed/cds_dna.txt")
@@ -36,14 +38,19 @@ def main():
             for rec in SeqIO.parse(gb, "genbank"):
                 seq = str(rec.seq).upper()
                 for feat in rec.features:
-                    if feat.type!="CDS": continue
+                    if feat.type != "CDS":
+                        continue
                     s,e = int(feat.location.start), int(feat.location.end)
                     strand = int(feat.location.strand or 1)
                     cds = seq[s:e]
-                    if strand==-1: cds = reverse_complement(cds)
+                    if strand == -1:
+                        cds = reverse_complement(cds)
                     if len(cds) >= args.min_len and set(cds) <= set("ACGTN"):
                         ft.write(cds+"\n")
                         fm.write(f"{idx}\t{genome_id}\n")
                         idx+=1
     print(f"[extract] wrote {idx} CDS with meta.")
-if __name__=="__main__": main()
+
+if __name__ == "__main__":
+    main()
+

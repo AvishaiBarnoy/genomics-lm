@@ -13,11 +13,12 @@ Example:
   python -m scripts.extract_embeddings --run_id 2025-11-05_tiny_8L6H_d384_e5 \
     --fasta data/my_genes.fasta --out outputs/reports/e1/train_embeddings.npz
 """
+
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 
 import numpy as np
 import torch
@@ -54,7 +55,9 @@ def _dna_to_codon_tokens(dna: str) -> List[str]:
     return toks
 
 
-def _pool_hidden(model: torch.nn.Module, idx: torch.Tensor, nonpad_mask: torch.Tensor) -> torch.Tensor:
+def _pool_hidden(
+    model: torch.nn.Module, idx: torch.Tensor, nonpad_mask: torch.Tensor
+) -> torch.Tensor:
     # Reconstruct forward pass up to ln_f to get token embeddings; then mean-pool over non-pad tokens
     with torch.no_grad():
         pos = torch.arange(0, idx.shape[1], device=idx.device).unsqueeze(0)
@@ -62,7 +65,7 @@ def _pool_hidden(model: torch.nn.Module, idx: torch.Tensor, nonpad_mask: torch.T
         x = model.drop(x)
         attn_mask = None
         if getattr(model, "sep_id", None) is not None:
-            sep = (idx == int(model.sep_id))
+            sep = idx == int(model.sep_id)
             seg = torch.cumsum(sep, dim=1)
             attn_mask = (seg.unsqueeze(-1) == seg.unsqueeze(-2)).unsqueeze(1)
         for blk in model.blocks:
@@ -104,6 +107,7 @@ def main() -> None:
         seqs += _read_fasta(Path(args.fasta))
     if args.csv:
         import csv
+
         with open(args.csv, "r", newline="") as f:
             for row in csv.DictReader(f):
                 seqs.append((row.get("id", f"row{len(seqs)}"), row[args.seq_col]))
@@ -133,7 +137,9 @@ def main() -> None:
                 toks.append(eos)
             if not toks:
                 continue
-            ids_tensor = torch.tensor(toks[:max_T], dtype=torch.long, device=device).unsqueeze(0)
+            ids_tensor = torch.tensor(
+                toks[:max_T], dtype=torch.long, device=device
+            ).unsqueeze(0)
             nonpad = ids_tensor.ne(pad)
             pooled = _pool_hidden(model, ids_tensor, nonpad)
             out_vecs.append(pooled.squeeze(0).cpu().numpy())
@@ -148,4 +154,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

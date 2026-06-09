@@ -9,7 +9,6 @@ import argparse
 from pathlib import Path
 from Bio import SeqIO
 from Bio.Seq import Seq
-import numpy as np
 
 def extract_anchored_bridges(gb_path, window_bp, out_f, out_m, genome_id):
     """
@@ -38,11 +37,9 @@ def extract_anchored_bridges(gb_path, window_bp, out_f, out_m, genome_id):
             
             # Boundary calculation
             if f1.location.strand == 1:
-                boundary = int(f1.location.end) # Stop of first gene
                 # midpoint is roughly between end of f1 and start of f2
                 midpoint = (int(f1.location.end) + int(f2.location.start)) // 2
             else:
-                boundary = int(f1.location.start) # Start of first gene (on reverse, this is the 3' end)
                 midpoint = (int(f1.location.start) + int(f2.location.end)) // 2
                 
             start = midpoint - half_win
@@ -69,6 +66,7 @@ def extract_anchored_bridges(gb_path, window_bp, out_f, out_m, genome_id):
     return idx
 
 def main():
+    """Extracts anchored operon bridges from GenBank files and writes them to text and metadata files."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--gbff", nargs="+", required=True)
     ap.add_argument("--window_bp", type=int, default=1536, help="Window size in BP (512 codons)")
@@ -90,6 +88,7 @@ def main():
             total_bridges += count
             
     print(f"[success] Extracted {total_bridges} anchored operon bridges.")
+
 
 if __name__ == "__main__":
     main()

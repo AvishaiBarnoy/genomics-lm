@@ -3,6 +3,7 @@
 If probe_labels.csv is missing, attempt to generate it from the run's
 `itos.txt` using the standard genetic code mapping.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -15,7 +16,13 @@ from sklearn.linear_model import LogisticRegression
 import warnings
 from sklearn.model_selection import StratifiedKFold, train_test_split
 
-from ._shared import ensure_run_layout, load_artifacts, load_token_list, stoi, resolve_run
+from ._shared import (
+    ensure_run_layout,
+    load_artifacts,
+    load_token_list,
+    stoi,
+    resolve_run,
+)
 
 try:
     # Reuse mappings from the label generator when available
@@ -61,9 +68,12 @@ def _write_probe_labels_if_missing(run_dir: Path, tokens: list[str]) -> None:
         rows.append((tok, aa, polarity, hyd, is_stop, is_start))
     with path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["token", "aa", "polarity", "hydropathy", "is_stop", "is_start"])
+        writer.writerow(
+            ["token", "aa", "polarity", "hydropathy", "is_stop", "is_start"]
+        )
         for r in rows:
             writer.writerow(list(r))
+
 
 TASKS = {
     "AA identity": "aa",
@@ -93,7 +103,9 @@ def _read_probe_labels(path: Path, tokens: List[str]) -> List[Dict[str, str]]:
     return rows
 
 
-def _encode_labels(rows: List[Dict[str, str]], field: str) -> Tuple[np.ndarray, np.ndarray, Dict[str, int]]:
+def _encode_labels(
+    rows: List[Dict[str, str]], field: str
+) -> Tuple[np.ndarray, np.ndarray, Dict[str, int]]:
     valid = [r[field] for r in rows if r.get(field) not in (None, "")]
     unique = sorted(set(valid))
     mapping = {v: i for i, v in enumerate(unique)}
@@ -110,7 +122,9 @@ def _encode_labels(rows: List[Dict[str, str]], field: str) -> Tuple[np.ndarray, 
     return np.array(labels, dtype=np.int64), np.array(mask, dtype=bool), mapping
 
 
-def _encode_binary(rows: List[Dict[str, str]], field: str) -> Tuple[np.ndarray, np.ndarray]:
+def _encode_binary(
+    rows: List[Dict[str, str]], field: str
+) -> Tuple[np.ndarray, np.ndarray]:
     def to_int(val: str) -> int:
         if val is None:
             return -1
@@ -148,7 +162,9 @@ def _kfold_indices(n: int, k: int, seed: int = RNG_SEED):
         start = end
 
 
-def _train_eval_probe_sklearn(train_x: np.ndarray, train_y: np.ndarray, val_x: np.ndarray, val_y: np.ndarray) -> float:
+def _train_eval_probe_sklearn(
+    train_x: np.ndarray, train_y: np.ndarray, val_x: np.ndarray, val_y: np.ndarray
+) -> float:
     # Keep defaults; sklearn>=1.5 deprecates multi_class="auto", so omit it
     clf = LogisticRegression(max_iter=200)
     with warnings.catch_warnings():
@@ -191,7 +207,9 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         return
 
     token_to_idx = stoi(tokens)
-    indices = [token_to_idx[row["token"]] for row in rows if row.get("token") in token_to_idx]
+    indices = [
+        token_to_idx[row["token"]] for row in rows if row.get("token") in token_to_idx
+    ]
     X = embeddings[indices].astype(np.float32, copy=False)
 
     results = []
@@ -213,11 +231,15 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         if field == "aa":
             keep_classes = set(int(c) for c, cnt in zip(classes, counts) if cnt >= 2)
             if keep_classes and len(keep_classes) < classes.size:
-                keep_mask = np.array([int(v) in keep_classes for v in y_task], dtype=bool)
+                keep_mask = np.array(
+                    [int(v) in keep_classes for v in y_task], dtype=bool
+                )
                 X_task = X_task[keep_mask]
                 y_task = y_task[keep_mask]
                 classes, counts = np.unique(y_task, return_counts=True)
-                print(f"[probe-linear] AA identity: dropped singleton classes; kept {classes.size} classes")
+                print(
+                    f"[probe-linear] AA identity: dropped singleton classes; kept {classes.size} classes"
+                )
         if classes.size < 2:
             print(f"[probe-linear] skipping {task}; only one class present")
             continue
@@ -227,7 +249,11 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
             test_size = 0.5 if min_per_class == 1 else 0.2
             try:
                 train_x, val_x, train_y, val_y = train_test_split(
-                    X_task, y_task, test_size=test_size, stratify=y_task, random_state=RNG_SEED
+                    X_task,
+                    y_task,
+                    test_size=test_size,
+                    stratify=y_task,
+                    random_state=RNG_SEED,
                 )
             except ValueError as exc:
                 print(f"[probe-linear] skipping {task}; holdout split failed ({exc})")
@@ -240,7 +266,9 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         else:
             n_splits = max(2, min(K_FOLDS, min_per_class))
             fold_acc = []
-            skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=RNG_SEED)
+            skf = StratifiedKFold(
+                n_splits=n_splits, shuffle=True, random_state=RNG_SEED
+            )
             for train_idx, val_idx in skf.split(X_task, y_task):
                 train_x = X_task[train_idx]
                 val_x = X_task[val_idx]

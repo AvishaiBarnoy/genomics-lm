@@ -8,9 +8,8 @@ Provides the training labels for the Multi-Task Protein Classifier.
 import argparse
 from pathlib import Path
 from Bio import SeqIO
-import requests
 import json
-import time
+
 
 def extract_protein_ids(gbff_files):
     """Parses GBFF files to map locus_tags to protein_ids and sequences."""
@@ -27,9 +26,10 @@ def extract_protein_ids(gbff_files):
                         mapping[prot_id] = {
                             "locus_tag": locus,
                             "sequence": seq,
-                            "genome": Path(gb).stem.split("_")[:2]
+                            "genome": Path(gb).stem.split("_")[:2],
                         }
     return mapping
+
 
 def fetch_pfam_batch(protein_ids):
     """
@@ -42,11 +42,14 @@ def fetch_pfam_batch(protein_ids):
     # In a real run, we would POST the IDs and wait for the mapping job to finish.
     print(f"[*] Simulating fetch for {len(protein_ids)} proteins...")
     # Mock result for logic flow
-    return {pid: "PF00001" for pid in list(protein_ids)[:10]} 
+    return {pid: "PF00001" for pid in list(protein_ids)[:10]}
+
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--raw_dir", default="data/raw", help="Directory containing .gbff files")
+    ap.add_argument(
+        "--raw_dir", default="data/raw", help="Directory containing .gbff files"
+    )
     ap.add_argument("--out", default="data/processed/protein_pfam_labels.json")
     args = ap.parse_args()
 
@@ -62,9 +65,10 @@ def main():
     # For now, we save the extracted protein metadata to be processed.
     with open(args.out, "w") as f:
         json.dump(id_map, f, indent=4)
-    
+
     print(f"[save] Protein metadata saved to {args.out}")
     print("[*] Next Step: Use UniProt API to map these IDs to Pfam families.")
+
 
 if __name__ == "__main__":
     main()

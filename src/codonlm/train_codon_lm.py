@@ -17,13 +17,34 @@ Config highlights:
   log_csv: where to append training curves (relative to scores_dir by default)
 """
 
-import argparse, yaml, math, csv, time, torch, numpy as np, json, os, logging, shutil
+import argparse
+import yaml
+import math
+import csv
+import time
+import torch
+import numpy as np
+import json
+import os
+import logging
+import shutil
 from pathlib import Path
 from typing import Optional, Tuple
 from torch.utils.data import DataLoader, Dataset
 from .model_tiny_gpt import TinyGPT
 
 RUN_ID_ENV = "RUN_ID"
+
+
+class WallTimeLimitException(Exception):
+    pass
+
+
+
+def write_meta(run_dir: Path, meta: dict) -> None:
+    meta_path = run_dir / "meta.json"
+    meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+
 
 
 def _ensure_path_list(arg_value, cfg_value, key: str):
@@ -61,14 +82,15 @@ def _auto_run_id(cfg: dict, config_path: Optional[str]) -> str:
 
 
 def _prepare_output_dirs(base_ckpt_dir: str, base_scores_dir: str, run_id: Optional[str]) -> Tuple[Path, Path]:
-    ckpt_root = Path(base_ckpt_dir)
     if run_id:
-        ckpt_root = ckpt_root / run_id
+        runs_dir = Path("runs") / run_id
+        ckpt_root = runs_dir / "checkpoints"
+        scores_root = runs_dir / "scores"
+    else:
+        ckpt_root = Path(base_ckpt_dir)
+        scores_root = Path(base_scores_dir)
+        
     ckpt_root.mkdir(parents=True, exist_ok=True)
-
-    scores_root = Path(base_scores_dir)
-    if run_id:
-        scores_root = scores_root / run_id
     scores_root.mkdir(parents=True, exist_ok=True)
     return ckpt_root, scores_root
 
@@ -351,10 +373,12 @@ def main():
         log_csv = scores_dir / "curves.csv"
     log_csv.parent.mkdir(parents=True, exist_ok=True)
     with log_csv.open("w", newline="") as f:
-        writer = csv.writer(f); writer.writerow(["step","train_loss","val_loss","perplexity","lr"])
+        writer = csv.writer(f)
+        writer.writerow(["step","train_loss","val_loss","perplexity","lr"])
 
     start_epoch = 0
-    best = float("inf"); no_improve = 0
+    best = float("inf")
+    no_improve = 0
     step = 0
     best_epoch = None
 
@@ -363,8 +387,10 @@ def main():
         ckpt_transfer = torch.load(transfer_path, map_location=device)
         sd = ckpt_transfer["model"] if isinstance(ckpt_transfer, dict) and "model" in ckpt_transfer else ckpt_transfer
         missing, unexpected = model.load_state_dict(sd, strict=False)
-        if missing: print(f"[transfer] missing: {missing}")
-        if unexpected: print(f"[transfer] unexpected: {unexpected}")
+        if missing:
+            print(f"[transfer] missing: {missing}")
+        if unexpected:
+            print(f"[transfer] unexpected: {unexpected}")
 
     if resume_path:
         print(f"[resume] loading {resume_path}")
@@ -389,9 +415,8 @@ def main():
     if start_epoch >= max_epochs:
         print(f"[resume] start_epoch {start_epoch} >= configured epochs {max_epochs}; no new epochs will run unless you increase 'epochs'.")
 
-    scaler = None  # GradScaler is CUDA-only; autocast on MPS may be unsupported in some torch versions
-
     def one_pass(split, loader):
+        """Runs a single training or validation epoch pass over the dataset."""
         nonlocal step
         mps_autocast_ok = True
         model.train(split=="train")
@@ -406,6 +431,7 @@ def main():
             
             xb, yb = xb.to(device), yb.to(device)
             def fwd():
+                """Helper to run model forward pass and return scaled loss."""
                 logits_, loss_ = model(xb, yb)
                 return logits_, loss_ / gacc
 
@@ -439,10 +465,14 @@ def main():
                     step += 1
                     if use_cosine:
                         scheduler.step()
-            total += loss.item()*gacc; n += 1
+            total += loss.item()*gacc
+            n += 1
+            if max_time_seconds and (time.time() - train_start_time) > max_time_seconds:
+                raise WallTimeLimitException()
         return (total / max(n,1), skipped)
 
     history = []
+
     best_epoch = None
     if run_id:
         print(f"[run] id={run_id}")
@@ -457,65 +487,119 @@ def main():
     train_wall0 = time.perf_counter()
     train_cpu0 = time.process_time()
 
-    for epoch in range(start_epoch, max_epochs):
-        ep_wall0 = time.perf_counter()
-        ep_cpu0 = time.process_time()
-        epoch_idx = epoch + 1
-        train_loss, train_skips = one_pass("train", train_loader)
-        with torch.no_grad():
-            val_loss, val_skips = one_pass("val", val_loader)
-        ppl = math.exp(min(20.0, val_loss))
-        if not use_cosine:
-            scheduler.step(val_loss)
-        lr_now = optim.param_groups[0]["lr"]
-        msg = f"[epoch {epoch_idx}] train {train_loss:.3f} | val {val_loss:.3f} | ppl {ppl:.2f} | lr {lr_now:.2e}"
-        if train_skips or val_skips:
-            msg += f" | skips train={train_skips} val={val_skips}"
-        print(msg)
-        ep_wall1 = time.perf_counter()
-        ep_cpu1 = time.process_time()
-        print(f"[timing] epoch {epoch_idx} wall_sec={ep_wall1-ep_wall0:.2f} cpu_sec={ep_cpu1-ep_cpu0:.2f}")
+    max_time_minutes = cfg.get("max_time_minutes", None)
+    max_time_seconds = max_time_minutes * 60 if max_time_minutes else None
+    if max_time_minutes:
+        print(f"[*] Wall-time limit configured: {max_time_minutes} minutes")
+    train_start_time = time.time()
 
-        improved = val_loss + 1e-6 < best
-        if improved:
-            best = val_loss
-            best_epoch = epoch_idx
-            no_improve = 0
-        else:
-            no_improve += 1
+    try:
+        for epoch in range(start_epoch, max_epochs):
+            ep_wall0 = time.perf_counter()
+            ep_cpu0 = time.process_time()
+            epoch_idx = epoch + 1
+            train_loss, train_skips = one_pass("train", train_loader)
+            with torch.no_grad():
+                val_loss, val_skips = one_pass("val", val_loader)
+            ppl = math.exp(min(20.0, val_loss))
+            if not use_cosine:
+                scheduler.step(val_loss)
+            lr_now = optim.param_groups[0]["lr"]
+            msg = f"[epoch {epoch_idx}] train {train_loss:.3f} | val {val_loss:.3f} | ppl {ppl:.2f} | lr {lr_now:.2e}"
+            if train_skips or val_skips:
+                msg += f" | skips train={train_skips} val={val_skips}"
+            print(msg)
+            ep_wall1 = time.perf_counter()
+            ep_cpu1 = time.process_time()
+            print(f"[timing] epoch {epoch_idx} wall_sec={ep_wall1-ep_wall0:.2f} cpu_sec={ep_cpu1-ep_cpu0:.2f}")
 
+            improved = val_loss + 1e-6 < best
+            if improved:
+                best = val_loss
+                best_epoch = epoch_idx
+                no_improve = 0
+            else:
+                no_improve += 1
+
+            ckpt_payload = {
+                "model": model.state_dict(),
+                "optimizer": optim.state_dict(),
+                "scheduler": scheduler.state_dict() if scheduler is not None else None,
+                "cfg": cfg,
+                "epoch": epoch_idx,
+                "val_loss": val_loss,
+                "train_loss": train_loss,
+                "best_val": best,
+                "best_epoch": best_epoch,
+                "no_improve": no_improve,
+                "step": step,
+            }
+            torch.save(ckpt_payload, ckpt_dir / "last.pt")
+            if cfg.get("save_epochs", False):
+                torch.save(ckpt_payload, ckpt_dir / f"epoch_{epoch_idx}.pt")
+            with log_csv.open("a", newline="") as f:
+                csv.writer(f).writerow([epoch_idx, f"{train_loss:.4f}", f"{val_loss:.4f}", f"{ppl:.3f}", f"{lr_now:.3e}"])
+
+            history.append({
+                "epoch": epoch_idx,
+                "train_loss": train_loss,
+                "val_loss": val_loss,
+                "perplexity": ppl,
+                "lr": lr_now,
+            })
+
+            if improved:
+                torch.save(ckpt_payload, ckpt_dir / "best.pt")
+            elif no_improve >= int(cfg.get("early_stop_patience", 5)):
+                print("[early-stopping] no improvement; stopping.")
+                break
+    except WallTimeLimitException:
+        print(f"\n[info] Wall-time limit of {max_time_minutes} minutes reached mid-epoch.")
         ckpt_payload = {
             "model": model.state_dict(),
             "optimizer": optim.state_dict(),
             "scheduler": scheduler.state_dict() if scheduler is not None else None,
             "cfg": cfg,
-            "epoch": epoch_idx,
-            "val_loss": val_loss,
-            "train_loss": train_loss,
+            "epoch": epoch,
+            "val_loss": float("inf"),
+            "train_loss": float("inf"),
             "best_val": best,
             "best_epoch": best_epoch,
             "no_improve": no_improve,
             "step": step,
         }
         torch.save(ckpt_payload, ckpt_dir / "last.pt")
-        if cfg.get("save_epochs", False):
-            torch.save(ckpt_payload, ckpt_dir / f"epoch_{epoch_idx}.pt")
-        with log_csv.open("a", newline="") as f:
-            csv.writer(f).writerow([epoch_idx, f"{train_loss:.4f}", f"{val_loss:.4f}", f"{ppl:.3f}", f"{lr_now:.3e}"])
+        print(f"[success] Gracefully saved checkpoint to {ckpt_dir / 'last.pt'}. Exiting.")
 
-        history.append({
-            "epoch": epoch_idx,
-            "train_loss": train_loss,
-            "val_loss": val_loss,
-            "perplexity": ppl,
-            "lr": lr_now,
-        })
+        # Final meta and metrics collection
+        train_wall1 = time.perf_counter()
+        train_cpu1 = time.process_time()
+        total_time = train_wall1 - train_wall0
 
-        if improved:
-            torch.save(ckpt_payload, ckpt_dir / "best.pt")
-        elif no_improve >= int(cfg.get("early_stop_patience", 5)):
-            print("[early-stopping] no improvement; stopping.")
-            break
+        meta = {
+            "run_id": run_id,
+            "train_wall_sec": round(total_time, 2),
+            "train_cpu_sec": round(train_cpu1 - train_cpu0, 2),
+            "best_epoch": best_epoch,
+            "best_val_loss": float(best) if best != float("inf") else None,
+            "status": "stopped",
+            "model_spec": model.to_dict() if hasattr(model, "to_dict") else {}
+        }
+
+        if history:
+            meta.update({
+                "last_epoch": history[-1]["epoch"],
+                "last_val_loss": history[-1]["val_loss"],
+                "last_train_loss": history[-1]["train_loss"],
+                "last_perplexity": history[-1]["perplexity"],
+            })
+            metrics_path = scores_dir / "metrics.json"
+            metrics_path.write_text(json.dumps(meta, indent=2) + "\n")
+
+        write_meta(ckpt_dir, meta)
+
+        print(f"[timing] train_wall_sec={total_time:.2f} train_cpu_sec={train_cpu1-train_cpu0:.2f}")
+        return
 
     # Final meta and metrics collection
     train_wall1 = time.perf_counter()

@@ -55,6 +55,8 @@ All steps read `runs/<run_id>/artifacts.npz` (plus optional labels) and write ch
   - [x] **Protein-Critic Bridge**: DNA -> ProteinLM scoring script (`scripts/protein_critic_bridge.py`).
   - [x] **Multi-Task Classifiers**: Multi-head model for Family, Stability, and Function.
 - [x] **Inference Policy Optimization (ReD)**: Implement Reset-and-Discard to overcome the sublinear coverage trap and the 0% termination barrier.
+- [ ] **Anchored Operon Bridges**: Train specifically on gene-gene boundaries to master operon logic. (In Progress)
+- [ ] **Inference Benchmark**: Increase termination rate beyond 20% with Operon training. (In Progress)
 - [ ] **Energy-Based Physical Models (EBM)**: Integrate thermodynamic/structural stability as a global sequence filter.
 
 **Projects**
@@ -72,6 +74,11 @@ All steps read `runs/<run_id>/artifacts.npz` (plus optional labels) and write ch
 3. **Motif Co‑occurrence Graphs**
 
 * Build motif graphs from hidden‑state clusters; relate to function labels; inspect with Steps 2–3.
+
+**Maintenance & Usability**
+
+* **Data Organization Consolidation**: Consolidate `outputs/` checkpoints/scores and `runs/` diagnostics under a unified run directory layout (`runs/<run_id>/`). Write unit verification tests and update documentation.
+* [x] **Model Querying UI**: Created a visual "Model Playground" tab in the Streamlit web dashboard to automate next-codon, sequence generation, and protein classification queries.
 
 **Hardware**: 16 GB MacBook with quantization+LoRA.
 **Outcome**: Strong lightweight classifiers, interpretable embeddings, motif‑aware generation.
