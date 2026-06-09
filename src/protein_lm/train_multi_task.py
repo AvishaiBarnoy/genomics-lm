@@ -42,7 +42,7 @@ class MultiTaskProteinDataset(Dataset):
             "stability": torch.tensor(s.get("stability_id", -1), dtype=torch.long)
         }
 
-def train_multi_task(config_path, resume_path=None):
+def train_multi_task(config_path, resume_path=None, run_id=None):
     with open(config_path, 'r') as f:
         cfg = yaml.safe_load(f)
         
@@ -113,8 +113,26 @@ def train_multi_task(config_path, resume_path=None):
     
     start_time = time.time()
     
-    out_dir = Path(cfg.get("out_dir", "runs/protein_critic/checkpoints"))
+    if not run_id:
+        run_id = cfg.get("run_id", None)
+    if not run_id:
+        from datetime import date
+        today = date.today().strftime("%Y-%m-%d")
+        tag = Path(config_path).stem
+        run_id = f"{today}_{tag}_{model_cfg.n_layer}L{model_cfg.n_head}H_d{model_cfg.n_embd}_e{epochs}"
+    
+    runs_dir = Path("runs") / run_id
+    out_dir = runs_dir / "checkpoints"
+    scores_dir = runs_dir / "scores"
+    
     out_dir.mkdir(parents=True, exist_ok=True)
+    scores_dir.mkdir(parents=True, exist_ok=True)
+    
+    log_csv = scores_dir / "curves.csv"
+    import csv
+    if not log_csv.exists():
+        with open(log_csv, "w", newline="") as f:
+            csv.writer(f).writerow(["epoch", "train_loss", "val_loss"])
     
     time_limit_reached = False
     for epoch in range(start_epoch, epochs):
@@ -196,6 +214,9 @@ def train_multi_task(config_path, resume_path=None):
             torch.mps.empty_cache()
         print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
         
+        with open(log_csv, "a", newline="") as f:
+            csv.writer(f).writerow([epoch + 1, f"{train_loss:.4f}", f"{val_loss:.4f}"])
+        
         # Save last checkpoint for resilience
         checkpoint = {
             'epoch': epoch,
@@ -214,5 +235,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True, help="Path to YAML config")
     parser.add_argument("--resume", default=None, help="Path to checkpoint file to resume from")
+    parser.add_argument("--run_id", default=None, help="Unique run id")
     args = parser.parse_args()
-    train_multi_task(args.config, args.resume)
+    train_multi_task(args.config, args.resume, args.run_id)

@@ -50,20 +50,36 @@ def test_train_multi_task_wall_time_limit(tmp_path):
     with open(config_file, "w") as f:
         yaml.safe_dump(config_data, f)
         
-    # Run train_multi_task.py in a subprocess from workspace root
+    # Run train_multi_task.py in a subprocess from workspace root with a custom run_id
+    run_id = "test_run_multi_task_wall_time_temp"
     cmd = [
         sys.executable,
         "-m", "src.protein_lm.train_multi_task",
         "--config", str(config_file),
+        "--run_id", run_id,
     ]
     
     workspace_root = "/Users/User/github/genomics-lm"
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=workspace_root)
-    print("STDOUT:", result.stdout)
-    print("STDERR:", result.stderr)
+    runs_dir = Path(workspace_root) / "runs" / run_id
     
-    assert result.returncode == 0
-    
-    # Verify that checkpoints directory contains last_critic.pt
-    last_critic_pt = tmp_path / "checkpoints" / "last_critic.pt"
-    assert last_critic_pt.exists()
+    # Ensure any previous temp run dir is clean
+    if runs_dir.exists():
+        shutil.rmtree(runs_dir)
+        
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=workspace_root)
+        print("STDOUT:", result.stdout)
+        print("STDERR:", result.stderr)
+        
+        assert result.returncode == 0
+        
+        # Verify that checkpoints directory contains last_critic.pt
+        last_critic_pt = runs_dir / "checkpoints" / "last_critic.pt"
+        assert last_critic_pt.exists()
+        
+        # Verify curves.csv contains header and exists
+        curves_csv = runs_dir / "scores" / "curves.csv"
+        assert curves_csv.exists()
+    finally:
+        if runs_dir.exists():
+            shutil.rmtree(runs_dir)
