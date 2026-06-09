@@ -89,7 +89,7 @@ python -m scripts.query_model <RUN_ID> --mode next --dna ATGAAACCC --topk 5
 ```
 
 ## Development Conventions
-*   **Run IDs**: Experiments are tracked via unique Run IDs. Outputs are stored in `outputs/checkpoints/<RUN_ID>` and `outputs/scores/<RUN_ID>`.
+*   **Run IDs**: Experiments are tracked via unique Run IDs. Outputs are stored in `runs/<RUN_ID>/checkpoints` and `runs/<RUN_ID>/scores`.
 *   **Testing**: Run unit tests using `pytest`:
     ```bash
     pytest

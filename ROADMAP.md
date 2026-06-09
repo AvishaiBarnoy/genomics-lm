@@ -77,8 +77,9 @@ All steps read `runs/<run_id>/artifacts.npz` (plus optional labels) and write ch
 
 **Maintenance & Usability**
 
-* **Data Organization Consolidation**: Consolidate `outputs/` checkpoints/scores and `runs/` diagnostics under a unified run directory layout (`runs/<run_id>/`). Write unit verification tests and update documentation.
+* [x] **Data Organization Consolidation**: Consolidate `outputs/` checkpoints/scores and `runs/` diagnostics under a unified run directory layout (`runs/<run_id>/`). Write unit verification tests and update documentation.
 * [x] **Model Querying UI**: Created a visual "Model Playground" tab in the Streamlit web dashboard to automate next-codon, sequence generation, and protein classification queries.
+* [x] **SOTA Benchmarking & Hardware Profiling**: Define prokaryotic benchmarking metrics against Evo 1, GenSLM, and ProGen2, and establish a local hardware stress-testing protocol (100–200 genomes).
 
 **Hardware**: 16 GB MacBook with quantization+LoRA.
 **Outcome**: Strong lightweight classifiers, interpretable embeddings, motif‑aware generation.

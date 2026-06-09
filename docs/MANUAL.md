@@ -11,7 +11,7 @@ A compact codon‑level GPT‑style LM with a reproducible training + analysis p
 - Setup: conda env create -f environment.yml; conda activate codonlm (or pip install -r requirements.txt)
 - Train (default config + auto RUN_ID):
   - ./main.sh
-  - Outputs: checkpoints → outputs/checkpoints/<RUN_ID>/, curves/metrics → outputs/scores/<RUN_ID>/, full log → runs/<RUN_ID>/log.txt
+  - Outputs: checkpoints → runs/<RUN_ID>/checkpoints/, curves/metrics → runs/<RUN_ID>/scores/, full log → runs/<RUN_ID>/log.txt
 - Analyze (one command):
   - ./analysis.sh <RUN_ID> [configs/tiny_mps.yaml]
 - Query a trained model:
@@ -46,12 +46,12 @@ A compact codon‑level GPT‑style LM with a reproducible training + analysis p
 
 - Goal: benchmark sequence‑level representations from the LM against classical baselines.
 - Extract embeddings from a run:
-  - python -m scripts.extract_embeddings --run_id <RUN_ID> --fasta data/my.fasta --out outputs/reports/e1/train_embeddings.npz
+  - python -m scripts.extract_embeddings --run_id <RUN_ID> --fasta data/my.fasta --out runs/<RUN_ID>/scores/train_embeddings.npz
 - Train a probe or baseline (configure paths in configs/classifier/*):
   - python -m scripts.train_classifier --config configs/classifier/probe_aa.yaml
   - python -m scripts.train_classifier --config configs/classifier/kmer_aa.yaml
 - Evaluate a saved classifier:
-  - python -m scripts.eval_classifier --kind probe --model outputs/reports/e1/model.pkl --embeddings <NPZ> --labels <CSV> --out outputs/reports/e1
+  - python -m scripts.eval_classifier --kind probe --model runs/<RUN_ID>/scores/model.pkl --embeddings <NPZ> --labels <CSV> --out runs/<RUN_ID>/scores
 - Protocols:
   - TSTR/TRTS are supported by choosing train_* and test_* sources in the config (e.g., synthetic vs real).
 
@@ -59,13 +59,13 @@ A compact codon‑level GPT‑style LM with a reproducible training + analysis p
 
 ```bash
 # Predict next codon probabilities
-python -m scripts.infer_predict_next_codon --run_dir outputs/checkpoints/<RUN_ID> --prompt "ATG GCT GCT" --topk 10
+python -m scripts.infer_predict_next_codon --run_dir runs/<RUN_ID>/checkpoints --prompt "ATG GCT GCT" --topk 10
 
 # Generate a CDS until a stop codon or EOS
-python -m scripts.infer_generate_cds --run_dir outputs/checkpoints/<RUN_ID> --stop_on_bio_stop --max_codons 300
+python -m scripts.infer_generate_cds --run_dir runs/<RUN_ID>/checkpoints --stop_on_bio_stop --max_codons 300
 
 # Score per-position ΔlogP for a provided CDS and plot a heatmap
-python -m scripts.infer_score_mutations --run_dir outputs/checkpoints/<RUN_ID> --seq "ATG GCT ... TGA" --out_dir outputs/analysis/<RUN_ID>
+python -m scripts.infer_score_mutations --run_dir runs/<RUN_ID>/checkpoints --seq "ATG GCT ... TGA" --out_dir runs/<RUN_ID>/scores
 ```
 
 ### Long Protein Generation (Prefix Benchmark)
@@ -82,21 +82,21 @@ python -m scripts.infer_score_mutations --run_dir outputs/checkpoints/<RUN_ID> -
 Evaluate a trained run on the held‑out test split and compute sanity KPIs:
 
 ```bash
-# Test cross‑entropy and perplexity; updates outputs/scores/<RUN_ID>/metrics.json
-python -m scripts.evaluate_test --run_dir outputs/checkpoints/<RUN_ID>
+# Test cross‑entropy and perplexity; updates runs/<RUN_ID>/scores/metrics.json
+python -m scripts.evaluate_test --run_dir runs/<RUN_ID>/checkpoints
 
 # Sanity KPIs (codon_corr, frameshift_delta, start/stop deltas, syn_gap)
-python -m scripts.sanity_kpis --run_dir outputs/checkpoints/<RUN_ID>
+python -m scripts.sanity_kpis --run_dir runs/<RUN_ID>/checkpoints
 
 # Compare multiple runs and produce a table + plots
 python -m scripts.compare_runs
 # outputs:
-#   outputs/scores/compare/summary.csv
-#   outputs/scores/compare/ppl_vs_params.png
-#   outputs/scores/compare/val_vs_test_ppl.png
+#   runs/_summary/summary.csv
+#   runs/_summary/ppl_vs_params.png
+#   runs/_summary/val_vs_test_ppl.png
 ```
 
-The benchmarking scripts merge results into each run’s `outputs/scores/<RUN_ID>/metrics.json` without overwriting unrelated fields.
+The benchmarking scripts merge results into each run’s `runs/<RUN_ID>/scores/metrics.json` without overwriting unrelated fields.
 
 ### Secondary-Structure Checks (optional)
 
