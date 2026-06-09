@@ -217,6 +217,11 @@ def train_multi_task(config_path, resume_path=None, run_id=None):
         with open(log_csv, "a", newline="") as f:
             csv.writer(f).writerow([epoch + 1, f"{train_loss:.4f}", f"{val_loss:.4f}"])
         
+        improved = False
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            improved = True
+
         # Save last checkpoint for resilience
         checkpoint = {
             'epoch': epoch,
@@ -226,8 +231,7 @@ def train_multi_task(config_path, resume_path=None, run_id=None):
         }
         torch.save(checkpoint, out_dir / "last_critic.pt")
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
+        if improved:
             torch.save(model.state_dict(), out_dir / "best_critic.pt")
             print("  -> Saved new best model.")
 
