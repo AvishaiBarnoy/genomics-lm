@@ -27,3 +27,6 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [x] **Track: Model Querying Streamlit UI**
 *Link: [./tracks/querying_ui_20260608/](./tracks/querying_ui_20260608/)*
+
+- [ ] **Track: SOTA Benchmarking & Hardware Profiling**
+*Link: [./tracks/sota_benchmarking_20260609/](./tracks/sota_benchmarking_20260609/)*
