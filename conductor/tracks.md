@@ -19,7 +19,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [x] **Track: Shabbat 26-Hour Automated Workflow**
 *Link: [./tracks/shabbat_workflow_20260605/](./tracks/shabbat_workflow_20260605/)*
 
-- [ ] **Track: Data Organization Consolidation**
+- [x] **Track: Data Organization Consolidation**
 *Link: [./tracks/data_organization_20260608/](./tracks/data_organization_20260608/)*
 
 - [ ] **Track: NoProp Algorithm Integration**
@@ -30,3 +30,6 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [ ] **Track: SOTA Benchmarking & Hardware Profiling**
 *Link: [./tracks/sota_benchmarking_20260609/](./tracks/sota_benchmarking_20260609/)*
+
+- [ ] **Track: hayaData 2026 Submission Preparation**
+*Link: [./tracks/hayadata_submission_20260609/](./tracks/hayadata_submission_20260609/)*
