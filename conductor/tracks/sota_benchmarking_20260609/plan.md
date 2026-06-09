@@ -1,43 +1,36 @@
 # SOTA Benchmarking Implementation Plan
 
-This plan outlines the steps required to execute baseline benchmarking evaluations on our local models and log comparative results.
+This plan outlines the steps required to evaluate our local prokaryotic models against Evo 1 using standard prokaryotic evaluation suites.
 
 ---
 
-## Phase 1: Research & Setup
-- [ ] **Task 1.1:** Fetch exact downstream performance tables from SOTA papers:
-  - DNABERT-2 (Zhou et al., 2024) - GUE benchmark tables.
-  - HyenaDNA (Nguyen et al., 2023) - GenomicBenchmarks tables.
-  - Caduceus (Schiff et al., 2024) - Variant effect and epigenetic classification tables.
-- [ ] **Task 1.2:** Install `GenomicBenchmarks` package:
-  ```bash
-  pip install genomic-benchmarks
-  ```
-- [ ] **Task 1.3:** Setup downloading and preprocessing scripts for GUE sample datasets (e.g., promoter and splice-site datasets).
+## Phase 1: Benchmark Data Acquisition
+- [ ] **Task 1.1:** Retrieve Deep Mutational Scanning (DMS) datasets for prokaryotic proteins and *E. coli* 5S rRNA (referenced in Stanford Arc's Evo 1 papers).
+- [ ] **Task 1.2:** Download the Kosuri promoter/RBS expression datasets.
+- [ ] **Task 1.3:** Retrieve gene essentiality labels for:
+  - Lambda phage essentiality (Piya et al., 2023).
+  - *Pseudomonas aeruginosa* essentiality (Turner et al., 2015).
 
 ---
 
-## Phase 2: Feature Extraction Pipeline
-- [ ] **Task 2.1:** Implement a unified feature extractor script `scripts/benchmark_extract_features.py` that:
-  - Loads a trained backbone (CodonLM TinyGPT or ProteinLM backbone).
-  - Encodes sequences from the benchmark dataset.
-  - Generates token-level embeddings and applies mean pooling to output sequence-level feature arrays (`.npz` files).
-- [ ] **Task 2.2:** Support sliding-window feature pooling for long context inputs exceeding default context lengths.
+## Phase 2: Zero-Shot Mutation Scoring Pipeline
+- [ ] **Task 2.1:** Implement a zero-shot scoring script `scripts/benchmark_zero_shot_mutations.py` that:
+  - Loads our CodonLM model.
+  - Takes a wild-type and a mutated nucleotide sequence.
+  - Computes the log-likelihood (or perplexity difference) under the model.
+  - Calculates the Spearman rank correlation against experimental DMS fitness values.
+- [ ] **Task 2.2:** Verify that the scoring handles codon boundaries and sequence padding correctly.
 
 ---
 
-## Phase 3: Linear Probe Evaluation
-- [ ] **Task 3.1:** Write a evaluation runner script `scripts/benchmark_eval_heads.py` to:
-  - Load the generated feature arrays (`.npz` files).
-  - Train a simple PyTorch linear probe or 1-layer MLP classification head.
-  - Calculate standard metrics (Accuracy, MCC, F1 Score).
-- [ ] **Task 3.2:** Save metrics output to `runs/<run_id>/scores/sota_benchmarks.json`.
+## Phase 3: Gene Essentiality Classification
+- [ ] **Task 3.1:** Implement `scripts/benchmark_gene_essentiality.py` to:
+  - Extract sequence embeddings from our backbones for the Lambda phage and *P. aeruginosa* gene datasets.
+  - Train a simple linear probe on the embeddings.
+  - Report classification metrics (Accuracy, F1, MCC).
 
 ---
 
-## Phase 4: Comparative Reporting
-- [ ] **Task 4.1:** Write a reporting script `scripts/generate_sota_report.py` to:
-  - Read local metrics from `runs/<run_id>/scores/sota_benchmarks.json`.
-  - Fetch stored literature benchmarks for DNABERT-2, HyenaDNA, and Caduceus.
-  - Calculate and report the *compute efficiency ratio* (Performance score divided by training hardware energy/FLOPs).
-  - Generate a markdown comparison table in the dashboards.
+## Phase 4: Comparative Reports
+- [ ] **Task 4.1:** Consolidate local metrics and compare them to published Evo 1 results (DMS correlation, essentiality F1).
+- [ ] **Task 4.2:** Calculate performance efficiency density (e.g. F1 score divided by parameter size and GPU pre-training hours) to compare M2 Mac efficiency vs. A100 pre-training.
