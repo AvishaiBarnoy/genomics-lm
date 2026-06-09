@@ -39,5 +39,5 @@ This plan outlines the steps required to evaluate our local prokaryotic models a
 ---
 
 ## Phase 4: Comparative Reports
-- [ ] **Task 4.1:** Consolidate local metrics and compare them to published Evo 1 results (DMS correlation, essentiality F1).
+- [ ] **Task 4.1:** Consolidate local metrics and compare them to published Evo 1 and GenSLM results (DMS correlation, essentiality F1).
 - [ ] **Task 4.2:** Calculate performance efficiency density (e.g. F1 score divided by parameter size and GPU pre-training hours) to compare M2 Mac efficiency vs. A100 pre-training.
