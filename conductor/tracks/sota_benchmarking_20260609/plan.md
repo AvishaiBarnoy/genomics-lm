@@ -1,6 +1,13 @@
 # SOTA Benchmarking Implementation Plan
 
-This plan outlines the steps required to evaluate our local prokaryotic models against Evo 1 using standard prokaryotic evaluation suites.
+This plan outlines the steps required to evaluate our local prokaryotic models against Evo 1 using standard prokaryotic evaluation suites and stress-test our local hardware.
+
+---
+
+## Phase 0: Local Pre-training Dataset Scaling (Hardware Stress-Test)
+- [ ] **Task 0.1:** Curate a subset of 100–200 representative prokaryotic genomes from GenBank (targeting 300M–500M nucleotides).
+- [ ] **Task 0.2:** Write a pipeline preparation script to extract and tokenize all CDS coding sequences.
+- [ ] **Task 0.3:** Conduct a continuous 24–48 hour training run (stress-test) on the local M2 Mac GPU to establish a scratch-pretrained baseline.
 
 ---
 
