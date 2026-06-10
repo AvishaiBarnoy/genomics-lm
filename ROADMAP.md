@@ -72,7 +72,7 @@ All steps read `runs/<run_id>/artifacts.npz` (plus optional labels) and write ch
 - [ ] **Dual-Track Late Fusion (Structural Compass)**:
   - Train a lightweight nucleotide encoder (e.g. CNN/local Transformer) on 60 bp sliding windows.
   - Inject physical DNA shape/energy representations into the main codon-level generator to guide sequence generation.
-- [ ] **Hybrid Tokenization (Variable-Scale Tape)**:
+- [x] **Hybrid Tokenization (Variable-Scale Tape)**:
   - Build a multi-scale tokenizer with a unified vocabulary (64 codons + 4 nucleotides).
   - Tokenize coding regions (CDS) as codons ($3\times$ compression) and intergenic/UTR regions as single nucleotides (1 bp resolution).
 - [ ] **Energy-Based mRNA Optimizer (EBM)**:
