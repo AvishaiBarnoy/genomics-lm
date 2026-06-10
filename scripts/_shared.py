@@ -117,6 +117,8 @@ def resolve_run(
 def read_meta(run_dir: Path) -> Dict[str, object]:
     meta_path = run_dir / "meta.json"
     if not meta_path.exists():
+        meta_path = run_dir / "checkpoints" / "meta.json"
+    if not meta_path.exists():
         raise ArtifactError(f"meta.json missing for run at {run_dir}")
     return json.loads(meta_path.read_text())
 

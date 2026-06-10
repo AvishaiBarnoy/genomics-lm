@@ -129,8 +129,9 @@ def main():
         # 1. Val PPL from meta
         try:
             meta = read_meta(run_dir)
-            if "val_ppl" in meta:
-                row["val_ppl"] = f"{float(meta['val_ppl']):.4f}"
+            val_ppl = meta.get("val_ppl", meta.get("last_perplexity"))
+            if val_ppl is not None:
+                row["val_ppl"] = f"{float(val_ppl):.4f}"
         except Exception:
             pass
 
