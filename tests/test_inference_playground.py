@@ -135,3 +135,26 @@ def test_score_protein_sequence():
     assert "avg_log_prob" in scores
     assert isinstance(scores["perplexity"], float)
 
+
+def test_get_attention_weights():
+    """Tests attention weight extraction using a dummy TinyGPT model."""
+    from src.eval.inference_playground import get_attention_weights
+    vocab_size = 69
+    block_size = 16
+    model = TinyGPT(vocab_size=vocab_size, block_size=block_size, n_layer=1, n_head=1, n_embd=16)
+    model.eval()
+    
+    itos = [f"TOK_{i}" for i in range(vocab_size)]
+    itos[1] = "<BOS_CDS>"
+    stoi = {tok: i for i, tok in enumerate(itos)}
+    
+    device = torch.device("cpu")
+    res = get_attention_weights(model, stoi, itos, device, "tok_4 tok_5")
+    
+    assert res is not None
+    assert "tokens" in res
+    assert "attention" in res
+    assert "Layer 1" in res["attention"]
+    assert res["attention"]["Layer 1"].shape == (1, 3, 3)  # n_head=1, T=3 (BOS + TOK_4 + TOK_5)
+
+

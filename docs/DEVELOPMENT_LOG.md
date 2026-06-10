@@ -111,5 +111,18 @@ $$\text{Efficiency Density} = \frac{\text{F1 Score}}{\text{Params (M)} \times \t
 Our local models deliver orders of magnitude higher performance density per parameter-hour on consumer-grade hardware compared to massive A100-supercomputer-trained foundations.
 
 ---
+
+## 6. Stage 5: Frugal MLOps & Advanced Playground Upgrades
+**Goal:** Address consumer hardware constraints and optimize the user-facing model Servicing UI.
+* **MacBook Sleep-Immune Training:** Replaced all training wall-time checks and speed metric routines with `time.perf_counter()`, ensuring that training can survive macOS sleep/suspend cycles without triggering premature timeouts or reporting distorted execution speeds.
+* **Local-First SQLite Caching for Bioinformatics:** Implemented an asynchronous client fallback for NCBI BLAST/EBI annotations, integrated with a local SQLite query database cache. This keeps API rate limits respected and allows instant, cached offline mock-engine queries.
+* **Interactive UI Playground Upgrades:**
+  * **Reset-and-Discard (ReD) Visualizer:** Added an interactive sampling toggle logging the stochastic reset attempts and token expenditures.
+  * **Live Training Progress Monitor:** Created a Live Monitor panel plotting active loss/learning-rate curves dynamically from active run CSV directories.
+  * **3D DNAshape Aligned Chart:** Aligned minor groove width (MGW), roll, and electrostatic potential (EP) curves dynamically underneath the generated sequences.
+  * **Attention Weight Heatmaps:** Enabled head-level self-attention heatmaps on custom inputs by temporarily disabling SDPA during forward inference.
+  * **Synonymous codon Alignment:** Aligns synonymous sequences, highlighting GC% shifting and 3D physical deltas.
+
+---
 *End of Log*
 

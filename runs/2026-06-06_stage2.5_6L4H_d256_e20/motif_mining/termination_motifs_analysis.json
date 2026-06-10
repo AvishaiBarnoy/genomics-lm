@@ -1,0 +1,25 @@
+{
+    "early_metrics": {
+        "count": 112,
+        "hairpin_avg": 12.080357142857142,
+        "hairpin_max": 19.0,
+        "poly_t_avg": 1.9196428571428572,
+        "poly_t_max": 4,
+        "poly_t_gte_4_frac": 0.03571428571428571,
+        "mgw_avg": 4.524553571428571,
+        "roll_avg": 3.1755952380952377,
+        "ep_avg": -4.986607142857143
+    },
+    "capped_metrics": {
+        "count": 38,
+        "hairpin_avg": 11.973684210526315,
+        "hairpin_max": 17.0,
+        "poly_t_avg": 1.9210526315789473,
+        "poly_t_max": 6,
+        "poly_t_gte_4_frac": 0.02631578947368421,
+        "mgw_avg": 4.525438596491227,
+        "roll_avg": 3.4078947368421053,
+        "ep_avg": -5.0017543859649125
+    },
+    "n_samples": 150
+}

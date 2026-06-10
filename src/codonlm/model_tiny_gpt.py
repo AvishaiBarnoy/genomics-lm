@@ -64,6 +64,7 @@ class CausalSelfAttention(nn.Module):
             else:
                 att = att.masked_fill(base==0, float('-inf'))
             att = torch.softmax(att, dim=-1)
+            self.last_attn = att.detach()
             y = att @ v
             y = y.transpose(1,2).contiguous().view(B, T, C)
         return self.proj(y)

@@ -1,0 +1,20 @@
+{
+    "termination_probabilities": {
+        "Control (Neutral)": 0.020872567894416095,
+        "Poly-T Tract": 0.02155533948312573,
+        "Hairpin Stem-Loop": 0.021253755030321658,
+        "Full Terminator (Hairpin + Poly-T)": 0.021448156008372646
+    },
+    "eos_probabilities": {
+        "Control (Neutral)": 5.356424727376297e-11,
+        "Poly-T Tract": 5.452953234785784e-11,
+        "Hairpin Stem-Loop": 5.411612782890707e-11,
+        "Full Terminator (Hairpin + Poly-T)": 5.482380029120382e-11
+    },
+    "stop_probabilities": {
+        "Control (Neutral)": 0.020872567840851845,
+        "Poly-T Tract": 0.0215553394285962,
+        "Hairpin Stem-Loop": 0.02125375497620553,
+        "Full Terminator (Hairpin + Poly-T)": 0.021448155953548848
+    }
+}

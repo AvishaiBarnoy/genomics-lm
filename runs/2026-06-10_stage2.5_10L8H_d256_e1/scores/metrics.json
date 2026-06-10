@@ -1,0 +1,13 @@
+{
+  "run_id": "2026-06-10_stage2.5_10L8H_d256_e1",
+  "train_wall_sec": 4620.6,
+  "train_cpu_sec": 1926.9,
+  "best_epoch": 1,
+  "best_val_loss": 0.0,
+  "status": "completed",
+  "model_spec": {},
+  "last_epoch": 1,
+  "last_val_loss": 0.0,
+  "last_train_loss": 0.0,
+  "last_perplexity": 1.0
+}

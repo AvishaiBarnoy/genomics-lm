@@ -426,10 +426,10 @@ def main():
         total, n = 0.0, 0
         optim.zero_grad(set_to_none=True)
         skipped = 0
-        start_time = time.time()
+        start_time = time.perf_counter()
         for xb, yb in loader:
             if n > 0 and n % 200 == 0:
-                elapsed = time.time() - start_time
+                elapsed = time.perf_counter() - start_time
                 print(f"[{split}] progress: {n}/{len(loader)} speed: {n*xb.shape[0]/elapsed:.2f} seq/sec")
             
             xb, yb = xb.to(device), yb.to(device)
@@ -470,7 +470,7 @@ def main():
                         scheduler.step()
             total += loss.item()*gacc
             n += 1
-            if max_time_seconds and (time.time() - train_start_time) > max_time_seconds:
+            if max_time_seconds and (time.perf_counter() - train_start_time) > max_time_seconds:
                 raise WallTimeLimitException()
         return (total / max(n,1), skipped)
 
@@ -494,7 +494,7 @@ def main():
     max_time_seconds = max_time_minutes * 60 if max_time_minutes else None
     if max_time_minutes:
         print(f"[*] Wall-time limit configured: {max_time_minutes} minutes")
-    train_start_time = time.time()
+    train_start_time = time.perf_counter()
 
     try:
         for epoch in range(start_epoch, max_epochs):

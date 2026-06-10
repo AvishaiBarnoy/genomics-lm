@@ -111,7 +111,7 @@ def train_multi_task(config_path, resume_path=None, run_id=None):
     if max_time_minutes:
         print(f"[*] Wall-time limit configured: {max_time_minutes} minutes")
     
-    start_time = time.time()
+    start_time = time.perf_counter()
     
     if not run_id:
         run_id = cfg.get("run_id", None)
@@ -153,8 +153,8 @@ def train_multi_task(config_path, resume_path=None, run_id=None):
                 targets = batch[task].to(device)
                 # Check if there's at least one valid label in the batch for this task
                 if (targets != -1).any():
-                    loss += criterion(logits_dict[task], targets)
-                    tasks_added += 1
+                     loss += criterion(logits_dict[task], targets)
+                     tasks_added += 1
             
             if tasks_added > 0:
                 loss = loss / grad_accum_steps
@@ -171,7 +171,7 @@ def train_multi_task(config_path, resume_path=None, run_id=None):
                 torch.mps.empty_cache()
 
             # Check wall-time limit at the end of every step
-            if max_time_seconds and (time.time() - start_time) > max_time_seconds:
+            if max_time_seconds and (time.perf_counter() - start_time) > max_time_seconds:
                 print(f"\n[info] Wall-time limit of {max_time_minutes} minutes reached mid-epoch.")
                 checkpoint = {
                     'epoch': epoch,

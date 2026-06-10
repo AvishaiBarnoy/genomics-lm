@@ -98,6 +98,9 @@ All steps read `runs/<run_id>/artifacts.npz` (plus optional labels) and write ch
 
 * [x] **Data Organization Consolidation**: Consolidate `outputs/` checkpoints/scores and `runs/` diagnostics under a unified run directory layout (`runs/<run_id>/`). Write unit verification tests and update documentation.
 * [x] **Model Querying UI**: Created a visual "Model Playground" tab in the Streamlit web dashboard to automate next-codon, sequence generation, and protein classification queries.
+* [x] **Model Querying UI Upgrades**: Integrated Reset-and-Discard (ReD) visualizer logs, interactive 3D DNAshape aligned profile plots, head-level attention heatmaps (via selective SDPA bypass), and synonymous mutation alignment comparison views.
+* [x] **Live Training Progress Monitor**: Built a status tab that reads curves.csv and metrics.json dynamically during active training, plotting loss curves and rates.
+* [x] **Remote Bioinformatics SQLite Caching**: Implemented EBI/NCBI BLAST API client fallbacks integrated with local SQLite caching for rate-limited auto-annotations.
 * [x] **Stage 2.5: Genomic Tapes & Anchored Operons (Completed)**:
   * *Phase 1: Tape Extraction Logic* - sliding genomic windows over chromosomes.
   * *Phase 2: Tokenization & Dataset Packing* - single-mode packed datasets.
@@ -108,6 +111,8 @@ All steps read `runs/<run_id>/artifacts.npz` (plus optional labels) and write ch
   * *Phase 3: Gene Essentiality Classification* - linear probing on sequence embeddings.
   * *Phase 4: Comparative Reports* - compute efficiency density reporting vs. Evo 1 and GenSLM.
 * [ ] **Hybrid DNA-Protein Critic Benchmark**: Integrate the Multi-Task Critic as a bidirectional re-feeding filter (Phase 5 of SOTA Benchmarking).
+* [ ] **Protein Latent Energy-Based Model**: Implement latent Langevin dynamics and NCE training for stability design.
+* [ ] **Multi-Frame Overlapping Gene Modeling**: Sum frame-shift positional context embeddings to predict overprinted genes in viral/bacterial genomes.
 
 **Hardware**: 16 GB MacBook with quantization+LoRA.
 **Outcome**: Strong lightweight classifiers, interpretable embeddings, motif‑aware generation.

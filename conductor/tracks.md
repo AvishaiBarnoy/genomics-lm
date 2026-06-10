@@ -36,3 +36,18 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [ ] **Track: Multi-Scale Biophysical Architecture (Stage 2.6)**
 *Link: [./tracks/multiscale_biophysics_20260609/](./tracks/multiscale_biophysics_20260609/)*
+
+- [ ] **Track: Protein Latent Energy-Based Model (Stage 2.6)**
+*Link: [./tracks/protein_ebm_20260610/](./tracks/protein_ebm_20260610/)*
+
+- [ ] **Track: Hybrid DNA-Protein Critic Benchmark (Stage 2.6)**
+*Link: [./tracks/hybrid_critic_20260610/](./tracks/hybrid_critic_20260610/)*
+
+- [ ] **Track: Multi-Frame Overlapping Gene Modeling (Stage 3)**
+*Link: [./tracks/multi_frame_overlapping_20260610/](./tracks/multi_frame_overlapping_20260610/)*
+
+- [ ] **Track: Remote Bioinformatics Integrations (Maintenance)**
+*Link: [./tracks/remote_bioinformatics_20260610/](./tracks/remote_bioinformatics_20260610/)*
+
+- [ ] **Track: Interactive UI Playgrounds & Live Monitor Upgrades (Maintenance)**
+*Link: [./tracks/ui_improvements_20260610/](./tracks/ui_improvements_20260610/)*

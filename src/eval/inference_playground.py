@@ -478,3 +478,68 @@ def score_protein_sequence(
         "avg_log_prob": avg_log_prob,
         "perplexity": torch.exp(torch.tensor(-avg_log_prob)).item()
     }
+
+
+def get_attention_weights(
+    model: TinyGPT,
+    stoi: Dict[str, int],
+    itos: List[str],
+    device: torch.device,
+    dna_sequence: str
+) -> Optional[Dict[str, Any]]:
+    """Runs a single forward pass over the DNA prefix sequence and extracts attention maps per layer.
+
+    Args:
+        model: Loaded TinyGPT model.
+        stoi: Vocabulary lookup.
+        itos: Vocabulary list.
+        device: Torch device.
+        dna_sequence: DNA input sequence.
+
+    Returns:
+        A dictionary with 'tokens' list and 'attention' mapping of Layer -> weights (n_head, T, T).
+    """
+    prefix = dna_sequence.strip().upper()
+    if not prefix:
+        return None
+    if " " in prefix:
+        codons = [c.strip() for c in prefix.split() if c.strip()]
+        ids = [stoi.get("<BOS_CDS>", 1)] + [stoi[c] for c in codons if c in stoi]
+    else:
+        L = (len(prefix) // 3) * 3
+        ids = [stoi.get("<BOS_CDS>", 1)]
+        for i in range(0, L, 3):
+            codon = prefix[i:i+3]
+            if codon in stoi:
+                ids.append(stoi[codon])
+
+    if not ids:
+        return None
+
+    # Temporarily disable SDPA to capture attention maps
+    original_sdpa = []
+    for blk in model.blocks:
+        original_sdpa.append(blk.attn.use_sdpa)
+        blk.attn.use_sdpa = False
+
+    x = torch.tensor(ids, dtype=torch.long, device=device).unsqueeze(0)
+
+    try:
+        with torch.no_grad():
+            _ = model(x)
+
+        # Collect attention weights
+        attn_maps = {}
+        for layer_idx, blk in enumerate(model.blocks):
+            if hasattr(blk.attn, "last_attn"):
+                # last_attn shape is (B, n_head, T, T) -> grab batch 0 and move to CPU
+                attn_maps[f"Layer {layer_idx + 1}"] = blk.attn.last_attn[0].cpu().numpy()
+        return {
+            "tokens": [itos[i] for i in ids],
+            "attention": attn_maps
+        }
+    finally:
+        # Restore SDPA settings
+        for blk, val in zip(model.blocks, original_sdpa):
+            blk.attn.use_sdpa = val
+

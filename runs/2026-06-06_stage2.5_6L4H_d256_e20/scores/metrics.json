@@ -1,0 +1,10 @@
+{
+  "sota_protein_dms_spearman": -0.10537773799602868,
+  "sota_rrna_dms_spearman": 0.018569076124061723,
+  "sota_lambda_essentiality_acc": 0.775,
+  "sota_lambda_essentiality_f1": 0.8730897009966778,
+  "sota_lambda_essentiality_mcc": 0.0,
+  "sota_pseudomonas_essentiality_acc": 0.5466666666666666,
+  "sota_pseudomonas_essentiality_f1": 0.7067530064754857,
+  "sota_pseudomonas_essentiality_mcc": 0.0
+}
