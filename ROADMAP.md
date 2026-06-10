@@ -55,9 +55,28 @@ All steps read `runs/<run_id>/artifacts.npz` (plus optional labels) and write ch
   - [x] **Protein-Critic Bridge**: DNA -> ProteinLM scoring script (`scripts/protein_critic_bridge.py`).
   - [x] **Multi-Task Classifiers**: Multi-head model for Family, Stability, and Function.
 - [x] **Inference Policy Optimization (ReD)**: Implement Reset-and-Discard to overcome the sublinear coverage trap and the 0% termination barrier.
+- [x] **Termination Motif Diagnostics**: 
+  - [x] Created sampling auditor (`scripts/check_termination_motifs.py`).
+  - [x] Created causal in-silico perturbation (`scripts/test_perturbation_motifs.py`).
+  - [x] Created post-STOP UTR generation check (`scripts/test_utr_generation.py`).
+  - [x] Verified CodonLM currently lacks structural terminator generation (see `docs/termination_motifs_analysis.md`).
 - [ ] **Anchored Operon Bridges**: Train specifically on gene-gene boundaries to master operon logic. (In Progress)
 - [ ] **Inference Benchmark**: Increase termination rate beyond 20% with Operon training. (In Progress)
-- [ ] **Energy-Based Physical Models (EBM)**: Integrate thermodynamic/structural stability as a global sequence filter.
+
+---
+
+## Stage 2.6 – The Multi-Scale Biophysical Architecture (Next Milestone)
+
+*Goal: Overcome the 9x attention/memory scaling trap of nucleotide-level modeling while capturing fine-grained UTR physics.*
+
+- [ ] **Dual-Track Late Fusion (Structural Compass)**:
+  - Train a lightweight nucleotide encoder (e.g. CNN/local Transformer) on 60 bp sliding windows.
+  - Inject physical DNA shape/energy representations into the main codon-level generator to guide sequence generation.
+- [ ] **Hybrid Tokenization (Variable-Scale Tape)**:
+  - Build a multi-scale tokenizer with a unified vocabulary (64 codons + 4 nucleotides).
+  - Tokenize coding regions (CDS) as codons ($3\times$ compression) and intergenic/UTR regions as single nucleotides (1 bp resolution).
+- [ ] **Energy-Based mRNA Optimizer (EBM)**:
+  - Integrate a bidirectional Energy-Based Model at the nucleotide level to optimize synonymous codon sequences for global stability ($\Delta G$).
 
 **Projects**
 
@@ -79,7 +98,16 @@ All steps read `runs/<run_id>/artifacts.npz` (plus optional labels) and write ch
 
 * [x] **Data Organization Consolidation**: Consolidate `outputs/` checkpoints/scores and `runs/` diagnostics under a unified run directory layout (`runs/<run_id>/`). Write unit verification tests and update documentation.
 * [x] **Model Querying UI**: Created a visual "Model Playground" tab in the Streamlit web dashboard to automate next-codon, sequence generation, and protein classification queries.
-* [x] **SOTA Benchmarking & Hardware Profiling**: Define prokaryotic benchmarking metrics against Evo 1, GenSLM, and ProGen2, and establish a local hardware stress-testing protocol (100–200 genomes).
+* [x] **Stage 2.5: Genomic Tapes & Anchored Operons (Completed)**:
+  * *Phase 1: Tape Extraction Logic* - sliding genomic windows over chromosomes.
+  * *Phase 2: Tokenization & Dataset Packing* - single-mode packed datasets.
+  * *Phase 3: Master Model Fine-tuning* - 6L4H 512-block context model resolving natural termination.
+* [x] **SOTA Benchmarking & Hardware Profiling (Completed)**:
+  * *Phase 1: Benchmark Data Acquisition* - mock/synthetic loaders for protein/rRNA DMS and gene essentiality.
+  * *Phase 2: Zero-Shot Mutation Scoring Pipeline* - rank correlation metrics.
+  * *Phase 3: Gene Essentiality Classification* - linear probing on sequence embeddings.
+  * *Phase 4: Comparative Reports* - compute efficiency density reporting vs. Evo 1 and GenSLM.
+* [ ] **Hybrid DNA-Protein Critic Benchmark**: Integrate the Multi-Task Critic as a bidirectional re-feeding filter (Phase 5 of SOTA Benchmarking).
 
 **Hardware**: 16 GB MacBook with quantization+LoRA.
 **Outcome**: Strong lightweight classifiers, interpretable embeddings, motif‑aware generation.

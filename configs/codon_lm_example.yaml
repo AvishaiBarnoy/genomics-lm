@@ -1,0 +1,65 @@
+# =====================================================================
+# CodonLM Example Configuration Template
+# =====================================================================
+# This file lists all supported user-facing options and hyperparameters
+# for training and fine-tuning the CodonLM model.
+
+# ---------------------------------------------------------------------
+# Model Architecture Configuration
+# ---------------------------------------------------------------------
+vocab_size: 69              # Vocabulary size (64 codons + 5 special tokens: PAD, BOS, EOS, SEP, etc.)
+block_size: 512             # Context window receptive field length (number of codons)
+n_layer: 10                 # Number of transformer decoder blocks/layers
+n_head: 8                   # Number of self-attention heads (must divide n_embd)
+n_embd: 256                 # Embedding / hidden dimension size
+dropout: 0.1                # Dropout probability for embedding, attention, and MLP layers
+label_smoothing: 0.05       # Label smoothing epsilon for cross-entropy loss calculation
+use_checkpoint: true        # Enable activation/gradient checkpointing (saves GPU RAM)
+use_sdpa: true              # Use PyTorch's native Scaled Dot Product Attention (FlashAttention-like)
+n_kv_head: 4                # Grouped Query Attention (GQA) Key-Value head count (n_head must be divisible by n_kv_head)
+tie_embeddings: true        # Share weights between token embeddings and the language model output head
+
+# ---------------------------------------------------------------------
+# Transfer Learning / Warm Start
+# ---------------------------------------------------------------------
+# Path to pre-trained weights.pt checkpoint. Restores model weights but ignores optimizer states,
+# starting training fresh at epoch 0 on new data/architecture.
+transfer_from: "outputs/checkpoints/2026-06-06_stage2.5_6L4H_d256_e20/best.pt"
+
+# ---------------------------------------------------------------------
+# Data Specification
+# ---------------------------------------------------------------------
+itos_path: "data/processed/itos_codon.txt"                    # Path to vocabulary mapping file (index -> token string)
+train_npz: "data/processed/stage2.5_master_pack/train_bs512.npz" # Path to training NPZ file (or list of paths)
+val_npz: "data/processed/stage2.5_master_pack/val_bs512.npz"     # Path to validation NPZ file
+test_npz: "data/processed/stage2.5_master_pack/test_bs512.npz"   # Path to test NPZ file (evaluated after training)
+
+# ---------------------------------------------------------------------
+# Data Packing / Formatting Toggles
+# ---------------------------------------------------------------------
+pack_mode: "single"         # Dataset formatting mode: 'single' (one CDS per window) or 'multi' (multiple CDS packed together)
+sep_mask_enabled: true      # If true, applies attention masks across <SEP> boundaries in 'multi' mode to block cheating
+
+# ---------------------------------------------------------------------
+# Optimizer & Scheduler Settings
+# ---------------------------------------------------------------------
+optimizer: "adamw"          # Optimizer selection: "adamw" or "adafactor" (Adafactor reduces memory overhead)
+lr: 0.00003                 # Learning rate peak
+min_lr: 0.000005            # Minimum learning rate reached at the end of the cosine decay scheduler
+weight_decay: 0.05          # L2 weight decay strength
+warmup_steps: 100           # Number of linear warmup steps for the learning rate schedule
+
+# ---------------------------------------------------------------------
+# Training Control Loops
+# ---------------------------------------------------------------------
+batch_size: 4               # Physical batch size per GPU/device step
+grad_accum_steps: 16        # Gradient accumulation steps (Simulates Batch Size = batch_size * grad_accum_steps)
+epochs: 10                  # Total training epochs
+early_stop_patience: 3      # Stop training if validation loss does not improve for this many epochs
+max_time_minutes: 360       # Bounded wall-time limit. Saves checkpoint and exits gracefully if limit is reached mid-epoch
+
+# ---------------------------------------------------------------------
+# Output Directory Layout
+# ---------------------------------------------------------------------
+out_dir: "runs/codon_lm_run/checkpoints" # Destination folder for best.pt and last.pt weights
+scores_dir: "runs/codon_lm_run/scores"   # Destination folder for curves.csv and metrics.json diagnostics

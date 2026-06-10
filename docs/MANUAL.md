@@ -33,14 +33,41 @@ A compact codon‑level GPT‑style LM with a reproducible training + analysis p
 - If data integrity fails (pad‑only windows), re‑run with --force or reduce block_size/windows_per_seq.
 - On Apple Silicon, AMP is enabled; CE is computed in float32 to avoid NaNs.
 
-### Training toggles (advanced)
+### Training configs & toggles (advanced)
 
-- tie_embeddings (default true): share token and output head weights to save parameters.
-- n_kv_head (GQA): fewer K/V heads than query heads (requires n_head % n_kv_head == 0).
-- use_sdpa: use scaled_dot_product_attention when available (PyTorch 2.x+).
-- grad_checkpointing: enable gradient checkpointing (alias of use_checkpoint).
-- optimizer: adafactor or adamw. Adafactor reduces memory for large models.
-- pack_mode: multi|single; sep_mask_enabled: true|false for <SEP> boundary masking.
+You can configure training runs using YAML files under `configs/`. Complete template configurations are available at [codon_lm_example.yaml](file:///Users/User/github/genomics-lm/configs/codon_lm_example.yaml) and [protein_lm_example.yaml](file:///Users/User/github/genomics-lm/configs/protein_lm_example.yaml). Supported keys include:
+
+*   **Model Architecture:**
+    *   `vocab_size`: Size of vocabulary (usually 69 for CodonLM, containing 64 codons and 5 specials).
+    *   `block_size`: Maximum sequence length receptive window (e.g., 512).
+    *   `n_layer`: Number of transformer blocks (e.g., 6 or 10).
+    *   `n_head`: Number of self-attention heads (must divide `n_embd`).
+    *   `n_embd`: Hidden state embedding dimension size (e.g., 256).
+    *   `dropout`: Dropout probability applied to projections and embeddings.
+    *   `label_smoothing`: Epsilon smoothing factor for CrossEntropyLoss.
+    *   `use_checkpoint`: Enable activation gradient checkpointing (saves GPU RAM).
+    *   `use_sdpa`: Use PyTorch's native Scaled Dot Product Attention for speedups.
+    *   `n_kv_head` (GQA): Number of key-value heads for Grouped Query Attention (GQA).
+    *   `tie_embeddings`: Share weights between token and output embeddings.
+*   **Data Packing & Masking:**
+    *   `pack_mode`: Dataset format, either `single` (one CDS per window) or `multi` (sequences packed).
+    *   `sep_mask_enabled`: Enable attention masking across `<SEP>` boundaries in packed mode.
+*   **Transfer Learning / Resumption:**
+    *   `transfer_from`: Path to pre-trained weights `.pt` file to initialize model parameters while discarding optimizer state.
+*   **Optimizer & Scheduler:**
+    *   `optimizer`: Select `"adamw"` or `"adafactor"` (reduces memory footprint).
+    *   `lr`: Peak learning rate.
+    *   `min_lr`: End-of-cycle minimum learning rate for cosine scheduler.
+    *   `weight_decay`: L2 regularization decay strength.
+    *   `warmup_steps`: Iterations of linear learning rate warmup.
+*   **Training Loops:**
+    *   `batch_size`: Physical batch size per device step.
+    *   `grad_accum_steps`: Accumulate gradients over this many steps to simulate large batch sizes.
+    *   `early_stop_patience`: Stop training after this many epochs without validation loss improvements.
+    *   `max_time_minutes`: Limit training run duration. Saves checkpoint and exits gracefully if exceeded.
+*   **Output Directories:**
+    *   `out_dir`: Location to save checkpoints.
+    *   `scores_dir`: Location to save diagnostics.
 
 ### Stage‑2 Classifiers
 
@@ -270,3 +297,31 @@ By default, the client will start a local server (typically at `http://localhost
 - **🧬 Saliency & Mutation Maps**: Audit model predictions and generate heatmaps of mutation probabilities.
 - **🧪 Model Playground**: Run causal generation queries on the CodonLM model (adjusting Temperature, Top-K, and Max Codons) and instantly translate the resulting DNA to amino acids.
 - **🛡️ Protein Critic Bridge**: The playground automatically translates generated DNA sequences and scores their predicted Pfam family, EC number function, and thermodynamic stability using the loaded Protein Critic model.
+
+## SOTA Benchmarking & Compute Footprint Profiling
+
+To evaluate our model against published SOTA prokaryotic models (Evo 1, GenSLM) on aligned prokaryotic benchmarks:
+
+1.  **Prepare mock/synthetic benchmark datasets:**
+    ```bash
+    python scripts/prepare_sota_benchmarks.py
+    ```
+    This creates datasets under `data/benchmarks/` for zero-shot mutation scoring and gene essentiality.
+
+2.  **Evaluate Zero-Shot Mutational Fitness:**
+    ```bash
+    python -m scripts.benchmark_zero_shot_mutations --run_id <RUN_ID>
+    ```
+    This computes sequence log-likelihood comparisons on protein and rRNA DMS datasets and writes Spearman rank correlations to the run's `metrics.json`.
+
+3.  **Evaluate Gene Essentiality (Linear Probes):**
+    ```bash
+    python -m scripts.benchmark_gene_essentiality --run_id <RUN_ID>
+    ```
+    This trains stratified 5-fold cross-validated logistic regression probes on the mean-pooled sequence embeddings of Lambda phage and *P. aeruginosa* genes.
+
+4.  **Generate SOTA Comparison and Compute Footprint Report:**
+    ```bash
+    python -m scripts.generate_sota_report --run_id <RUN_ID>
+    ```
+    This generates a comprehensive markdown comparison report (`SOTA_BENCHMARK_REPORT.md` inside the run directory) containing parameter and resource efficiency density ratios.

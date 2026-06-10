@@ -31,13 +31,18 @@ def main():
             cfg = yaml.safe_load(f)
 
     tokenizer = ProteinTokenizer()
-    with open("data/processed/protein_lm/multitask/task_vocabs.json", "r") as f:
-        vocabs = json.load(f)
-    task_dims = {
-        "family": len(vocabs["pfam"]),
-        "function": len(vocabs["ec"]),
-        "stability": len(vocabs["stability"]),
-    }
+    state = torch.load(args.ckpt, map_location="cpu")
+    state_dict = state.get("model_state_dict", state)
+    state_dict = state_dict.get("model", state_dict)
+
+    # Dynamically infer task dimensions from checkpoint weights
+    task_dims = {}
+    if "heads.family.weight" in state_dict:
+        task_dims["family"] = state_dict["heads.family.weight"].shape[0]
+    if "heads.function.weight" in state_dict:
+        task_dims["function"] = state_dict["heads.function.weight"].shape[0]
+    if "heads.stability.weight" in state_dict:
+        task_dims["stability"] = state_dict["heads.stability.weight"].shape[0]
 
     model_cfg = ProteinClassifierConfig(
         vocab_size=len(tokenizer.vocab),
@@ -50,8 +55,7 @@ def main():
     )
 
     model = MultiTaskProteinClassifier(model_cfg, task_dims)
-    state = torch.load(args.ckpt, map_location="cpu")
-    model.load_state_dict(state)
+    model.load_state_dict(state_dict, strict=False)
     model.eval()
 
     val_ds = MultiTaskProteinDataset(

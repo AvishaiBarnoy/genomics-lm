@@ -1,0 +1,60 @@
+# =====================================================================
+# ProteinLM & Protein Critic Example Configuration Templates
+# =====================================================================
+# This file provides documented configurations for both the conditional
+# Protein Language Model and the Multi-Task Protein Critic.
+
+# ---------------------------------------------------------------------
+# TYPE 1: Conditional Protein Language Model Config (train_lm.py)
+# ---------------------------------------------------------------------
+# Uses a nested YAML structure.
+
+# Model Architecture Parameters
+model:
+  n_layer: 6                # Number of transformer blocks
+  n_head: 4                 # Number of self-attention heads
+  n_embd: 256               # Embedding / hidden dimension size
+  block_size: 512           # Context length receptive field (number of amino acids)
+  dropout: 0.1              # Dropout probability
+
+# Optimizer & Epoch Control
+training:
+  batch_size: 32            # Batch size
+  grad_accum_steps: 4       # Gradient accumulation steps
+  lr: 0.0003                # Learning rate peak
+  weight_decay: 0.01        # L2 weight decay strength
+  epochs: 10                # Number of training epochs
+
+# Data File Paths
+data:
+  train_path: "data/processed/protein_lm/train.jsonl" # Path to training JSONL sequences
+  val_path: "data/processed/protein_lm/val.jsonl"     # Path to validation JSONL sequences
+
+---
+
+# ---------------------------------------------------------------------
+# TYPE 2: Multi-Task Protein Critic Config (train_multi_task.py)
+# ---------------------------------------------------------------------
+# Uses a flat YAML structure.
+
+# Dataset Sources
+train_data: "data/processed/protein_lm/multitask/train.jsonl" # Path to training JSONL data
+val_data: "data/processed/protein_lm/multitask/val.jsonl"     # Path to validation JSONL data
+
+# Model Architecture Parameters
+block_size: 512             # Maximum sequence length (amino acids)
+n_layer: 12                 # Number of transformer blocks
+n_head: 8                   # Number of self-attention heads
+n_embd: 256                 # Embedding / hidden dimension size
+dropout: 0.1                # Dropout probability
+use_checkpoint: true        # Enable activation/gradient checkpointing to conserve memory
+
+# Training Optimizer & Loop Parameters
+batch_size: 4               # Physical batch size per device step
+grad_accum_steps: 16        # Gradient accumulation steps (Simulates Batch Size = batch_size * grad_accum_steps)
+epochs: 12                  # Total training epochs
+lr: 0.0001                  # Learning rate peak
+max_time_minutes: 180       # Bounded wall-time limit (exit gracefully if reached mid-epoch)
+
+# Output Destination
+out_dir: "runs/protein_critic_12L8H/checkpoints" # Folder to save best_critic.pt and last_critic.pt

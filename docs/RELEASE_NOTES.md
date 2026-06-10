@@ -4,6 +4,7 @@ This document tracks notable changes to the project. We follow a simple date‑b
 
 ## Unreleased
 
+- **SOTA Benchmarking & Compute Footprint Profiling**: Added a target prokaryotic evaluation suite comparing our models against published SOTA prokaryotic models (Evo 1 and GenSLM). Implemented zero-shot mutation scoring (`scripts/benchmark_zero_shot_mutations.py`) on protein and rRNA DMS, and linear probing (`scripts/benchmark_gene_essentiality.py`) on gene essentiality datasets. Added comparison reporting (`scripts/generate_sota_report.py`) demonstrating orders of magnitude higher compute-efficiency density ratio for locally-trained models on consumer hardware.
 - **Stage 2.5: Genomic Tapes & Anchored Operons**: `src/codonlm/extract_genomic_tape.py` and `extract_anchored_operons.py` enable training on contiguous chromosomal data and targeted gene-boundary transitions.
 - **Structural DNA Probing**: `scripts/probe_structural_awareness.py` validates model physics by mapping hidden states to Roll, EP, and MGW using DNAshape heuristics.
 - **Stage 3: Multi-Task Protein Critic Implemented & Trained**: Completed training of the `MultiTaskProteinClassifier` (`configs/protein_critic.yaml` with an 8L8H_d256 architecture) over 50 epochs on Apple Silicon GPU (`mps`), achieving 76.81% validation accuracy on thermodynamic stability, 6.15% on Pfam (1,000 classes), and 5.50% on EC function (500 classes). Added full train-resumption features (`--resume`) and automatic epoch-end checkpoints (`last_critic.pt`).

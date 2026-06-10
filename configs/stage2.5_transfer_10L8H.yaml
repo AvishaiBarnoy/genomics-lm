@@ -1,0 +1,38 @@
+# Suggested Larger CodonLM Architecture for Transfer Learning
+# Scaled up from 6L4H to 10L8H to improve hierarchical representations and multi-task learning.
+# Uses n_embd=256 to allow direct parameter alignment for transfer learning from 6L4H_d256.
+
+# Model Architecture
+vocab_size: 69
+block_size: 512
+n_layer: 10
+n_head: 8
+n_embd: 256
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+use_sdpa: true
+
+# Transfer Learning Weights
+transfer_from: "outputs/checkpoints/2026-06-06_stage2.5_6L4H_d256_e20/best.pt"
+
+# Data
+itos_path: "data/processed/itos_codon.txt"
+train_npz: "data/processed/stage2.5_master_pack/train_bs512.npz"
+val_npz: "data/processed/stage2.5_master_pack/val_bs512.npz"
+test_npz: "data/processed/stage2.5_master_pack/test_bs512.npz"
+
+# Training
+batch_size: 4
+grad_accum_steps: 16
+epochs: 1
+lr: 0.00003
+min_lr: 0.000005
+weight_decay: 0.05
+warmup_steps: 50
+early_stop_patience: 2
+max_time_minutes: 0.5  # Smoke test limit: exit after 30 seconds
+
+# Output
+out_dir: "runs/2026-06-10_transfer_10L8H/checkpoints"
+scores_dir: "runs/2026-06-10_transfer_10L8H/scores"
