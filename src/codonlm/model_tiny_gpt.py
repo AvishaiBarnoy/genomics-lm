@@ -49,9 +49,9 @@ class CausalSelfAttention(nn.Module):
                 causal = (base > 0)
                 segmask = (attn_mask > 0)
                 # both are (B,1,T,T); broadcast to heads
-                mask = ~(causal & segmask).expand(B, self.n_head, T, T)
+                mask = (causal & segmask).expand(B, self.n_head, T, T)
             else:
-                mask = ~(base > 0).expand(B, self.n_head, T, T)
+                mask = (base > 0).expand(B, self.n_head, T, T)
             y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=False)
             y = y.transpose(1,2).contiguous().view(B, T, C)
         else:
