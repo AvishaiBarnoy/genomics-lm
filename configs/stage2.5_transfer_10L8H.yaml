@@ -23,15 +23,15 @@ val_npz: "data/processed/stage2.5_master_pack/val_bs512.npz"
 test_npz: "data/processed/stage2.5_master_pack/test_bs512.npz"
 
 # Training
-batch_size: 4
-grad_accum_steps: 16
+batch_size: 2
+grad_accum_steps: 32
 epochs: 1
 lr: 0.00003
 min_lr: 0.000005
 weight_decay: 0.05
 warmup_steps: 50
 early_stop_patience: 2
-max_time_minutes: 0.5  # Smoke test limit: exit after 30 seconds
+max_time_minutes: 180  # Smoke test limit: exit after 30 seconds
 
 # Output
 out_dir: "runs/2026-06-10_transfer_10L8H/checkpoints"

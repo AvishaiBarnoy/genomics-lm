@@ -29,6 +29,9 @@ def _load_config(path: Path) -> Dict:
     cfg = yaml.safe_load(path.read_text()) or {}
     if not isinstance(cfg, dict):
         raise SystemExit(f"[error] Config at {path} must be a mapping.")
+    if "data" in cfg and isinstance(cfg["data"], dict):
+        for k, v in cfg["data"].items():
+            cfg.setdefault(k, v)
     return cfg
 
 

@@ -17,10 +17,13 @@ python -m scripts.collect_artifacts_yaml "${RUN_ID}" "${CONFIG}"
 
 # Copy mutation scores into run dir if present to help summarizers
 RUN_DIR="runs/$RUN_ID"
-SCORES_FILE="outputs/scores/$RUN_ID/one_cds__best.tsv"
+SCORES_FILE="runs/$RUN_ID/scores/one_cds__best.tsv"
 if [ -f "$SCORES_FILE" ]; then
   mkdir -p "$RUN_DIR"
   cp "$SCORES_FILE" "$RUN_DIR/one_cds__best.tsv"
+elif [ -f "outputs/scores/$RUN_ID/one_cds__best.tsv" ]; then
+  mkdir -p "$RUN_DIR"
+  cp "outputs/scores/$RUN_ID/one_cds__best.tsv" "$RUN_DIR/one_cds__best.tsv"
 fi
 
 echo "[post-process] Collected artifacts for ${RUN_ID} into ${RUN_DIR}"

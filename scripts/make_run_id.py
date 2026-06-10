@@ -41,6 +41,9 @@ def main() -> None:
     args = ap.parse_args()
     path = Path(args.config)
     cfg = yaml.safe_load(path.read_text()) or {}
+    if "data" in cfg and isinstance(cfg["data"], dict):
+        for k, v in cfg["data"].items():
+            cfg.setdefault(k, v)
     print(make_run_id(path, cfg))
 
 

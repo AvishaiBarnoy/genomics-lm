@@ -153,7 +153,10 @@ def main():
     ap.add_argument("--test_npz", action="append", default=None, help="Test NPZ file (repeatable)")
     ap.add_argument("--save_epochs", action="store_true", help="Save checkpoint at every epoch")
     args = ap.parse_args()
-    cfg = yaml.safe_load(open(args.config))
+    cfg = yaml.safe_load(open(args.config)) or {}
+    if "data" in cfg and isinstance(cfg["data"], dict):
+        for k, v in cfg["data"].items():
+            cfg.setdefault(k, v)
     cfg["save_epochs"] = args.save_epochs or cfg.get("save_epochs", False)
     resume_path = args.resume or cfg.pop("resume", None)
     if resume_path is not None:

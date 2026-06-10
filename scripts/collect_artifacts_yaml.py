@@ -96,8 +96,14 @@ def _load_yaml(yaml_path: Path) -> Mapping[str, object]:
         raise FileNotFoundError(f"Config file not found: {yaml_path}")
     with yaml_path.open("r") as fh:
         cfg = yaml.safe_load(fh) or {}
-    if not isinstance(cfg, Mapping):
-        raise ValueError(f"Config at {yaml_path} is not a mapping")
+    if not isinstance(cfg, dict):
+        if isinstance(cfg, Mapping):
+            cfg = dict(cfg)
+        else:
+            raise ValueError(f"Config at {yaml_path} is not a mapping")
+    if "data" in cfg and isinstance(cfg["data"], dict):
+        for k, v in cfg["data"].items():
+            cfg.setdefault(k, v)
     return cfg
 
 
@@ -114,6 +120,9 @@ def _find_checkpoint(
         run_sub = check_dir / run_id
         if run_sub.exists():
             search_roots.append(run_sub)
+        runs_ckpt = Path("runs") / run_id / "checkpoints"
+        if runs_ckpt.exists():
+            search_roots.append(runs_ckpt)
     search_roots.append(check_dir)
 
     # fallback: allow common alternate directory names (legacy layouts)

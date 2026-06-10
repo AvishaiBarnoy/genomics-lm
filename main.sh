@@ -129,36 +129,68 @@ PY
 
 T0=$(date +%s)
 
-# Prepare datasets via Python helper
-PREP_ARGS=(--config "$CONF" --run-id "$RUN_ID" --run-dir "$RUN_DIR")
-if [[ $FORCE -eq 1 ]]; then PREP_ARGS+=(--force); fi
-if [[ ${#EXTRA_DATASETS[@]} -gt 0 ]]; then
-  for spec in "${EXTRA_DATASETS[@]}"; do PREP_ARGS+=(--extra-dataset "$spec"); done
-fi
-python -m scripts.pipeline_prepare "${PREP_ARGS[@]}" 2>&1 | tee -a "$LOG"
+# Check if train_npz dataset paths are already specified in the configuration
+HAS_NPZ=$(python -c "
+import yaml
+cfg = yaml.safe_load(open('$CONF')) or {}
+data = cfg.get('data', {}) if isinstance(cfg.get('data'), dict) else {}
+print(1 if ('train_npz' in cfg or 'train_npz' in data) else 0)
+")
 
-PREP_JSON="${RUN_DIR}/pipeline_prepare.json"
-if [[ ! -f "$PREP_JSON" ]]; then
-  echo "[error] pipeline_prepare did not produce ${PREP_JSON}" | tee -a "$LOG"
-  echo "[hint] If the integrity check failed, try: --force or tune block_size/windows_per_seq to avoid pad-only windows." | tee -a "$LOG"
-  exit 1
-fi
+if [[ $HAS_NPZ -eq 1 ]]; then
+  echo "[info] train_npz found in config. Bypassing data preparation stage." | tee -a "$LOG"
+  TRAIN_NPZ=$(python -c "
+import yaml
+cfg = yaml.safe_load(open('$CONF')) or {}
+data = cfg.get('data', {}) if isinstance(cfg.get('data'), dict) else {}
+print(cfg.get('train_npz') or data.get('train_npz', ''))
+")
+  VAL_NPZ=$(python -c "
+import yaml
+cfg = yaml.safe_load(open('$CONF')) or {}
+data = cfg.get('data', {}) if isinstance(cfg.get('data'), dict) else {}
+print(cfg.get('val_npz') or data.get('val_npz', ''))
+")
+  TEST_NPZ=$(python -c "
+import yaml
+cfg = yaml.safe_load(open('$CONF')) or {}
+data = cfg.get('data', {}) if isinstance(cfg.get('data'), dict) else {}
+print(cfg.get('test_npz') or data.get('test_npz', ''))
+")
+  PRIMARY_DNA=""
+  COMBINED_MANIFEST=""
+else
+  # Prepare datasets via Python helper
+  PREP_ARGS=(--config "$CONF" --run-id "$RUN_ID" --run-dir "$RUN_DIR")
+  if [[ $FORCE -eq 1 ]]; then PREP_ARGS+=(--force); fi
+  if [[ ${#EXTRA_DATASETS[@]} -gt 0 ]]; then
+    for spec in "${EXTRA_DATASETS[@]}"; do PREP_ARGS+=(--extra-dataset "$spec"); done
+  fi
+  python -m scripts.pipeline_prepare "${PREP_ARGS[@]}" 2>&1 | tee -a "$LOG"
 
-eval "$(
-python - <<'PY' "$PREP_JSON"
-import json, shlex, sys
-info = json.load(open(sys.argv[1]))
-mapping = {
-    "TRAIN_NPZ": info["train_npz"],
-    "VAL_NPZ": info["val_npz"],
-    "TEST_NPZ": info["test_npz"],
-    "PRIMARY_DNA": info["primary_dna"],
-    "COMBINED_MANIFEST": info["combined_manifest"],
-}
-for key, value in mapping.items():
-    print(f'{key}={shlex.quote(str(value))}')
-PY
-)"
+  PREP_JSON="${RUN_DIR}/pipeline_prepare.json"
+  if [[ ! -f "$PREP_JSON" ]]; then
+    echo "[error] pipeline_prepare did not produce ${PREP_JSON}" | tee -a "$LOG"
+    echo "[hint] If the integrity check failed, try: --force or tune block_size/windows_per_seq to avoid pad-only windows." | tee -a "$LOG"
+    exit 1
+  fi
+
+  eval "$(
+  python - <<'PY' "$PREP_JSON"
+  import json, shlex, sys
+  info = json.load(open(sys.argv[1]))
+  mapping = {
+      "TRAIN_NPZ": info["train_npz"],
+      "VAL_NPZ": info["val_npz"],
+      "TEST_NPZ": info["test_npz"],
+      "PRIMARY_DNA": info["primary_dna"],
+      "COMBINED_MANIFEST": info["combined_manifest"],
+  }
+  for key, value in mapping.items():
+      print(f'{key}={shlex.quote(str(value))}')
+  PY
+  )"
+fi
 echo "[info] combined_manifest=${COMBINED_MANIFEST}" | tee -a "$LOG"
 echo "[info] train_npz=${TRAIN_NPZ}" | tee -a "$LOG"
 echo "[info] val_npz=${VAL_NPZ}" | tee -a "$LOG"
@@ -177,8 +209,8 @@ except Exception as exc:
 PY
 
 # Train
-CKPT_ROOT="outputs/checkpoints/${RUN_ID}"
-SCORES_ROOT="outputs/scores/${RUN_ID}"
+CKPT_ROOT="runs/${RUN_ID}/checkpoints"
+SCORES_ROOT="runs/${RUN_ID}/scores"
 Ttrain0=$(date +%s)
 TRAIN_ARGS=(--config "$CONF" --run_id "${RUN_ID}" --train_npz "$TRAIN_NPZ" --val_npz "$VAL_NPZ" --test_npz "$TEST_NPZ")
 if [[ -n "$RESUME" ]]; then TRAIN_ARGS+=(--resume "$RESUME"); fi
@@ -189,10 +221,14 @@ Ttrain1=$(date +%s)
 python -m src.codonlm.eval_perplexity --ckpt "${CKPT_ROOT}/best.pt" --val_npz "$VAL_NPZ" 2>&1 | tee -a "$LOG" || true
 python -m src.codonlm.eval_perplexity --ckpt "${CKPT_ROOT}/best.pt" --val_npz "$TEST_NPZ" 2>&1 | tee -a "$LOG" || true
 
-# Score mutations for one CDS
-head -n1 "$PRIMARY_DNA" > data/processed/one_cds.txt
-mkdir -p "${SCORES_ROOT}"
-conda run -n codonlm python -m src.codonlm.score_mutations --ckpt "${CKPT_ROOT}/best.pt" --dna data/processed/one_cds.txt --out "${SCORES_ROOT}/one_cds__best.tsv" 2>&1 | tee -a "$LOG" || true
+# Score mutations for one CDS if primary DNA is available
+if [[ -n "$PRIMARY_DNA" ]]; then
+  head -n1 "$PRIMARY_DNA" > data/processed/one_cds.txt
+  mkdir -p "${SCORES_ROOT}"
+  conda run -n codonlm python -m src.codonlm.score_mutations --ckpt "${CKPT_ROOT}/best.pt" --dna data/processed/one_cds.txt --out "${SCORES_ROOT}/one_cds__best.tsv" 2>&1 | tee -a "$LOG" || true
+else
+  echo "[info] Bypassing mutation scoring: no primary DNA sequence available in pre-packed mode." | tee -a "$LOG"
+fi
 
 # Mine motifs (opt-in; skip if already present)
 if [[ $WITH_MOTIFS -eq 1 ]]; then

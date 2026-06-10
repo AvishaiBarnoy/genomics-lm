@@ -28,8 +28,11 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [x] **Track: Model Querying Streamlit UI**
 *Link: [./tracks/querying_ui_20260608/](./tracks/querying_ui_20260608/)*
 
-- [ ] **Track: SOTA Benchmarking & Hardware Profiling**
+- [x] **Track: SOTA Benchmarking & Hardware Profiling**
 *Link: [./tracks/sota_benchmarking_20260609/](./tracks/sota_benchmarking_20260609/)*
 
 - [ ] **Track: hayaData 2026 Submission Preparation**
 *Link: [./tracks/hayadata_submission_20260609/](./tracks/hayadata_submission_20260609/)*
+
+- [ ] **Track: Multi-Scale Biophysical Architecture (Stage 2.6)**
+*Link: [./tracks/multiscale_biophysics_20260609/](./tracks/multiscale_biophysics_20260609/)*
