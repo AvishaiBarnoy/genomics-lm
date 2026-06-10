@@ -416,6 +416,10 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         ]
     else:
         tokens = [f"tok_{i}" for i in range(vocab_size)]
+    
+    if len(tokens) < vocab_size:
+        tokens.extend([f"tok_{i}" for i in range(len(tokens), vocab_size)])
+        
     (run_dir / "itos.txt").write_text("\n".join(tokens) + "\n")
 
     checkpoint = torch.load(checkpoint_path, map_location="cpu")

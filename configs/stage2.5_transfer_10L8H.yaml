@@ -25,7 +25,7 @@ test_npz: "data/processed/stage2.5_master_pack/test_bs512.npz"
 # Training
 batch_size: 2
 grad_accum_steps: 32
-epochs: 1
+epochs: 3
 lr: 0.00003
 min_lr: 0.000005
 weight_decay: 0.05
@@ -33,5 +33,5 @@ warmup_steps: 50
 early_stop_patience: 2
 
 # Output
-out_dir: "runs/2026-06-10_transfer_10L8H/checkpoints"
-scores_dir: "runs/2026-06-10_transfer_10L8H/scores"
+out_dir: "runs/2026-06-10_stage2.5_10L8H_d256_e1/checkpoints"
+scores_dir: "runs/2026-06-10_stage2.5_10L8H_d256_e1/scores"
