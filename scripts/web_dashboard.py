@@ -401,6 +401,15 @@ def main():
                             st.write("**Top Choices:**")
                             for c in results["stability"]["choices"]:
                                 st.write(f"- {c['label']}: {c['prob'] * 100:.1f}%")
+
+                        st.divider()
+                        st.subheader("🔍 Remote NCBI BLAST Alignment Annotator")
+                        if st.button("Annotate Sequence via BLAST"):
+                            from src.eval.remote_bio import query_remote_blast
+                            with st.spinner("Submitting sequence to BLAST cache/API..."):
+                                blast_res = query_remote_blast(aa_input)
+                            st.write(f"*Source: {blast_res['source']}*")
+                            st.table(pd.DataFrame(blast_res["hits"]))
                     except Exception as e:
                         st.error(f"Error querying critic: {e}")
 
@@ -668,6 +677,15 @@ def main():
                                                 ],
                                                 f"{critic_results['stability']['probability'] * 100:.1f}% prob",
                                             )
+                                        
+                                        st.divider()
+                                        st.subheader("🔍 Remote NCBI BLAST Alignment Annotator")
+                                        if st.button("Annotate Generated Sequence via BLAST"):
+                                            from src.eval.remote_bio import query_remote_blast
+                                            with st.spinner("Submitting sequence to BLAST cache/API..."):
+                                                blast_res = query_remote_blast(aa_seq)
+                                            st.write(f"*Source: {blast_res['source']}*")
+                                            st.table(pd.DataFrame(blast_res["hits"]))
                                     except Exception as exc:
                                         st.warning(
                                             f"Could not run Protein Critic: {exc}"

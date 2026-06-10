@@ -46,8 +46,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [ ] **Track: Multi-Frame Overlapping Gene Modeling (Stage 3)**
 *Link: [./tracks/multi_frame_overlapping_20260610/](./tracks/multi_frame_overlapping_20260610/)*
 
-- [ ] **Track: Remote Bioinformatics Integrations (Maintenance)**
+- [x] **Track: Remote Bioinformatics Integrations (Maintenance)**
 *Link: [./tracks/remote_bioinformatics_20260610/](./tracks/remote_bioinformatics_20260610/)*
 
-- [ ] **Track: Interactive UI Playgrounds & Live Monitor Upgrades (Maintenance)**
+- [x] **Track: Interactive UI Playgrounds & Live Monitor Upgrades (Maintenance)**
 *Link: [./tracks/ui_improvements_20260610/](./tracks/ui_improvements_20260610/)*
