@@ -10,7 +10,7 @@ This plan details the implementation steps to execute the Stage 2.6 specificatio
 - [x] **Task 1.1: Build Hybrid Tokenizer**
   - Implement a tokenizer class that accepts a genomic sequence with annotated coding (CDS) and intergenic (UTR) regions.
   - Tokenize CDS spans as 3-nucleotide codons, and UTR/intergenic spans as individual nucleotides (or BPE nucleotide blocks).
-- [ ] **Task 1.2: Build Training Pipeline Parser**
+- [x] **Task 1.2: Build Training Pipeline Parser**
   - Adapt `src/codonlm/extract_cds_from_genbank.py` or pipeline scripts to keep 30 bp upstream of START and 60 bp downstream of STOP.
   - Generate a hybrid-tokenized dataset for training.
 - [x] **Task 1.3: Add Unit Tests**
