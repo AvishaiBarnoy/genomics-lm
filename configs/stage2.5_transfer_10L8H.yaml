@@ -31,7 +31,6 @@ min_lr: 0.000005
 weight_decay: 0.05
 warmup_steps: 50
 early_stop_patience: 2
-max_time_minutes: 240  # Smoke test limit: exit after 30 seconds
 
 # Output
 out_dir: "runs/2026-06-10_transfer_10L8H/checkpoints"

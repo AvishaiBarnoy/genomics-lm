@@ -46,6 +46,9 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [ ] **Track: Multi-Frame Overlapping Gene Modeling (Stage 3)**
 *Link: [./tracks/multi_frame_overlapping_20260610/](./tracks/multi_frame_overlapping_20260610/)*
 
+- [ ] **Track: Progressive High-Capacity Scaling Ladder (Stage 2.7)**
+*Link: [./tracks/progressive_scaling_20260610/](./tracks/progressive_scaling_20260610/)*
+
 - [x] **Track: Remote Bioinformatics Integrations (Maintenance)**
 *Link: [./tracks/remote_bioinformatics_20260610/](./tracks/remote_bioinformatics_20260610/)*
 
