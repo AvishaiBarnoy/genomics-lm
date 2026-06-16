@@ -52,8 +52,13 @@ def train_multi_task(config_path, resume_path=None, run_id=None):
 
     tokenizer = ProteinTokenizer()
     
-    # Load Vocabs to get task dimensions
-    with open("data/processed/protein_lm/multitask/task_vocabs.json", "r") as f:
+    # Load vocabs to get task dimensions. Keep the production default, but allow
+    # tests and small smoke runs to provide a self-contained vocab file.
+    task_vocabs_path = cfg.get(
+        "task_vocabs",
+        "data/processed/protein_lm/multitask/task_vocabs.json",
+    )
+    with open(task_vocabs_path, "r") as f:
         vocabs = json.load(f)
         
     task_dims = {

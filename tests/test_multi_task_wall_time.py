@@ -27,12 +27,20 @@ def test_train_multi_task_wall_time_limit(tmp_path):
     with open(val_data, "w") as f:
         for _ in range(5):
             f.write(json.dumps(sample) + "\n")
+
+    task_vocabs = tmp_path / "task_vocabs.json"
+    task_vocabs.write_text(json.dumps({
+        "pfam": {"pfam_0": 0},
+        "ec": {"ec_0": 0},
+        "stability": {"stable": 0},
+    }))
             
     # Create tiny config
     config_data = {
         "device": "cpu",
         "train_data": str(train_data),
         "val_data": str(val_data),
+        "task_vocabs": str(task_vocabs),
         "block_size": 32,
         "n_layer": 1,
         "n_head": 1,
