@@ -1,0 +1,31 @@
+# Structural-aware ProteinCritic initialized from the latest ProteinCritic backbone.
+#
+# This intentionally writes to a new run_id. The source checkpoint remains a
+# rollback point and is never overwritten by transfer training.
+#
+# Prepare data first:
+#   python -m scripts.prepare_protein_type_dataset \
+#     --uniprot_tsv data/raw/uniprot_bacteria_50_512.tsv \
+#     --out_dir data/processed/protein_lm/protein_type
+
+device: cpu
+train_data: data/processed/protein_lm/protein_type/train.jsonl
+val_data: data/processed/protein_lm/protein_type/val.jsonl
+task_vocabs: data/processed/protein_lm/protein_type/task_vocabs.json
+transfer_from: runs/protein_critic/checkpoints/best_critic.pt
+
+block_size: 512
+n_layer: 8
+n_head: 8
+n_embd: 256
+dropout: 0.1
+
+batch_size: 8
+grad_accum_steps: 8
+epochs: 5
+lr: 0.00005
+max_time_minutes: 240
+
+dynamic_padding: true
+multi_label_tasks:
+  - protein_type

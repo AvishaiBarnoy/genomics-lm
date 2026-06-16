@@ -101,7 +101,31 @@ def collate_protein_batch(batch, pad_token_id=0):
             result[key] = torch.stack(values)
     return result
 
-def train_multi_task(config_path, resume_path=None, run_id=None):
+
+def load_compatible_model_weights(model, checkpoint_path, map_location="cpu"):
+    """Load matching checkpoint tensors and skip incompatible task heads."""
+    checkpoint = torch.load(checkpoint_path, map_location=map_location)
+    source_state = (
+        checkpoint["model_state_dict"]
+        if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint
+        else checkpoint
+    )
+    target_state = model.state_dict()
+
+    compatible = {}
+    skipped = []
+    for name, tensor in source_state.items():
+        if name in target_state and target_state[name].shape == tensor.shape:
+            compatible[name] = tensor
+        else:
+            skipped.append(name)
+
+    target_state.update(compatible)
+    model.load_state_dict(target_state)
+    return len(compatible), skipped
+
+
+def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=None):
     with open(config_path, 'r') as f:
         cfg = yaml.safe_load(f)
         
@@ -144,6 +168,18 @@ def train_multi_task(config_path, resume_path=None, run_id=None):
 
     print("[*] Building model...")
     model = MultiTaskProteinClassifier(model_cfg, task_dims).to(device)
+
+    transfer_checkpoint = transfer_from or cfg.get("transfer_from")
+    if transfer_checkpoint:
+        if resume_path:
+            raise ValueError("--transfer_from and --resume are mutually exclusive")
+        transfer_checkpoint = Path(transfer_checkpoint)
+        if not transfer_checkpoint.exists():
+            raise FileNotFoundError(f"Transfer checkpoint not found: {transfer_checkpoint}")
+        loaded, skipped = load_compatible_model_weights(model, transfer_checkpoint, map_location=device)
+        print(f"[*] Transferred {loaded} compatible tensors from {transfer_checkpoint}")
+        if skipped:
+            print(f"[*] Skipped {len(skipped)} incompatible tensors, typically task-specific heads")
     
     print("[*] Loading datasets...")
     dynamic_padding = bool(cfg.get("dynamic_padding", False))
@@ -348,6 +384,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True, help="Path to YAML config")
     parser.add_argument("--resume", default=None, help="Path to checkpoint file to resume from")
+    parser.add_argument("--transfer_from", default=None, help="Checkpoint to partially initialize compatible weights from")
     parser.add_argument("--run_id", default=None, help="Unique run id")
     args = parser.parse_args()
-    train_multi_task(args.config, args.resume, args.run_id)
+    train_multi_task(args.config, args.resume, args.run_id, args.transfer_from)

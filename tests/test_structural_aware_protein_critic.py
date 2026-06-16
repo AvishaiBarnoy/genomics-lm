@@ -10,6 +10,7 @@ from src.protein_lm.train_multi_task import (
     LengthBucketBatchSampler,
     MultiTaskProteinDataset,
     collate_protein_batch,
+    load_compatible_model_weights,
 )
 
 
@@ -120,3 +121,31 @@ def test_multitask_model_uses_attention_mask():
 
     logits = model(input_ids, attention_mask=attention_mask)
     assert logits["protein_type"].shape == (2, 3)
+
+
+def test_transfer_loads_matching_backbone_and_skips_heads(tmp_path):
+    config = ProteinClassifierConfig(
+        vocab_size=len(ProteinTokenizer().vocab),
+        block_size=8,
+        n_layer=1,
+        n_head=1,
+        n_embd=8,
+        dropout=0.0,
+        num_classes=0,
+        use_checkpoint=False,
+    )
+    source = MultiTaskProteinClassifier(config, {"family": 5})
+    target = MultiTaskProteinClassifier(config, {"protein_type": 3})
+
+    with torch.no_grad():
+        source.backbone.token_embedding.weight.fill_(0.25)
+        target.backbone.token_embedding.weight.zero_()
+
+    checkpoint = tmp_path / "source.pt"
+    torch.save(source.state_dict(), checkpoint)
+
+    loaded, skipped = load_compatible_model_weights(target, checkpoint)
+
+    assert loaded > 0
+    assert "heads.family.weight" in skipped
+    assert torch.allclose(target.backbone.token_embedding.weight, source.backbone.token_embedding.weight)
