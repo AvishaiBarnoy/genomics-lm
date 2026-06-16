@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Sampler
 import time
 import json
 import argparse
@@ -11,9 +11,11 @@ from src.protein_lm.models_multi import MultiTaskProteinClassifier
 from src.protein_lm.config import ProteinClassifierConfig
 
 class MultiTaskProteinDataset(Dataset):
-    def __init__(self, jsonl_path, tokenizer, max_length=512):
+    def __init__(self, jsonl_path, tokenizer, max_length=512, dynamic_padding=False, multi_label_tasks=None):
         self.tokenizer = tokenizer
         self.max_length = max_length
+        self.dynamic_padding = dynamic_padding
+        self.multi_label_tasks = set(multi_label_tasks or [])
         self.samples = []
         
         with open(jsonl_path, "r") as f:
@@ -31,16 +33,73 @@ class MultiTaskProteinDataset(Dataset):
         # We manually add BOS (1) and EOS (2) if they exist, or just rely on raw tokens.
         tokens = [self.tokenizer.bos_token_id] + self.tokenizer.encode_sequence(s["sequence"])[:self.max_length-2] + [self.tokenizer.eos_token_id]
         
-        # Pad sequence
-        pad_len = self.max_length - len(tokens)
-        input_ids = tokens + [self.tokenizer.pad_token_id] * pad_len
-        
-        return {
+        attention_mask = [1] * len(tokens)
+        if not self.dynamic_padding:
+            pad_len = self.max_length - len(tokens)
+            input_ids = tokens + [self.tokenizer.pad_token_id] * pad_len
+            attention_mask = attention_mask + [0] * pad_len
+        else:
+            input_ids = tokens
+
+        item = {
             "input_ids": torch.tensor(input_ids, dtype=torch.long),
+            "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
             "family": torch.tensor(s.get("pfam_id", -1), dtype=torch.long),
             "function": torch.tensor(s.get("ec_id", -1), dtype=torch.long),
             "stability": torch.tensor(s.get("stability_id", -1), dtype=torch.long)
         }
+        for task in self.multi_label_tasks:
+            labels = s.get(task)
+            if labels is None:
+                labels = s.get(f"{task}_labels")
+            if labels is None:
+                labels = []
+            item[task] = torch.tensor(labels, dtype=torch.float32)
+        return item
+
+    def sequence_length(self, idx):
+        sequence = self.samples[idx]["sequence"]
+        return min(len(sequence) + 2, self.max_length)
+
+
+class LengthBucketBatchSampler(Sampler[list[int]]):
+    """Batch similar-length proteins together to reduce padding waste."""
+
+    def __init__(self, dataset, batch_size, shuffle=True):
+        self.dataset = dataset
+        self.batch_size = int(batch_size)
+        self.shuffle = shuffle
+
+    def __iter__(self):
+        generator = torch.Generator()
+        generator.manual_seed(1337)
+        indices = list(range(len(self.dataset)))
+        indices.sort(key=self.dataset.sequence_length)
+        batches = [indices[i : i + self.batch_size] for i in range(0, len(indices), self.batch_size)]
+        if self.shuffle:
+            order = torch.randperm(len(batches), generator=generator).tolist()
+            batches = [batches[i] for i in order]
+        yield from batches
+
+    def __len__(self):
+        return (len(self.dataset) + self.batch_size - 1) // self.batch_size
+
+
+def collate_protein_batch(batch, pad_token_id=0):
+    """Pad a variable-length protein batch to its local max length."""
+    max_len = max(item["input_ids"].numel() for item in batch)
+    result = {}
+    for key in batch[0].keys():
+        values = [item[key] for item in batch]
+        if key in {"input_ids", "attention_mask"}:
+            pad_value = pad_token_id if key == "input_ids" else 0
+            out = torch.full((len(batch), max_len), pad_value, dtype=values[0].dtype)
+            for i, value in enumerate(values):
+                out[i, : value.numel()] = value
+            result[key] = out
+        else:
+            result[key] = torch.stack(values)
+    return result
 
 def train_multi_task(config_path, resume_path=None, run_id=None):
     with open(config_path, 'r') as f:
@@ -66,6 +125,9 @@ def train_multi_task(config_path, resume_path=None, run_id=None):
         "function": len(vocabs["ec"]),
         "stability": len(vocabs["stability"])
     }
+    multi_label_tasks = list(cfg.get("multi_label_tasks", []))
+    for task in multi_label_tasks:
+        task_dims[task] = len(vocabs[task])
     print(f"[*] Task Dimensions: {task_dims}")
 
     # Build Config
@@ -84,16 +146,42 @@ def train_multi_task(config_path, resume_path=None, run_id=None):
     model = MultiTaskProteinClassifier(model_cfg, task_dims).to(device)
     
     print("[*] Loading datasets...")
-    train_ds = MultiTaskProteinDataset(cfg["train_data"], tokenizer, max_length=model_cfg.block_size)
-    val_ds = MultiTaskProteinDataset(cfg["val_data"], tokenizer, max_length=model_cfg.block_size)
-    
-    train_loader = DataLoader(train_ds, batch_size=cfg.get("batch_size", 8), shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=cfg.get("batch_size", 8))
+    dynamic_padding = bool(cfg.get("dynamic_padding", False))
+    train_ds = MultiTaskProteinDataset(
+        cfg["train_data"],
+        tokenizer,
+        max_length=model_cfg.block_size,
+        dynamic_padding=dynamic_padding,
+        multi_label_tasks=multi_label_tasks,
+    )
+    val_ds = MultiTaskProteinDataset(
+        cfg["val_data"],
+        tokenizer,
+        max_length=model_cfg.block_size,
+        dynamic_padding=dynamic_padding,
+        multi_label_tasks=multi_label_tasks,
+    )
+
+    if dynamic_padding:
+        train_loader = DataLoader(
+            train_ds,
+            batch_sampler=LengthBucketBatchSampler(train_ds, cfg.get("batch_size", 8), shuffle=True),
+            collate_fn=lambda batch: collate_protein_batch(batch, tokenizer.pad_token_id),
+        )
+        val_loader = DataLoader(
+            val_ds,
+            batch_sampler=LengthBucketBatchSampler(val_ds, cfg.get("batch_size", 8), shuffle=False),
+            collate_fn=lambda batch: collate_protein_batch(batch, tokenizer.pad_token_id),
+        )
+    else:
+        train_loader = DataLoader(train_ds, batch_size=cfg.get("batch_size", 8), shuffle=True)
+        val_loader = DataLoader(val_ds, batch_size=cfg.get("batch_size", 8))
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(cfg.get("lr", 1e-4)))
     
     # CrossEntropyLoss with ignore_index=-1 handles the missing labels
     criterion = nn.CrossEntropyLoss(ignore_index=-1)
+    multi_label_criterion = nn.BCEWithLogitsLoss()
 
     best_val_loss = float('inf')
     start_epoch = 0
@@ -149,8 +237,11 @@ def train_multi_task(config_path, resume_path=None, run_id=None):
         
         for step, batch in enumerate(train_loader):
             input_ids = batch["input_ids"].to(device)
+            attention_mask = batch.get("attention_mask")
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(device)
             
-            logits_dict = model(input_ids)
+            logits_dict = model(input_ids, attention_mask=attention_mask)
             
             loss = 0
             tasks_added = 0
@@ -160,6 +251,11 @@ def train_multi_task(config_path, resume_path=None, run_id=None):
                 if (targets != -1).any():
                      loss += criterion(logits_dict[task], targets)
                      tasks_added += 1
+            for task in multi_label_tasks:
+                targets = batch[task].to(device)
+                if targets.numel() and (targets >= 0).any():
+                    loss += multi_label_criterion(logits_dict[task], targets)
+                    tasks_added += 1
             
             if tasks_added > 0:
                 loss = loss / grad_accum_steps
@@ -199,7 +295,10 @@ def train_multi_task(config_path, resume_path=None, run_id=None):
         with torch.no_grad():
             for batch in val_loader:
                 input_ids = batch["input_ids"].to(device)
-                logits_dict = model(input_ids)
+                attention_mask = batch.get("attention_mask")
+                if attention_mask is not None:
+                    attention_mask = attention_mask.to(device)
+                logits_dict = model(input_ids, attention_mask=attention_mask)
                 
                 batch_loss = 0
                 batch_tasks = 0
@@ -207,6 +306,11 @@ def train_multi_task(config_path, resume_path=None, run_id=None):
                     targets = batch[task].to(device)
                     if (targets != -1).any():
                         batch_loss += criterion(logits_dict[task], targets)
+                        batch_tasks += 1
+                for task in multi_label_tasks:
+                    targets = batch[task].to(device)
+                    if targets.numel() and (targets >= 0).any():
+                        batch_loss += multi_label_criterion(logits_dict[task], targets)
                         batch_tasks += 1
                 
                 if batch_tasks > 0:
