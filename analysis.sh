@@ -57,8 +57,8 @@ if [[ ! -d "$SCORES_DIR" ]]; then
   SCORES_DIR="outputs/scores/${RUN_ID}"
 fi
 
-python -m scripts.evaluate_test --run-dir "${CKPT_DIR}" || true
-python -m scripts.sanity_kpis --run-dir "${CKPT_DIR}" || true
+python -m scripts.evaluate_test --run_dir "${CKPT_DIR}" || true
+python -m scripts.sanity_kpis --run_dir "${CKPT_DIR}" || true
 
 # 8) Sequence quality, SS/disorder, calibration
 VAL_NPZ=$(python - "${RUN_ID}" <<'PY'

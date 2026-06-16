@@ -7,16 +7,19 @@ from scripts._shared import load_model, resolve_run, load_token_list
 # Heuristic DNAshape parameters (Pentamer-based approximations)
 def get_theoretical_shape(dna_seq):
     """
-    Returns MGW (Angstroms), Roll (Degrees), and EP (kT/e).
-    Heuristic:
-    - A-tracts: narrow MGW (~3.3), low Roll (~0), low EP (negative/attractive).
-    - G/C-rich: wide MGW (~5.8), high Roll (~5), neutral EP.
+    Returns 14 structural DNAshape parameters (original 5 + 9 expanded parameters).
+    Heuristics are based on base-pair (intra) and base-pair step (inter) conformations:
+    - A-tracts: narrow MGW, low Roll, negative Slide, low EP, high negative ProT.
+    - GC-rich/steps: wide MGW, high Roll, positive Slide, higher EP.
     """
     mgw, roll, ep, prot, helt = [], [], [], [], []
+    slide, rise, shift, tilt = [], [], [], []
+    buckle, opening, shear, stagger, stretch = [], [], [], [], []
+
     for i in range(len(dna_seq)):
         window = dna_seq[max(0, i - 2) : min(len(dna_seq), i + 3)]
 
-        # MGW (Minor Groove Width)
+        # 1. MGW (Minor Groove Width)
         if "AAAA" in window:
             m_val = 3.5
         elif "GGGG" in window or "CCCC" in window:
@@ -24,7 +27,7 @@ def get_theoretical_shape(dna_seq):
         else:
             m_val = 4.5
 
-        # Roll (Bendability/Step Rotation)
+        # 2. Roll (Bendability/Step Rotation)
         if "GC" in window or "CG" in window:
             r_val = 5.0
         elif "AA" in window or "TT" in window:
@@ -32,7 +35,7 @@ def get_theoretical_shape(dna_seq):
         else:
             r_val = 2.5
 
-        # EP (Electrostatic Potential)
+        # 3. EP (Electrostatic Potential)
         if "AAAA" in window:
             e_val = -10.0
         elif "GGCC" in window:
@@ -40,7 +43,7 @@ def get_theoretical_shape(dna_seq):
         else:
             e_val = -5.0
 
-        # ProT (Propeller Twist) - Stiffer base pairing
+        # 4. ProT (Propeller Twist)
         if "GC" in window:
             pr_val = -11.0
         elif "AT" in window:
@@ -48,7 +51,7 @@ def get_theoretical_shape(dna_seq):
         else:
             pr_val = -14.0
 
-        # HelT (Helix Twist) - Degrees per bp
+        # 5. HelT (Helix Twist)
         if "CG" in window:
             h_val = 36.0
         elif "TA" in window:
@@ -56,11 +59,86 @@ def get_theoretical_shape(dna_seq):
         else:
             h_val = 34.0
 
+        # 6. Slide
+        if "AAAA" in window:
+            sl_val = -0.8
+        elif "GC" in window or "CG" in window:
+            sl_val = 0.2
+        else:
+            sl_val = -0.3
+
+        # 7. Rise
+        if "CG" in window:
+            ri_val = 3.2
+        elif "AA" in window:
+            ri_val = 3.4
+        else:
+            ri_val = 3.3
+
+        # 8. Shift
+        if "AA" in window or "TT" in window:
+            sh_val = 0.0
+        elif "GC" in window:
+            sh_val = 0.2
+        else:
+            sh_val = -0.1
+
+        # 9. Tilt
+        if "AA" in window:
+            ti_val = 0.0
+        elif "CG" in window:
+            ti_val = 0.5
+        else:
+            ti_val = -0.2
+
+        # 10. Buckle
+        if "GC" in window:
+            bu_val = -12.0
+        elif "AT" in window:
+            bu_val = 0.0
+        else:
+            bu_val = -6.0
+
+        # 11. Opening
+        if "AT" in window:
+            op_val = 2.0
+        elif "GC" in window:
+            op_val = 0.5
+        else:
+            op_val = 1.0
+
+        # 12. Shear
+        if "GC" in window:
+            se_val = 0.0
+        else:
+            se_val = 0.1
+
+        # 13. Stagger
+        if "AA" in window:
+            st_val = 0.1
+        else:
+            st_val = -0.1
+
+        # 14. Stretch
+        if "CG" in window:
+            sr_val = -0.1
+        else:
+            sr_val = 0.0
+
         mgw.append(m_val)
         roll.append(r_val)
         ep.append(e_val)
         prot.append(pr_val)
         helt.append(h_val)
+        slide.append(sl_val)
+        rise.append(ri_val)
+        shift.append(sh_val)
+        tilt.append(ti_val)
+        buckle.append(bu_val)
+        opening.append(op_val)
+        shear.append(se_val)
+        stagger.append(st_val)
+        stretch.append(sr_val)
 
     return {
         "MGW": np.array(mgw),
@@ -68,6 +146,15 @@ def get_theoretical_shape(dna_seq):
         "EP": np.array(ep),
         "ProT": np.array(prot),
         "HelT": np.array(helt),
+        "Slide": np.array(slide),
+        "Rise": np.array(rise),
+        "Shift": np.array(shift),
+        "Tilt": np.array(tilt),
+        "Buckle": np.array(buckle),
+        "Opening": np.array(opening),
+        "Shear": np.array(shear),
+        "Stagger": np.array(stagger),
+        "Stretch": np.array(stretch),
     }
 
 

@@ -1,13 +1,13 @@
 {
   "run_id": "2026-06-10_stage2.5_10L8H_d256_e1",
-  "train_wall_sec": 4620.6,
-  "train_cpu_sec": 1926.9,
+  "train_wall_sec": 12851.66,
+  "train_cpu_sec": 5611.73,
   "best_epoch": 1,
-  "best_val_loss": 0.0,
+  "best_val_loss": 4.321034479285832,
   "status": "completed",
   "model_spec": {},
   "last_epoch": 1,
-  "last_val_loss": 0.0,
-  "last_train_loss": 0.0,
-  "last_perplexity": 1.0
+  "last_val_loss": 4.321034479285832,
+  "last_train_loss": 4.922877158310479,
+  "last_perplexity": 75.26644961585507
 }

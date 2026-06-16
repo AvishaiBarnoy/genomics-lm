@@ -1,0 +1,47 @@
+# Config for Stage 2.6 — Optimized training config
+# Enables: GQA (n_kv_head=2), mmap dataset, bucket batching, SDPA fused kernel
+# Based on: configs/stage2.6_large_scaling.yaml
+
+# Model Architecture
+vocab_size: 69
+block_size: 512
+n_layer: 10
+n_head: 8
+n_embd: 384
+n_kv_head: 2           # GQA: 2 KV heads shared across 8 query heads (4x KV reduction)
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+use_sdpa: true
+sep_mask_enabled: false  # Disable SEP mask → triggers native fused causal SDPA kernel
+
+# Transfer Learning Weights
+transfer_from: "runs/2026-06-12_stage2.5_10L8H_d384_e5/checkpoints/last.pt"
+
+# Data Paths
+itos_path: "data/processed/itos_codon.txt"
+train_npz: "data/processed/stage2.6_large_master_pack/train_bs512.npz"
+val_npz: "data/processed/stage2.6_large_master_pack/val_bs512.npz"
+test_npz: "data/processed/stage2.6_large_master_pack/test_bs512.npz"
+
+# Training
+batch_size: 4
+grad_accum_steps: 32
+epochs: 10
+lr: 0.00003
+min_lr: 0.000003
+weight_decay: 0.05
+warmup_steps: 100
+early_stop_patience: 20
+max_time_minutes: 380
+
+# DataLoader Optimizations
+use_mmap: true           # Memory-map NPZ arrays (don't preload into RAM)
+bucket_batching: true    # Group seqs by length to minimize padding waste
+n_buckets: 8
+num_workers: 0           # Keep 0 on MPS (multiprocessing + mmap = pickling issues)
+pin_memory: false        # Always false on Apple Silicon
+
+# Output
+out_dir: "runs/stage2.6_10L8H_d384_optimized/checkpoints"
+scores_dir: "runs/stage2.6_10L8H_d384_optimized/scores"

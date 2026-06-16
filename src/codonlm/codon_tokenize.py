@@ -40,8 +40,8 @@ ALIASES = {
 for alias, canonical in ALIASES.items():
     stoi[alias] = stoi[canonical]
 
-def to_ids(dna: str) -> list[int]:
-    """Converts a DNA sequence string into a list of token IDs, wrapping it in BOS and EOS tokens."""
+def to_ids(dna: str, termination: str = "eos") -> list[int]:
+    """Converts a DNA sequence string into a list of token IDs, wrapping it in BOS and EOS/SEP tokens."""
     dna = dna.strip().upper().replace("U", "T")
     if len(dna) < 3:
         return []
@@ -55,13 +55,15 @@ def to_ids(dna: str) -> list[int]:
             # Skip unknown codons (should not happen for ACGT)
             continue
         ids.append(idx)
-    # Ensure we terminate with EOS_CDS even if sequence lacked a canonical stop
+    # Ensure we terminate correctly even if sequence lacked a canonical stop
     if len(ids) == 1:
         return []
-    if itos.get(ids[-1]) not in STOP_CODONS:
-        # do nothing; keep whatever last codon was (ground truth may not end with stop in some corpora)
-        pass
-    ids.append(stoi["<EOS_CDS>"])
+
+    if termination == "eos":
+        ids.append(stoi["<EOS_CDS>"])
+    elif termination == "sep":
+        ids.append(stoi["<SEP>"])
+    # "none" or other cases skip appending a special token here
     return ids
 
 
@@ -72,6 +74,8 @@ def main():
     ap.add_argument("--out_ids", default="data/processed/codon_ids.txt")
     ap.add_argument("--out_vocab", default="data/processed/vocab_codon.txt")
     ap.add_argument("--out_itos", default="data/processed/itos_codon.txt")
+    ap.add_argument("--termination", choices=["eos", "sep", "none"], default="eos",
+                    help="Termination token: 'eos' (id 2, default), 'sep' (id 3, legacy default), or 'none'")
     args = ap.parse_args()
 
     ids_path = Path(args.out_ids)
@@ -80,7 +84,7 @@ def main():
 
         n=0
         for line in fin:
-            arr = to_ids(line)
+            arr = to_ids(line, termination=args.termination)
             if len(arr) > 2:
                 fout.write(" ".join(map(str, arr)) + "\n")
                 n += 1

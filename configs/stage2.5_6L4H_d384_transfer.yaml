@@ -1,0 +1,36 @@
+# Config for 6L4H_d384 CodonLM transfer learning on dynamic master dataset
+# Transfers weights from 4L2H_d384 to preserve learned biological features (e.g. positive synonymous gap)
+
+# Model Architecture
+vocab_size: 69
+block_size: 512
+n_layer: 6
+n_head: 4
+n_embd: 384
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+use_sdpa: true
+
+# Transfer Learning Weights
+transfer_from: "runs/2026-06-12_stage2.5_4L2H_d384_e5/checkpoints/best.pt"
+
+# Data Paths
+itos_path: "data/processed/itos_codon.txt"
+train_npz: "data/processed/stage2.5_master_pack_v2/train_bs512.npz"
+val_npz: "data/processed/stage2.5_master_pack_v2/val_bs512.npz"
+test_npz: "data/processed/stage2.5_master_pack_v2/test_bs512.npz"
+
+# Training
+batch_size: 8
+grad_accum_steps: 16
+epochs: 5
+lr: 0.00005          # Lower learning rate to preserve pre-trained priors
+min_lr: 0.000005
+weight_decay: 0.05
+warmup_steps: 100
+early_stop_patience: 3
+
+# Output
+out_dir: "runs/stage2.5_6L4H_d384_transfer/checkpoints"
+scores_dir: "runs/stage2.5_6L4H_d384_transfer/scores"

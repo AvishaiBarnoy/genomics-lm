@@ -1,0 +1,34 @@
+# Config for 6L4H CodonLM training on dynamic master dataset
+# Designed to verify stop codon / termination learning with a deeper model
+# Can be used as a transfer learning source for 8L4H_d256 later.
+
+# Model Architecture
+vocab_size: 69
+block_size: 512
+n_layer: 6
+n_head: 4
+n_embd: 256
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+use_sdpa: true
+
+# Data Paths
+itos_path: "data/processed/itos_codon.txt"
+train_npz: "data/processed/stage2.5_master_pack_v2/train_bs512.npz"
+val_npz: "data/processed/stage2.5_master_pack_v2/val_bs512.npz"
+test_npz: "data/processed/stage2.5_master_pack_v2/test_bs512.npz"
+
+# Training
+batch_size: 8
+grad_accum_steps: 16
+epochs: 5
+lr: 0.0003
+min_lr: 0.00001
+weight_decay: 0.05
+warmup_steps: 100
+early_stop_patience: 3
+
+# Output
+out_dir: "runs/stage2.5_6L4H_dynamic/checkpoints"
+scores_dir: "runs/stage2.5_6L4H_dynamic/scores"

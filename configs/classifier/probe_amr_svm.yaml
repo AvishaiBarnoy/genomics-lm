@@ -1,0 +1,12 @@
+protocol: std
+task: probe_amr_svm
+out_dir: outputs/reports/amr_classification
+
+data:
+  train_embeddings: outputs/reports/amr_classification/train_embeddings.npz
+  train_labels: data/labels/train_amr.csv
+  test_embeddings: outputs/reports/amr_classification/test_embeddings.npz
+  test_labels: data/labels/test_amr.csv
+
+classifier:
+  kind: probe_svm

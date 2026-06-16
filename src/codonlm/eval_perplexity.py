@@ -15,15 +15,30 @@ class PackedDataset(Dataset):
     def __init__(self, npz_path):
         """Initializes PackedDataset by loading numpy arrays."""
         d = np.load(npz_path)
-        self.X = torch.from_numpy(d["X"]).long()
-        self.Y = torch.from_numpy(d["Y"]).long()
+        self.is_dynamic = "lengths" in d
+
+        if self.is_dynamic:
+            flat_X = d["X"]
+            lengths = d["lengths"]
+            offsets = np.insert(np.cumsum(lengths), 0, 0)
+            self.seqs = []
+            for i in range(len(lengths)):
+                seq = flat_X[offsets[i] : offsets[i+1]]
+                self.seqs.append(torch.from_numpy(seq.astype(np.int64)))
+        else:
+            self.X = torch.from_numpy(d["X"]).long()
+            self.Y = torch.from_numpy(d["Y"]).long()
 
     def __len__(self):
         """Returns the number of samples in the dataset."""
+        if getattr(self, "is_dynamic", False):
+            return len(self.seqs)
         return self.X.shape[0]
 
     def __getitem__(self, i):
         """Gets a tuple of (input_seq, target_seq) at index i."""
+        if getattr(self, "is_dynamic", False):
+            return self.seqs[i]
         return self.X[i], self.Y[i]
 
 def dev():

@@ -25,11 +25,14 @@ from src.codonlm.metrics_io import write_merge_metrics
 
 
 def dev() -> torch.device:
-    return (
-        torch.device("mps")
-        if torch.backends.mps.is_available()
-        else torch.device("cpu")
-    )
+    import os
+    if os.environ.get("FORCE_CPU") == "1":
+        return torch.device("cpu")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    elif torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
 
 
 def _infer_run_id(run_dir: Path) -> str:
@@ -38,6 +41,8 @@ def _infer_run_id(run_dir: Path) -> str:
 
 def _load_checkpoint(run_dir: Path) -> tuple[dict, dict]:
     best = run_dir / "best.pt"
+    if not best.exists():
+        best = run_dir / "checkpoints" / "best.pt"
     if not best.exists():
         raise FileNotFoundError(f"best.pt not found in {run_dir}")
     state = torch.load(best, map_location="cpu")
@@ -68,6 +73,15 @@ def _find_test_npz(
 ) -> Path:
     if data_dir_opt is not None:
         return data_dir_opt / f"test_bs{cfg['block_size']}.npz"
+    # prefer test_npz from config
+    test_npz_cfg = cfg.get("test_npz")
+    if test_npz_cfg:
+        if isinstance(test_npz_cfg, list) and len(test_npz_cfg) > 0:
+            test_npz_cfg = test_npz_cfg[0]
+        p = Path(test_npz_cfg)
+        if p.is_absolute():
+            return p
+        return repo_root / p
     # prefer combined manifest under data/processed/combined/<RUN_ID>
     manifest = repo_root / "data/processed/combined" / run_id / "manifest.json"
     if manifest.exists():
@@ -81,13 +95,28 @@ def _find_test_npz(
 class PackedDataset(torch.utils.data.Dataset):
     def __init__(self, npz_path: Path):
         blob = np.load(npz_path)
-        self.X = torch.from_numpy(np.asarray(blob["X"]).astype(np.int64))
-        self.Y = torch.from_numpy(np.asarray(blob["Y"]).astype(np.int64))
+        self.is_dynamic = "lengths" in blob
+
+        if self.is_dynamic:
+            flat_X = blob["X"]
+            lengths = blob["lengths"]
+            offsets = np.insert(np.cumsum(lengths), 0, 0)
+            self.seqs = []
+            for i in range(len(lengths)):
+                seq = flat_X[offsets[i] : offsets[i+1]]
+                self.seqs.append(torch.from_numpy(seq.astype(np.int64)))
+        else:
+            self.X = torch.from_numpy(np.asarray(blob["X"]).astype(np.int64))
+            self.Y = torch.from_numpy(np.asarray(blob["Y"]).astype(np.int64))
 
     def __len__(self):
+        if getattr(self, "is_dynamic", False):
+            return len(self.seqs)
         return self.X.shape[0]
 
     def __getitem__(self, i):
+        if getattr(self, "is_dynamic", False):
+            return self.seqs[i]
         return self.X[i], self.Y[i]
 
 
@@ -119,17 +148,12 @@ def main() -> None:
     ap.add_argument(
         "--data_dir", help="override test NPZ directory (contains test_bs*.npz)"
     )
+    ap.add_argument("--batch_size", type=int, default=None, help="evaluation batch size")
     args = ap.parse_args()
 
     # accept run_id or run_dir
-    run_id, _ = resolve_run(args.run_id, None)
-    run_dir = (
-        Path(args.run_dir) if args.run_dir else (Path("outputs/checkpoints") / run_id)
-    )
-    if not run_dir.exists():
-        raise FileNotFoundError(run_dir)
+    run_id, run_dir = resolve_run(args.run_id, args.run_dir)
     repo_root = Path(__file__).resolve().parents[1]
-    run_id = _infer_run_id(run_dir)
 
     state_dict, cfg = _load_checkpoint(run_dir)
     model = _build_model_from_cfg(cfg)
@@ -139,11 +163,36 @@ def main() -> None:
     data_dir_opt = Path(args.data_dir) if args.data_dir else None
     test_npz = _find_test_npz(run_id, cfg, repo_root, data_dir_opt)
     ds = PackedDataset(test_npz)
-    loader = DataLoader(ds, batch_size=int(cfg.get("batch_size", 2)))
+
+    collate_fn = None
+    if getattr(ds, "is_dynamic", False):
+        def dynamic_collate_fn(batch):
+            lengths = [len(seq) for seq in batch]
+            max_len = max(lengths)
+            xs, ys = [], []
+            for seq in batch:
+                x_seq = seq[:-1]
+                y_seq = seq[1:]
+                pad_len = (max_len - 1) - len(x_seq)
+                if pad_len > 0:
+                    x_seq = torch.cat([x_seq, torch.zeros(pad_len, dtype=torch.long)])
+                    y_seq = torch.cat([y_seq, torch.zeros(pad_len, dtype=torch.long)])
+                xs.append(x_seq)
+                ys.append(y_seq)
+            return torch.stack(xs), torch.stack(ys)
+        collate_fn = dynamic_collate_fn
+
+    batch_size = args.batch_size
+    if batch_size is None:
+        batch_size = int(cfg.get("eval_batch_size", 16 if dev().type == "mps" else 64))
+    loader = DataLoader(ds, batch_size=batch_size, collate_fn=collate_fn)
     nll, ppl = evaluate(model, dev(), loader)
     print(f"[test] loss={nll:.4f} ppl={ppl:.2f}")
 
-    metrics_path = repo_root / "outputs/scores" / run_id / "metrics.json"
+    metrics_path = run_dir / "scores" / "metrics.json"
+    if not metrics_path.parent.exists():
+        metrics_path = repo_root / "outputs/scores" / run_id / "metrics.json"
+
     write_merge_metrics(
         metrics_path,
         {

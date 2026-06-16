@@ -1,0 +1,15 @@
+protocol: std
+task: kmer_amr
+out_dir: outputs/reports/kmer_amr
+
+data:
+  train_seqs: data/processed/train_amr_seqs.csv
+  train_labels: data/labels/train_amr.csv
+  test_seqs: data/processed/test_amr_seqs.csv
+  test_labels: data/labels/test_amr.csv
+
+classifier:
+  kind: kmer_logreg
+  k: 3
+  tfidf: true
+  C: 1.0

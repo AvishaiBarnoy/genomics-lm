@@ -1,0 +1,15 @@
+protocol: std
+task: kmer_ec
+out_dir: outputs/reports/kmer_ec
+
+data:
+  train_seqs: data/processed/ec_train_seqs.csv
+  train_labels: data/labels/train_ec.csv
+  test_seqs: data/processed/ec_test_seqs.csv
+  test_labels: data/labels/test_ec.csv
+
+classifier:
+  kind: kmer_logreg
+  k: 3
+  tfidf: true
+  C: 1.0

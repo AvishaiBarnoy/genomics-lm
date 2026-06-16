@@ -89,7 +89,7 @@ def _prepare_output_dirs(base_ckpt_dir: str, base_scores_dir: str, run_id: Optio
     else:
         ckpt_root = Path(base_ckpt_dir)
         scores_root = Path(base_scores_dir)
-        
+
     ckpt_root.mkdir(parents=True, exist_ok=True)
     scores_root.mkdir(parents=True, exist_ok=True)
     return ckpt_root, scores_root
@@ -101,46 +101,219 @@ class PackedDataset(Dataset):
             paths = [paths]
         else:
             paths = list(paths)
-        totals = []
-        tail_shape = None
-        y_tail_shape = None
-        for path in paths:
-            with np.load(path, allow_pickle=False) as data:
-                X = data["X"]
-                Y = data["Y"]
-                if tail_shape is None:
-                    tail_shape = X.shape[1:]
-                    y_tail_shape = Y.shape[1:]
-                totals.append(X.shape[0])
-        total_rows = sum(totals)
-        if total_rows == 0:
-            self.X = torch.empty((0,) + (tail_shape or (0,)), dtype=torch.long)
-            self.Y = torch.empty((0,) + (y_tail_shape or (0,)), dtype=torch.long)
-            return
 
-        X_agg = np.empty((total_rows,) + tail_shape, dtype=np.int64)
-        Y_agg = np.empty((total_rows,) + y_tail_shape, dtype=np.int64)
+        self.is_dynamic = False
+        if len(paths) > 0:
+            with np.load(paths[0], allow_pickle=False) as data:
+                if "lengths" in data:
+                    self.is_dynamic = True
 
-        offset = 0
-        for path in paths:
-            with np.load(path, allow_pickle=False) as data:
-                X = np.asarray(data["X"], dtype=np.int64)
-                Y = np.asarray(data["Y"], dtype=np.int64)
-                rows = X.shape[0]
-                X_agg[offset:offset + rows] = X
-                Y_agg[offset:offset + rows] = Y
-                offset += rows
-        self.X = torch.from_numpy(X_agg)
-        self.Y = torch.from_numpy(Y_agg)
+        if self.is_dynamic:
+            self.seqs = []
+            for path in paths:
+                with np.load(path, allow_pickle=False) as data:
+                    flat_X = data["X"]
+                    lengths = data["lengths"]
+                    offsets = np.insert(np.cumsum(lengths), 0, 0)
+                    for i in range(len(lengths)):
+                        seq = flat_X[offsets[i] : offsets[i+1]]
+                        self.seqs.append(torch.from_numpy(seq.astype(np.int64)))
+        else:
+            totals = []
+            tail_shape = None
+            y_tail_shape = None
+            for path in paths:
+                with np.load(path, allow_pickle=False) as data:
+                    X = data["X"]
+                    Y = data["Y"]
+                    if tail_shape is None:
+                        tail_shape = X.shape[1:]
+                        y_tail_shape = Y.shape[1:]
+                    totals.append(X.shape[0])
+            total_rows = sum(totals)
+            if total_rows == 0:
+                self.X = torch.empty((0,) + (tail_shape or (0,)), dtype=torch.long)
+                self.Y = torch.empty((0,) + (y_tail_shape or (0,)), dtype=torch.long)
+                return
+
+            X_agg = np.empty((total_rows,) + tail_shape, dtype=np.int64)
+            Y_agg = np.empty((total_rows,) + y_tail_shape, dtype=np.int64)
+
+            offset = 0
+            for path in paths:
+                with np.load(path, allow_pickle=False) as data:
+                    X = np.asarray(data["X"], dtype=np.int64)
+                    Y = np.asarray(data["Y"], dtype=np.int64)
+                    rows = X.shape[0]
+                    X_agg[offset:offset + rows] = X
+                    Y_agg[offset:offset + rows] = Y
+                    offset += rows
+            self.X = torch.from_numpy(X_agg)
+            self.Y = torch.from_numpy(Y_agg)
 
     def __len__(self):
+        if self.is_dynamic:
+            return len(self.seqs)
         return self.X.shape[0]
 
     def __getitem__(self, i):
+        if self.is_dynamic:
+            return self.seqs[i]
         return self.X[i], self.Y[i]
 
+
+class MmapPackedDataset(Dataset):
+    """Memory-mapped alternative to PackedDataset for dynamic-length NPZ files.
+
+    Keeps the raw flat array on disk (mmap) and stores only per-sequence
+    byte-offsets in RAM. Reduces peak RSS by ~(N_seq × avg_seq_len × 8) bytes
+    compared to loading all sequences as individual tensors.
+
+    Only supports dynamic format (NPZ with 'X' flat array + 'lengths' vector).
+    Falls back to PackedDataset for fixed-length NPZs.
+    """
+
+    def __init__(self, paths):
+        if isinstance(paths, (str, os.PathLike)):
+            paths = [paths]
+        else:
+            paths = list(paths)
+
+        # Detect format
+        with np.load(paths[0], allow_pickle=False) as probe:
+            is_dynamic = "lengths" in probe
+
+        if not is_dynamic:
+            # Delegate to original loader for fixed-length format
+            _ds = PackedDataset(paths)
+            self._delegate = _ds
+            self.is_dynamic = False
+            return
+
+        self.is_dynamic = True
+        self._delegate = None
+
+        # Load flat arrays via mmap — OS pages them lazily
+        self._mmaps: list[np.ndarray] = []
+        self._offsets: list[np.ndarray] = []  # per-file per-seq start indices
+        self._file_idx: list[np.ndarray] = []  # which file each seq belongs to
+        self._lengths: list[np.ndarray] = []
+
+        total_seqs = 0
+        for path in paths:
+            data = np.load(path, allow_pickle=False, mmap_mode="r")
+            flat_X = data["X"]          # stays mmap'd on disk
+            lengths = data["lengths"]   # small, load fully
+            offsets = np.concatenate([[0], np.cumsum(lengths[:-1])])
+            self._mmaps.append(flat_X)
+            self._offsets.append(offsets)
+            self._lengths.append(lengths)
+            total_seqs += len(lengths)
+
+        # Build a global index: (file_idx, local_seq_idx)
+        global_file = []
+        global_local = []
+        for fi, lengths in enumerate(self._lengths):
+            global_file.append(np.full(len(lengths), fi, dtype=np.int32))
+            global_local.append(np.arange(len(lengths), dtype=np.int32))
+        self._global_file = np.concatenate(global_file)
+        self._global_local = np.concatenate(global_local)
+        self._total = total_seqs
+
+    def __len__(self):
+        if self._delegate is not None:
+            return len(self._delegate)
+        return self._total
+
+    def __getitem__(self, i):
+        if self._delegate is not None:
+            return self._delegate[i]
+        fi = int(self._global_file[i])
+        li = int(self._global_local[i])
+        start = int(self._offsets[fi][li])
+        length = int(self._lengths[fi][li])
+        # Copy slice from mmap into a contiguous int64 array → tensor
+        seq = np.array(self._mmaps[fi][start: start + length], dtype=np.int64)
+        return torch.from_numpy(seq)
+
+    @property
+    def seq_lengths(self) -> np.ndarray:
+        """All sequence lengths (for bucketing sampler)."""
+        if self._delegate is not None:
+            if self._delegate.is_dynamic:
+                return np.array([len(s) for s in self._delegate.seqs], dtype=np.int32)
+            return np.full(len(self._delegate), self._delegate.X.shape[1], dtype=np.int32)
+        return np.concatenate(self._lengths)
+
+
+class BucketBatchSampler(torch.utils.data.Sampler):
+    """Groups sequences into length buckets before sampling batches.
+
+    Reduces average padding per batch (padding tokens waste FLOPs and inflate
+    effective sequence length for attention). Within each bucket, sequences are
+    randomly shuffled each epoch.
+
+    Args:
+        lengths:    Array of sequence lengths, shape (N,).
+        batch_size: Target batch size.
+        n_buckets:  Number of equal-width length buckets.
+        shuffle:    Shuffle within and between buckets each epoch.
+        drop_last:  Drop the last incomplete batch in each bucket.
+    """
+
+    def __init__(
+        self,
+        lengths: np.ndarray,
+        batch_size: int,
+        n_buckets: int = 8,
+        shuffle: bool = True,
+        drop_last: bool = False,
+    ) -> None:
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.drop_last = drop_last
+
+        # Assign each sequence to a bucket
+        edges = np.linspace(lengths.min(), lengths.max() + 1, n_buckets + 1)
+        bucket_ids = np.digitize(lengths, edges[1:])  # 0 … n_buckets-1
+        self.buckets: list[list[int]] = [[] for _ in range(n_buckets)]
+        for idx, bid in enumerate(bucket_ids):
+            self.buckets[bid].append(idx)
+
+    def __iter__(self):
+        all_batches: list[list[int]] = []
+        rng = np.random.default_rng()
+        for bucket in self.buckets:
+            if not bucket:
+                continue
+            indices = list(bucket)
+            if self.shuffle:
+                rng.shuffle(indices)
+            for start in range(0, len(indices), self.batch_size):
+                batch = indices[start: start + self.batch_size]
+                if self.drop_last and len(batch) < self.batch_size:
+                    continue
+                all_batches.append(batch)
+        if self.shuffle:
+            rng.shuffle(all_batches)
+        for batch in all_batches:
+            yield batch
+
+    def __len__(self):
+        total = 0
+        for bucket in self.buckets:
+            n = len(bucket) // self.batch_size
+            if not self.drop_last and len(bucket) % self.batch_size:
+                n += 1
+            total += n
+        return total
+
 def dev():
-    return torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
 
 def main():
     ap = argparse.ArgumentParser()
@@ -182,7 +355,7 @@ def main():
 
     if resume_path and not os.path.isfile(resume_path):
         raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
-    
+
     transfer_path = args.transfer_from or cfg.pop("transfer_from", None)
     if transfer_path and not os.path.isfile(transfer_path):
         raise FileNotFoundError(f"Transfer weights not found: {transfer_path}")
@@ -207,8 +380,13 @@ def main():
         except Exception as exc:
             print(f"[dims] failed to derive n_embd from d_head: {exc}")
 
-    train_ds = PackedDataset(train_paths)
-    val_ds = PackedDataset(val_paths)
+    use_mmap = bool(cfg.get("use_mmap", False))
+    DatasetCls = MmapPackedDataset if use_mmap else PackedDataset
+    train_ds = DatasetCls(train_paths)
+    val_ds = DatasetCls(val_paths)
+    if use_mmap:
+        print(f"[loader] using MmapPackedDataset (memory-mapped, on-demand paging)")
+
     num_workers = int(cfg.get("num_workers", 0))
     pin_memory = bool(cfg.get("pin_memory", False))
     prefetch_factor = int(cfg.get("prefetch_factor", 2)) if num_workers > 0 else None
@@ -218,10 +396,63 @@ def main():
         dl_kwargs["prefetch_factor"] = prefetch_factor
     if persistent_workers:
         dl_kwargs["persistent_workers"] = True
-    train_loader = DataLoader(train_ds, batch_size=cfg["batch_size"], shuffle=True, **dl_kwargs)
-    val_loader   = DataLoader(val_ds, batch_size=cfg["batch_size"], **dl_kwargs)
+
+    collate_fn = None
+    if getattr(train_ds, "is_dynamic", False):
+        def dynamic_collate_fn(batch):
+            lengths = [len(seq) for seq in batch]
+            max_len = max(lengths)
+            xs, ys = [], []
+            for seq in batch:
+                x_seq = seq[:-1]
+                y_seq = seq[1:]
+                pad_len = (max_len - 1) - len(x_seq)
+                if pad_len > 0:
+                    x_seq = torch.cat([x_seq, torch.zeros(pad_len, dtype=torch.long)])
+                    y_seq = torch.cat([y_seq, torch.zeros(pad_len, dtype=torch.long)])
+                xs.append(x_seq)
+                ys.append(y_seq)
+            return torch.stack(xs), torch.stack(ys)
+        collate_fn = dynamic_collate_fn
+
+    # Bucket batching: group sequences by length to reduce padding waste
+    bucket_batching = bool(cfg.get("bucket_batching", False))
+    train_sampler = None
+    train_shuffle = True
+    if bucket_batching and getattr(train_ds, "is_dynamic", False):
+        try:
+            lengths = train_ds.seq_lengths
+            n_buckets = int(cfg.get("n_buckets", 8))
+            train_sampler = BucketBatchSampler(
+                lengths, batch_size=cfg["batch_size"], n_buckets=n_buckets, shuffle=True
+            )
+            train_shuffle = False
+            print(f"[loader] BucketBatchSampler: {n_buckets} buckets, "
+                  f"{len(train_sampler)} batches, batch_size={cfg['batch_size']}")
+        except Exception as exc:
+            print(f"[loader] BucketBatchSampler failed ({exc}), falling back to shuffle=True")
+            train_sampler = None
+            train_shuffle = True
+
+    if train_sampler is not None:
+        train_loader = DataLoader(train_ds, batch_sampler=train_sampler, collate_fn=collate_fn, **dl_kwargs)
+    else:
+        train_loader = DataLoader(train_ds, batch_size=cfg["batch_size"], shuffle=train_shuffle, collate_fn=collate_fn, **dl_kwargs)
+    val_loader = DataLoader(val_ds, batch_size=cfg["batch_size"], collate_fn=collate_fn, **dl_kwargs)
 
     sep_mask_enabled = bool(cfg.get("sep_mask_enabled", True))
+
+    eos_loss_weight = cfg.get("eos_loss_weight", None)
+    loss_weights = None
+    if eos_loss_weight is not None and float(eos_loss_weight) != 1.0:
+        from .codon_tokenize import stoi, STOP_CODONS
+        loss_weights = [1.0] * cfg["vocab_size"]
+        loss_weights[stoi["<EOS_CDS>"]] = float(eos_loss_weight)
+        for codon in STOP_CODONS:
+            if codon in stoi:
+                loss_weights[stoi[codon]] = float(eos_loss_weight)
+        print(f"[weights] upweighting termination tokens by {eos_loss_weight}x")
+
     model = TinyGPT(
         cfg["vocab_size"],
         cfg["block_size"],
@@ -235,6 +466,7 @@ def main():
         tie_embeddings=bool(cfg.get("tie_embeddings", True)),
         n_kv_head=int(cfg.get("n_kv_head")) if cfg.get("n_kv_head") is not None else None,
         use_sdpa=bool(cfg.get("use_sdpa", False)),
+        loss_weights=loss_weights,
     ).to(device)
 
     compile_requested = bool(cfg.get("compile", False))
@@ -364,10 +596,10 @@ def main():
     outdir = cfg["out_dir"]
     scores_base = cfg.get("scores_dir", "outputs/scores")
     ckpt_dir, scores_dir = _prepare_output_dirs(outdir, scores_base, run_id)
-    
+
     # Save a copy of the config for reproducibility
     shutil.copy2(args.config, ckpt_dir / "config.yaml")
-    
+
     log_csv_cfg = cfg.get("log_csv")
     if log_csv_cfg:
         log_csv_path = Path(log_csv_cfg)
@@ -431,7 +663,7 @@ def main():
             if n > 0 and n % 200 == 0:
                 elapsed = time.perf_counter() - start_time
                 print(f"[{split}] progress: {n}/{len(loader)} speed: {n*xb.shape[0]/elapsed:.2f} seq/sec")
-            
+
             xb, yb = xb.to(device), yb.to(device)
             def fwd():
                 """Helper to run model forward pass and return scaled loss."""
@@ -608,7 +840,7 @@ def main():
     train_wall1 = time.perf_counter()
     train_cpu1 = time.process_time()
     total_time = train_wall1 - train_wall0
-    
+
     meta = {
         "run_id": run_id,
         "train_wall_sec": round(total_time, 2),
@@ -618,7 +850,7 @@ def main():
         "status": "completed",
         "model_spec": model.to_dict() if hasattr(model, "to_dict") else {}
     }
-    
+
     if history:
         meta.update({
             "last_epoch": history[-1]["epoch"],
@@ -626,13 +858,13 @@ def main():
             "last_train_loss": history[-1]["train_loss"],
             "last_perplexity": history[-1]["perplexity"],
         })
-        
+
         # Also write the compact metrics.json for dashboard
         metrics_path = scores_dir / "metrics.json"
         metrics_path.write_text(json.dumps(meta, indent=2) + "\n")
 
     write_meta(ckpt_dir, meta)
-    
+
     print(f"[timing] train_wall_sec={total_time:.2f} train_cpu_sec={train_cpu1-train_cpu0:.2f}")
 
 if __name__ == "__main__":

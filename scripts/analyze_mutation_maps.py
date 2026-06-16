@@ -8,7 +8,6 @@ import argparse
 from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 from scripts._shared import resolve_run, ensure_run_layout
 
 # Standard DNA translation table
@@ -153,7 +152,16 @@ def analyze_tsv(tsv_path: Path, run_id: str = None):
     # Visualization
     # 1. Heatmap
     plt.figure(figsize=(24, 12))
-    sns.heatmap(df[codons].T, cmap="RdBu_r", center=0, cbar_kws={"label": "ΔlogP"})
+    data = df[codons].T.values
+    max_val = max(abs(data.min()), abs(data.max())) if data.size > 0 else 1.0
+    im = plt.imshow(data, cmap="RdBu_r", aspect="auto", vmin=-max_val, vmax=max_val)
+    cbar = plt.colorbar(im)
+    cbar.set_label("ΔlogP")
+    plt.yticks(range(len(codons)), codons)
+    positions = df["pos"].values
+    if len(positions) > 0:
+        step = max(1, len(positions) // 20)
+        plt.xticks(range(0, len(positions), step), positions[::step])
     plt.title(f"Mutation Map (ΔlogP relative to WT)\n{tsv_path.name}")
     plt.xlabel("Sequence Position")
     plt.ylabel("Codon Substitution")

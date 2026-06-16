@@ -1,0 +1,37 @@
+# Config for 10L8H_d384 CodonLM transfer learning on dynamically packed expanded bacterial corpus
+# Transfers weights from 6L4H_d384_e5 to scale up depth and heads while preserving biological features
+
+# Model Architecture
+vocab_size: 69
+block_size: 512
+n_layer: 10
+n_head: 8
+n_embd: 384
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+use_sdpa: true
+
+# Transfer Learning Weights
+transfer_from: "runs/2026-06-12_stage2.5_10L8H_d384_e5/checkpoints/last.pt"
+
+# Data Paths
+itos_path: "data/processed/itos_codon.txt"
+train_npz: "data/processed/stage2.6_large_master_pack/train_bs512.npz"
+val_npz: "data/processed/stage2.6_large_master_pack/val_bs512.npz"
+test_npz: "data/processed/stage2.6_large_master_pack/test_bs512.npz"
+
+# Training
+batch_size: 4             # Reverted to 4 to prevent OOM
+grad_accum_steps: 32     # Doubled to maintain effective batch size of 128
+epochs: 10
+lr: 0.00003              # Lower learning rate for fine-tuning deep model
+min_lr: 0.000003
+weight_decay: 0.05
+warmup_steps: 100
+early_stop_patience: 20
+max_time_minutes: 380
+
+# Output
+out_dir: "runs/stage2.6_10L8H_d384_large_scaling/checkpoints"
+scores_dir: "runs/stage2.6_10L8H_d384_large_scaling/scores"

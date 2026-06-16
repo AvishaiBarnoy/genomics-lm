@@ -31,8 +31,8 @@ def main():
     ap.add_argument("--val_frac", type=float, default=0.1)
     ap.add_argument("--test_frac", type=float, default=0.1)
     ap.add_argument("--out_dir", default="data/processed")
-    ap.add_argument("--pack_mode", choices=["multi", "single"], default="multi",
-                    help="'multi': pack multiple CDS per window with <SEP>; 'single': one CDS per window")
+    ap.add_argument("--pack_mode", choices=["multi", "single", "dynamic"], default="multi",
+                    help="'multi': pack multiple CDS per window with <SEP>; 'single': one CDS per window; 'dynamic': save raw variable-length lists of arrays")
     ap.add_argument("--seed", type=int, default=1337)
     args = ap.parse_args()
     rng = random.Random(args.seed)
@@ -61,10 +61,10 @@ def main():
         rng.shuffle(indices)
         n_test = max(1, int(len(seqs) * args.test_frac))
         n_val = max(1, int(len(seqs) * args.val_frac))
-        
+
         test_idx = set(indices[:n_test])
         val_idx = set(indices[n_test:n_test + n_val])
-        
+
         for i, arr in enumerate(seqs):
             key = "val" if i in val_idx else "test" if i in test_idx else "train"
             buckets[key].append(arr)
@@ -203,9 +203,32 @@ def main():
         np.savez_compressed(out, X=X, Y=Y)
         print(f"[build] {name}: {X.shape} → {out}")
 
+    def pack_dynamic(name, subset):
+        """Packs each sequence independently without padding. Concatenates them into a flat array and saves lengths to avoid pickle."""
+        filtered = []
+        for arr in subset:
+            if len(arr) <= 2:
+                continue
+            if len(arr) > args.block_size:
+                arr = arr[-args.block_size:]
+            filtered.append(arr)
+
+        if not filtered:
+            flat_X = np.zeros((0,), dtype=np.int32)
+            lengths = np.zeros((0,), dtype=np.int32)
+        else:
+            flat_X = np.concatenate([np.array(x, dtype=np.int32) for x in filtered])
+            lengths = np.array([len(x) for x in filtered], dtype=np.int32)
+
+        out = Path(args.out_dir) / f"{name}_bs{args.block_size}.npz"
+        np.savez_compressed(out, X=flat_X, lengths=lengths)
+        print(f"[build] {name} (dynamic): {len(filtered)} sequences → {out}")
+
     for name in ("train", "val", "test"):
         if args.pack_mode == "single":
             pack_single(name, buckets[name])
+        elif args.pack_mode == "dynamic":
+            pack_dynamic(name, buckets[name])
         else:
             pack_multi(name, buckets[name])
 
