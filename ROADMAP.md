@@ -55,7 +55,7 @@ All steps read `runs/<run_id>/artifacts.npz` (plus optional labels) and write ch
   - [x] **Protein-Critic Bridge**: DNA -> ProteinLM scoring script (`scripts/protein_critic_bridge.py`).
   - [x] **Multi-Task Classifiers**: Multi-head model for Family, Stability, and Function.
 - [x] **Inference Policy Optimization (ReD)**: Implement Reset-and-Discard to overcome the sublinear coverage trap and the 0% termination barrier.
-- [x] **Termination Motif Diagnostics**: 
+- [x] **Termination Motif Diagnostics**:
   - [x] Created sampling auditor (`scripts/check_termination_motifs.py`).
   - [x] Created causal in-silico perturbation (`scripts/test_perturbation_motifs.py`).
   - [x] Created post-STOP UTR generation check (`scripts/test_utr_generation.py`).
@@ -113,6 +113,8 @@ All steps read `runs/<run_id>/artifacts.npz` (plus optional labels) and write ch
 * [ ] **Hybrid DNA-Protein Critic Benchmark**: Integrate the Multi-Task Critic as a bidirectional re-feeding filter (Phase 5 of SOTA Benchmarking).
 * [ ] **Protein Latent Energy-Based Model**: Implement latent Langevin dynamics and NCE training for stability design.
 * [ ] **Multi-Frame Overlapping Gene Modeling**: Sum frame-shift positional context embeddings to predict overprinted genes in viral/bacterial genomes.
+* [ ] **Training Speed & Memory Optimization**: Implement GQA, memory-mapped data loaders, and batch bucketing by length to optimize pre-training throughput.
+
 
 **Hardware**: 16 GB MacBook with quantization+LoRA.
 **Outcome**: Strong lightweight classifiers, interpretable embeddings, motif‑aware generation.
@@ -151,6 +153,21 @@ All steps read `runs/<run_id>/artifacts.npz` (plus optional labels) and write ch
 
 **Hardware**: Cloud GPUs (A100/H100) or university cluster.
 **Outcome**: First de‑novo functional design experiments.
+
+---
+
+## 💊 Drug Discovery & Biotherapeutic Design Track
+
+Integrating multi-scale genomic LMs into Computer-Aided Drug Discovery (CADD) and biomanufacturing workflows:
+
+1. **Host-Specific Codon Optimization (Biomanufacturing)**
+   * Target: Translate human therapeutic genes (e.g. insulin, monoclonal antibodies) into the optimal bacterial host codon dialects (using CodonLM) to maximize expression yields and stability in bioreactors.
+2. **Pathogen Mutation & Drug Escape Prediction**
+   * Target: Use zero-shot fitness scoring ([benchmark_zero_shot_mutations.py](file:///Users/User/github/genomics-lm/scripts/benchmark_zero_shot_mutations.py)) to forecast mutation trajectories in bacterial/viral target proteins under drug pressure, allowing early pre-screening for drug resistance.
+3. **De-novo Peptide & Enzyme Design**
+   * Target: Generate novel therapeutic peptides or enzymes by combining conditional generation with a hierarchical gating filter (using the [Protein-Critic Bridge](file:///Users/User/github/genomics-lm/scripts/protein_critic_bridge.py)).
+4. **Metagenomic AMR and Target Discovery**
+   * Target: Leverage sequence representations and linear probes ([benchmark_gene_essentiality.py](file:///Users/User/github/genomics-lm/scripts/benchmark_gene_essentiality.py)) to discover novel highly-conserved essential genes in pathogen genomes and scan microbiome datasets for AMR (Antimicrobial Resistance) genes.
 
 ---
 

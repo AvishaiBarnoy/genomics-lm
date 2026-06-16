@@ -1,0 +1,22 @@
+# configs/noprop_toy.yaml
+# Minimal toy config for NoProp CPU verification
+
+# Model Architecture
+vocab_size: 69
+block_size: 512
+n_layer: 2
+n_head: 2
+n_embd: 64
+dropout: 0.1
+sep_mask_enabled: true
+use_sdpa: false
+
+# Data Paths
+train_npz: "data/processed/toy_train.npz"
+val_npz: "data/processed/toy_val.npz"
+test_npz: "data/processed/toy_val.npz"
+
+# Training
+batch_size: 2
+epochs: 1
+learning_rate: 0.001

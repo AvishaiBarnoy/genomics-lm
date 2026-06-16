@@ -88,7 +88,10 @@ def plot_calibration(y_true: np.ndarray, y_proba: np.ndarray, out_path: str | Pa
     else:
         scores = y_proba.reshape(-1)
         y_bin = y_true
-    prob_true, prob_pred = skm.calibration_curve(y_bin, scores, n_bins=n_bins)
+    if np.any(scores < 0.0) or np.any(scores > 1.0):
+        scores = 1.0 / (1.0 + np.exp(-scores))
+    from sklearn.calibration import calibration_curve
+    prob_true, prob_pred = calibration_curve(y_bin, scores, n_bins=n_bins)
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.plot(prob_pred, prob_true, marker="o", label="model")
     ax.plot([0, 1], [0, 1], linestyle="--", color="gray", label="perfect")
@@ -111,7 +114,7 @@ def save_npz(path: str | Path, **arrays) -> None:
 
 def load_npz(path: str | Path) -> Dict[str, np.ndarray]:
     """Loads and returns arrays from an npz file."""
-    with np.load(path, allow_pickle=False) as blob:
+    with np.load(path, allow_pickle=True) as blob:
         return {k: blob[k] for k in blob.files}
 
 
@@ -122,4 +125,3 @@ class EmbeddingPack:
     y: Optional[np.ndarray] = None
 
     ids: Optional[List[str]] = None
-

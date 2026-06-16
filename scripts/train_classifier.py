@@ -153,8 +153,9 @@ def main() -> None:
             model = res.model
             import torch
 
+            device = next(model.parameters()).device
             with torch.no_grad():
-                logits = model(torch.from_numpy(test_X.astype(np.float32)))
+                logits = model(torch.from_numpy(test_X.astype(np.float32)).to(device))
                 y_pred = torch.argmax(logits, dim=1).cpu().numpy()
                 y_proba = torch.softmax(logits, dim=1).cpu().numpy()
         metrics = compute_metrics(test_y, y_pred, y_proba)

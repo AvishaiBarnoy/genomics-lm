@@ -1,0 +1,13 @@
+protocol: std
+task: probe_ec
+out_dir: outputs/reports/ec_classification
+
+data:
+  train_embeddings: outputs/reports/ec_classification/train_embeddings.npz
+  train_labels: data/labels/train_ec.csv
+  test_embeddings: outputs/reports/ec_classification/test_embeddings.npz
+  test_labels: data/labels/test_ec.csv
+
+classifier:
+  kind: probe_logreg
+  C: 1.0

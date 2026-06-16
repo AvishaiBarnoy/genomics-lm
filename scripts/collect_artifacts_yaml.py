@@ -390,7 +390,11 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         cfg.get("out_dir") or cfg.get("checkpoints_dir") or "outputs/checkpoints"
     )
     out_dir = _resolve_from(repo_root, str(out_dir_cfg))
-    if out_dir is None or not out_dir.exists():
+    # Fallback to runs/run_id/checkpoints if the configured out_dir does not exist
+    runs_dir_ckpt = repo_root / "runs" / args.run_id / "checkpoints"
+    if runs_dir_ckpt.exists():
+        out_dir = runs_dir_ckpt
+    elif out_dir is None or not out_dir.exists():
         raise FileNotFoundError(f"Output directory not found: {out_dir}")
 
     checkpoint_path = _find_checkpoint(
@@ -404,6 +408,12 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
 
     for optional_name in ("motif_clusters.npz", "one_cds__best.tsv"):
         src = out_dir / optional_name
+        # Fallback search paths in the run directory structure
+        if not src.exists():
+            if out_dir.parent.exists() and (out_dir.parent / optional_name).exists():
+                src = out_dir.parent / optional_name
+            elif (out_dir.parent / "scores" / optional_name).exists():
+                src = out_dir.parent / "scores" / optional_name
         dst = run_dir / optional_name
         if src.exists():
             shutil.copy2(src, dst)
@@ -416,10 +426,10 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
         ]
     else:
         tokens = [f"tok_{i}" for i in range(vocab_size)]
-    
+
     if len(tokens) < vocab_size:
         tokens.extend([f"tok_{i}" for i in range(len(tokens), vocab_size)])
-        
+
     (run_dir / "itos.txt").write_text("\n".join(tokens) + "\n")
 
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
@@ -439,6 +449,8 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
     spec = _infer_spec_from_state(merged_cfg, state_dict)
     model = build_model(spec)
     model.load_state_dict(state_dict, strict=False)
+    device = torch.device("mps") if torch.backends.mps.is_available() else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
+    model.to(device)
     model.eval()
 
     val_npz = _load_val_npz(merged_cfg, repo_root)
@@ -451,26 +463,43 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
     if val_npz and val_npz.exists():
         data = _load_npz_dataset(val_npz)
         if "X" in data:
-            val_inputs = np.asarray(data["X"], dtype=np.int64)
-            token_counts = compute_bincount(val_inputs, spec.vocab_size)
-            if val_inputs.size > 0:
+            X_arr = np.asarray(data["X"], dtype=np.int64)
+            if "lengths" in data:
+                lengths = np.asarray(data["lengths"], dtype=np.int64)
+                offsets = np.insert(np.cumsum(lengths)[:-1], 0, 0)
+                token_counts = compute_bincount(X_arr, spec.vocab_size)
                 first_token_counts = compute_bincount(
-                    val_inputs[:, :1], spec.vocab_size
+                    X_arr[offsets], spec.vocab_size
                 )
-        if "Y" in data:
-            val_targets = np.asarray(data["Y"], dtype=np.int64)
-        if val_targets is None and val_inputs is not None:
-            val_targets = np.roll(val_inputs, -1, axis=1)
-        arrays["val_inputs"] = (
-            val_inputs[:32].copy()
-            if val_inputs is not None
-            else np.zeros((0,), dtype=np.int64)
-        )
-        arrays["val_targets"] = (
-            val_targets[:32].copy()
-            if val_targets is not None
-            else np.zeros((0,), dtype=np.int64)
-        )
+
+                num_seqs = min(32, len(lengths))
+                seq_list = []
+                for i in range(num_seqs):
+                    seq_list.append(X_arr[offsets[i] : offsets[i] + lengths[i]])
+                max_len = max(len(s) for s in seq_list) if seq_list else 1
+                val_inputs = np.zeros((num_seqs, max_len - 1), dtype=np.int64)
+                val_targets = np.zeros((num_seqs, max_len - 1), dtype=np.int64)
+                for i, seq in enumerate(seq_list):
+                    x_s = seq[:-1]
+                    y_s = seq[1:]
+                    val_inputs[i, :len(x_s)] = x_s
+                    val_targets[i, :len(y_s)] = y_s
+
+                arrays["val_inputs"] = val_inputs
+                arrays["val_targets"] = val_targets
+            else:
+                val_inputs = X_arr
+                token_counts = compute_bincount(val_inputs, spec.vocab_size)
+                if val_inputs.size > 0:
+                    first_token_counts = compute_bincount(
+                        val_inputs[:, :1], spec.vocab_size
+                    )
+                if "Y" in data:
+                    val_targets = np.asarray(data["Y"], dtype=np.int64)
+                if val_targets is None:
+                    val_targets = np.roll(val_inputs, -1, axis=1)
+                arrays["val_inputs"] = val_inputs[:32].copy()
+                arrays["val_targets"] = val_targets[:32].copy()
     else:
         arrays["val_inputs"] = np.zeros((0,), dtype=np.int64)
         arrays["val_targets"] = np.zeros((0,), dtype=np.int64)
@@ -481,7 +510,7 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
     attn_arr = np.zeros((0,), dtype=ATTN_DTYPE)
 
     if batch_inputs.size > 0:
-        batch_tensor = torch.from_numpy(batch_inputs[:4]).long()
+        batch_tensor = torch.from_numpy(batch_inputs[:4]).long().to(device)
         logits, attn = _capture_attention(model, batch_tensor)
         probs = torch.softmax(logits, dim=-1)
         logits_arr = logits.detach().cpu().numpy()

@@ -1,5 +1,13 @@
 # NoProp Algorithm Integration Plan
 
+**Status:** Prototype implemented; not trained/evaluated.
+
+**Update (2026-06-16):** We added the NoProp architecture, a dedicated training
+script, a toy config, and unit tests. We have **not** run a substantive NoProp
+training experiment, benchmarked memory scaling, or integrated NoProp
+checkpoints into the standard evaluation/generation tools. Keep this track open
+until those validation steps are done.
+
 ## Background & Motivation
 The current models (`TinyGPT` for CodonLM, `ProteinLM`) are trained using standard global backpropagation. As sequence lengths increase (especially for the upcoming Nucleotide-Level models) and model sizes expand, we are hitting memory bottlenecks on the 8GB Apple M2 hardware. 
 NoProp algorithms decouple the network into independent denoising layers, eliminating the need to store activations for the full forward and backward pass. This provides constant memory scaling with respect to network depth.
@@ -22,23 +30,32 @@ This track focuses on creating a secondary NoProp-compatible architecture and tr
 - **Upgrading Hardware**: Not an immediate option; we must maximize the M2 constraints.
 
 ## Implementation Steps
-1. **Phase 1: Architecture (NoProp Modules)**
-   - Add `NoPropBlock` to `src/codonlm/model_tiny_gpt.py`.
-   - Add `NoPropTinyGPT` that initializes multiple `NoPropBlock`s and a shared target embedding matrix.
-2. **Phase 2: Training Loop**
-   - Create `src/codonlm/train_noprop.py` to initialize a list of optimizers (one per block).
-   - Implement the local forward-backward pass: 
+1. **Phase 1: Architecture (NoProp Modules)** - Done
+   - [x] Add `NoPropBlock` to `src/codonlm/model_tiny_gpt.py`.
+   - [x] Add `NoPropTinyGPT` that initializes multiple `NoPropBlock`s and a shared target embedding matrix.
+2. **Phase 2: Training Loop** - Prototype done, not validated
+   - [x] Create `src/codonlm/train_noprop.py` to initialize a list of optimizers (one per block).
+   - [x] Implement the local forward-backward pass:
      - Generate Gaussian noise.
      - Compute noisy target embeddings.
      - For each block, predict clean embeddings, compute local MSE loss, and run `backward()` locally.
-3. **Phase 3: Validation & Inference**
-   - Ensure `eval_perplexity.py` and generation scripts (`sample.py` / `inference_playground.py`) can load and query `NoPropTinyGPT`.
+   - [ ] Run a real NoProp training experiment beyond the toy/smoke path.
+   - [ ] Compare validation loss, throughput, and peak memory against standard TinyGPT backprop.
+3. **Phase 3: Validation & Inference** - Open
+   - [ ] Ensure `eval_perplexity.py` and generation scripts (`sample.py` / `inference_playground.py`) can load and query `NoPropTinyGPT`.
+   - [ ] Decide whether NoProp remains an experimental separate trainer or becomes selectable from the main training config.
 
 ## Verification & Testing
-- Create `tests/test_noprop.py` to assert that:
-  - Local gradients only affect the current block (zero gradients in other blocks).
-  - Memory consumption stays constant as `n_layer` increases (using PyTorch memory profiling).
-- Run a minimal training loop on a small subset of CDS data to verify loss decreases.
+- [x] Create `tests/test_noprop.py` to assert that local gradients only affect the current block.
+- [ ] Add memory-scaling profiling across increasing `n_layer`.
+- [ ] Run a minimal training loop on a small subset of CDS data to verify loss decreases.
+
+## Current Artifacts
+- `src/codonlm/model_tiny_gpt.py`: `NoPropBlock`, `NoPropTinyGPT`
+- `src/codonlm/train_noprop.py`: standalone NoProp trainer
+- `configs/noprop_toy.yaml`: toy configuration
+- `tests/test_noprop.py`: initialization, gradient isolation, and forward-shape tests
+- `runs/2026-06-14_noprop_2L2H_d64_e1`: smoke artifact only; not enough to claim training success
 
 ## Migration & Rollback
 - The existing `TinyGPT` and `train_codon_lm.py` scripts will remain as the default. The NoProp integration will be opt-in via a config flag (e.g., `use_noprop: true`) or a dedicated script (`train_noprop.py`).

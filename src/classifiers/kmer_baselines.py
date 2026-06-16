@@ -11,16 +11,22 @@ from sklearn.svm import LinearSVC
 from .probes import compute_metrics
 
 
-def _kmer_analyzer(k: int):
-    def analyzer(s: str) -> List[str]:
+class _KmerAnalyzer:
+    """Picklable k-mer tokenizer for TfidfVectorizer."""
+
+    def __init__(self, k: int) -> None:
+        self.k = k
+
+    def __call__(self, s: str) -> List[str]:
         s = s.strip().upper().replace("U", "T")
-        toks = []
+        k = self.k
         if len(s) < k:
-            return toks
-        for i in range(0, len(s) - k + 1):
-            toks.append(s[i : i + k])
-        return toks
-    return analyzer
+            return []
+        return [s[i: i + k] for i in range(len(s) - k + 1)]
+
+
+def _kmer_analyzer(k: int) -> "_KmerAnalyzer":
+    return _KmerAnalyzer(k)
 
 
 @dataclass
@@ -79,4 +85,3 @@ def fit_kmer_xgb(seqs: List[str], y: np.ndarray, k: int = 3, tfidf: bool = True,
         pass
     metrics = compute_metrics(y, y_pred, y_proba)
     return KmerResult(vec, clf, metrics, y_pred, y_proba)
-

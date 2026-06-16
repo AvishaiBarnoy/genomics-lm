@@ -1,0 +1,17 @@
+protocol: std
+task: probe_ec_mlp
+out_dir: outputs/reports/ec_classification_mlp
+
+data:
+  train_embeddings: outputs/reports/ec_classification/train_embeddings.npz
+  train_labels: data/labels/train_ec.csv
+  test_embeddings: outputs/reports/ec_classification/test_embeddings.npz
+  test_labels: data/labels/test_ec.csv
+
+classifier:
+  kind: mlp
+  hidden: 128
+  depth: 2
+  epochs: 50
+  lr: 0.001
+  batch_size: 64

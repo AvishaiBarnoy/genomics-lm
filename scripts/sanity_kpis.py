@@ -29,11 +29,14 @@ from scripts._shared import resolve_run
 
 
 def dev() -> torch.device:
-    return (
-        torch.device("mps")
-        if torch.backends.mps.is_available()
-        else torch.device("cpu")
-    )
+    import os
+    if os.environ.get("FORCE_CPU") == "1":
+        return torch.device("cpu")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    elif torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
 
 
 CODON_TO_AA: Dict[str, str] = {
@@ -108,6 +111,10 @@ CODON_TO_AA: Dict[str, str] = {
 
 def _load_checkpoint(run_dir: Path) -> tuple[dict, dict]:
     best = run_dir / "best.pt"
+    if not best.exists():
+        best = run_dir / "checkpoints" / "best.pt"
+    if not best.exists():
+        raise FileNotFoundError(f"best.pt not found in {run_dir}")
     state = torch.load(best, map_location="cpu")
     if isinstance(state, dict) and "model" in state:
         return state["model"], state.get("cfg", {})
@@ -130,13 +137,27 @@ def _build_model_from_cfg(cfg: dict) -> TinyGPT:
 class NPZ(Dataset):
     def __init__(self, path: Path):
         blob = np.load(path)
-        self.X = torch.from_numpy(np.asarray(blob["X"]).astype(np.int64))
-        self.Y = torch.from_numpy(np.asarray(blob["Y"]).astype(np.int64))
+        self.is_dynamic = "lengths" in blob
+        if self.is_dynamic:
+            flat_X = blob["X"]
+            lengths = blob["lengths"]
+            offsets = np.insert(np.cumsum(lengths), 0, 0)
+            self.seqs = []
+            for i in range(len(lengths)):
+                seq = flat_X[offsets[i] : offsets[i+1]]
+                self.seqs.append(torch.from_numpy(seq.astype(np.int64)))
+        else:
+            self.X = torch.from_numpy(np.asarray(blob["X"]).astype(np.int64))
+            self.Y = torch.from_numpy(np.asarray(blob["Y"]).astype(np.int64))
 
     def __len__(self):
+        if getattr(self, "is_dynamic", False):
+            return len(self.seqs)
         return self.X.shape[0]
 
     def __getitem__(self, i):
+        if getattr(self, "is_dynamic", False):
+            return self.seqs[i]
         return self.X[i], self.Y[i]
 
 
@@ -179,8 +200,25 @@ def compute_kpis(
     ds = NPZ(test_npz)
     n = min(sample_windows, len(ds))
     idxs = np.linspace(0, len(ds) - 1, num=n, dtype=int)
-    x = ds.X[idxs]
-    y = ds.Y[idxs]
+    if getattr(ds, "is_dynamic", False):
+        batch = [ds.seqs[i] for i in idxs]
+        lengths = [len(seq) for seq in batch]
+        max_len = max(lengths)
+        xs, ys = [], []
+        for seq in batch:
+            x_seq = seq[:-1]
+            y_seq = seq[1:]
+            pad_len = (max_len - 1) - len(x_seq)
+            if pad_len > 0:
+                x_seq = torch.cat([x_seq, torch.zeros(pad_len, dtype=torch.long)])
+                y_seq = torch.cat([y_seq, torch.zeros(pad_len, dtype=torch.long)])
+            xs.append(x_seq)
+            ys.append(y_seq)
+        x = torch.stack(xs)
+        y = torch.stack(ys)
+    else:
+        x = ds.X[idxs]
+        y = ds.Y[idxs]
 
     # 1) codon_corr
     cmask = codon_mask(itos)
@@ -330,30 +368,39 @@ def main() -> None:
     ap.add_argument("--run_dir", help="outputs/checkpoints/<RUN_ID>")
     ap.add_argument("--run_id", help="Run id (alternative to --run_dir)")
     ap.add_argument("--max_windows", type=int, default=200)
+    ap.add_argument("--test_npz", help="override test NPZ path")
     args = ap.parse_args()
 
     repo = Path(__file__).resolve().parents[1]
     # accept run_id or run_dir
-    run_id, _ = resolve_run(args.run_id, args.run_dir)
-    run_dir = (
-        Path(args.run_dir)
-        if args.run_dir
-        else (repo / "outputs" / "checkpoints" / run_id)
-    )
+    run_id, run_dir = resolve_run(args.run_id, args.run_dir)
 
     state_dict, cfg = _load_checkpoint(run_dir)
     model = _build_model_from_cfg(cfg)
     model.load_state_dict(state_dict, strict=False)
     model.to(dev()).eval()
 
-    # test NPZ path from combined manifest or default
-    manifest = repo / "data/processed/combined" / run_id / "manifest.json"
-    if manifest.exists():
-        test_npz = Path(json.loads(manifest.read_text()).get("test"))
+    if args.test_npz:
+        test_npz = Path(args.test_npz)
         if not test_npz.is_absolute():
             test_npz = repo / test_npz
     else:
-        test_npz = repo / f"data/processed/test_bs{cfg['block_size']}.npz"
+        # test NPZ path from config or combined manifest or default
+        test_npz_cfg = cfg.get("test_npz")
+        if test_npz_cfg:
+            if isinstance(test_npz_cfg, list) and len(test_npz_cfg) > 0:
+                test_npz_cfg = test_npz_cfg[0]
+            test_npz = Path(test_npz_cfg)
+            if not test_npz.is_absolute():
+                test_npz = repo / test_npz
+        else:
+            manifest = repo / "data/processed/combined" / run_id / "manifest.json"
+            if manifest.exists():
+                test_npz = Path(json.loads(manifest.read_text()).get("test"))
+                if not test_npz.is_absolute():
+                    test_npz = repo / test_npz
+            else:
+                test_npz = repo / f"data/processed/test_bs{cfg['block_size']}.npz"
 
     itos, _ = load_vocab(run_id, repo)
     kpis = compute_kpis(model, dev(), test_npz, itos, sample_windows=args.max_windows)

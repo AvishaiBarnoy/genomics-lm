@@ -104,6 +104,8 @@ def resolve_run(
         rd = Path(run_dir)
         if not rd.exists():
             raise ArtifactError(f"run_dir not found: {rd}")
+        if rd.name in ("checkpoints", "scores"):
+            return rd.parent.name, rd.parent
         return rd.name, rd
     if run_id is not None:
         rd = RUNS_DIR / run_id

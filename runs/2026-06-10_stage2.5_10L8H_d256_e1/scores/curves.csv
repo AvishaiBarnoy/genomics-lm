@@ -1,1 +1,2 @@
 step,train_loss,val_loss,perplexity,lr
+1,4.9229,4.3210,75.266,1.068e-05

@@ -12,10 +12,13 @@ def test_sota_benchmarking_pipeline(monkeypatch, tmp_path):
     run_id = "2026-06-06_stage2.5_6L4H_d256_e20"
     # We will point to the real run but override the output dir or run it on the existing run to verify end-to-end
     real_run_dir = Path("runs") / run_id
-    
+
     if not real_run_dir.exists():
         pytest.skip(f"Real run {run_id} not available for testing")
-        
+
+    ckpt_dir = real_run_dir / "checkpoints"
+    if not ckpt_dir.exists() or not any(ckpt_dir.glob("*.pt")):
+        pytest.skip(f"Checkpoints for {run_id} not available for testing")
     # Verify that the benchmark CSV files exist
     bench_dir = Path("data/benchmarks")
     assert (bench_dir / "protein_dms.csv").exists()
@@ -31,7 +34,7 @@ def test_sota_benchmarking_pipeline(monkeypatch, tmp_path):
         "--device", "cpu"
     ])
     run_zero_shot()
-    
+
     metrics_path = real_run_dir / "scores" / "metrics.json"
     assert metrics_path.exists()
     with open(metrics_path) as f:
@@ -46,7 +49,7 @@ def test_sota_benchmarking_pipeline(monkeypatch, tmp_path):
         "--device", "cpu"
     ])
     run_essentiality()
-    
+
     with open(metrics_path) as f:
         metrics = json.load(f)
     assert "sota_lambda_essentiality_f1" in metrics
@@ -58,7 +61,7 @@ def test_sota_benchmarking_pipeline(monkeypatch, tmp_path):
         "--run_id", run_id
     ])
     run_report()
-    
+
     report_path = real_run_dir / "SOTA_BENCHMARK_REPORT.md"
     assert report_path.exists()
     report_content = report_path.read_text()

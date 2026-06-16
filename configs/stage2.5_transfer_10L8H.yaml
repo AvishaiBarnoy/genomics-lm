@@ -25,7 +25,7 @@ test_npz: "data/processed/stage2.5_master_pack/test_bs512.npz"
 # Training
 batch_size: 2
 grad_accum_steps: 32
-epochs: 3
+epochs: 5
 lr: 0.00003
 min_lr: 0.000005
 weight_decay: 0.05

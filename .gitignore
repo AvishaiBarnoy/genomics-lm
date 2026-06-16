@@ -63,7 +63,20 @@ logs/*
 checkpoints/*
 !checkpoints/.gitkeep
 
+runs/*/
 runs/**/checkpoints/
+runs/**/charts/
+runs/**/tables/
+runs/**/motif_mining/
+runs/**/scores/gen_prefix/
+runs/**/artifacts.npz
+runs/**/combined_manifest.json
+runs/**/itos.txt
+runs/**/llm_summary.json
+runs/**/meta.json
+runs/**/probe_labels.csv
+runs/**/SOTA_BENCHMARK_REPORT.md
+runs/**/log.txt
 
 # ------------------------------------------------------------------------------
 # Models & large artifacts
@@ -91,6 +104,8 @@ tutorials/
 # ------------------------------------------------------------------------------
 .DS_Store
 Thumbs.db
+~$*.docx
 
 
 codex_sessions.txt  
+agents_sessions.txt

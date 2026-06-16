@@ -325,3 +325,93 @@ To evaluate our model against published SOTA prokaryotic models (Evo 1, GenSLM) 
     python -m scripts.generate_sota_report --run_id <RUN_ID>
     ```
     This generates a comprehensive markdown comparison report (`SOTA_BENCHMARK_REPORT.md` inside the run directory) containing parameter and resource efficiency density ratios.
+
+---
+
+## Downstream Classification Probes
+
+The repository supports two types of downstream classifiers trained on top of frozen LM embeddings:
+
+### LM Embedding Probes
+
+Extract mean-pooled hidden states from a trained run, then train linear or MLP classifiers:
+
+```bash
+# Step 1: Extract embeddings
+python -m scripts.extract_embeddings \
+  --run_id <RUN_ID> \
+  --csv data/processed/ec_train_seqs.csv \
+  --seq_col seq \
+  --mode codon_tokens \
+  --out outputs/reports/ec_classification/train_embeddings.npz
+
+# Step 2: Train a probe
+python -m scripts.train_classifier --config configs/classifier/probe_ec.yaml
+python -m scripts.train_classifier --config configs/classifier/probe_amr.yaml
+```
+
+Available probe configs in `configs/classifier/`:
+
+| Config | Task | Classifier |
+|---|---|---|
+| `probe_ec.yaml` | EC Level-1 classification | Logistic Regression |
+| `probe_amr.yaml` | AMR antibiotic class (CARD v3) | Logistic Regression |
+| `probe_amr_svm.yaml` | AMR antibiotic class (CARD v3) | Linear SVM |
+| `probe_ec_mlp.yaml` | EC Level-1 classification | MLP 2×128 |
+
+### K-mer Baselines
+
+Train raw 3-mer TF-IDF logistic regression on the same train/test splits (no LM required):
+
+```bash
+python -m scripts.train_classifier --config configs/classifier/kmer_ec.yaml
+python -m scripts.train_classifier --config configs/classifier/kmer_amr.yaml
+```
+
+### AMR Dataset Preparation
+
+Download and process CARD (Comprehensive Antibiotic Resistance Database, CC BY 4.0):
+
+```bash
+python -m scripts.prepare_amr_dataset
+# Outputs: data/labels/train_amr.csv, data/labels/test_amr.csv, data/labels/amr_label_map.json
+# Also: data/processed/train_amr_seqs.csv, data/processed/test_amr_seqs.csv (for k-mer)
+```
+
+---
+
+## Conference Figure Generation
+
+Generate publication-quality dark-background figures from a trained run's `artifacts.npz`:
+
+```bash
+# Figure 1: UMAP codon embedding space (synonymous codon clustering)
+python -m scripts.conference_umap <RUN_ID>
+
+# Figure 2: Attention head specialization heatmaps
+python -m scripts.conference_attention <RUN_ID>
+```
+
+Both scripts auto-copy outputs to `conference/figures/`. Scientific interpretations for each panel are in `conference/figure_descriptions.md`.
+
+---
+
+## Storage Layout & `outputs/` vs `runs/`
+
+The repository uses two output directory conventions due to a historical migration:
+
+| Directory | Purpose | Status |
+|---|---|---|
+| `runs/<RUN_ID>/` | **Primary active store** — checkpoints, logs, scores, charts, artifacts.npz | ✅ Current |
+| `outputs/checkpoints/` | **Legacy** — Stage 1 checkpoints from before the `runs/` layout | ⚠️ Safe to archive |
+| `outputs/reports/` | Downstream probe outputs (EC, AMR, k-mer classifiers) | ✅ Current |
+| `outputs/scores/` | Legacy benchmark scores | ⚠️ Historical |
+| `conference/` | Publication assets — figures, SOTA table, abstracts, slides | ✅ Current |
+
+> **Why is `outputs/` so large?**
+> `outputs/checkpoints/` (~4.4 GB) contains 31 old Stage 1 and early Stage 2 model checkpoints that predate the migration to the `runs/` layout. They are not used by any current script and can be safely deleted or moved to cold storage:
+> ```bash
+> # Archive to external drive or just remove:
+> rm -rf outputs/checkpoints/
+> ```
+> All active model checkpoints are in `runs/<RUN_ID>/checkpoints/`.

@@ -1,0 +1,56 @@
+# Stage 2.6 — MPS-Optimized config (empirically validated on Apple M2)
+#
+# Benchmark results (MPS, 30 steps):
+#   Baseline (b4, MHA):       4,482 tok/s
+#   This config (b8, GQA-4):  4,838 tok/s  → +8% throughput, -1.5M params
+#
+# Key findings from isolation benchmarks:
+#   sep_mask_enabled=false: −11% to −15% on MPS (is_causal=True is SLOWER on Metal)
+#   n_kv_head=2:            −3% to −14%   (4× KV repeat overhead too high)
+#   n_kv_head=4:            +8% at b=8,   −72% at b=4 (MPS alignment bug at small batch)
+#   use_mmap:               neutral on throughput; saves ~300MB startup RAM
+#
+# DO NOT use n_kv_head=4 with batch_size < 8 (MPS regression).
+# DO NOT use sep_mask_enabled=false on MPS (Metal is_causal kernel is slower).
+
+# Model Architecture
+vocab_size: 69
+block_size: 512
+n_layer: 10
+n_head: 8
+n_kv_head: 4            # GQA: 4 KV heads → 2× repeat. Saves 1.5M params. +8% tok/s at b=8.
+n_embd: 384
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+use_sdpa: true
+sep_mask_enabled: true  # Keep true on MPS — is_causal=True is slower on Metal
+
+# Transfer Learning Weights
+transfer_from: "runs/2026-06-12_stage2.5_10L8H_d384_e5/checkpoints/last.pt"
+
+# Data Paths
+itos_path: "data/processed/itos_codon.txt"
+train_npz: "data/processed/stage2.6_large_master_pack/train_bs512.npz"
+val_npz: "data/processed/stage2.6_large_master_pack/val_bs512.npz"
+test_npz: "data/processed/stage2.6_large_master_pack/test_bs512.npz"
+
+# Training
+batch_size: 8            # b=8 required for GQA-4 to avoid MPS alignment bug
+grad_accum_steps: 16     # Halved vs b=4 to keep effective batch = 128
+epochs: 10
+lr: 0.00003
+min_lr: 0.000003
+weight_decay: 0.05
+warmup_steps: 100
+early_stop_patience: 20
+max_time_minutes: 380
+
+# DataLoader
+use_mmap: true           # ~300MB RAM saving at startup, neutral throughput
+num_workers: 0
+pin_memory: false
+
+# Output
+out_dir: "runs/stage2.6_10L8H_d384_mps_optimized/checkpoints"
+scores_dir: "runs/stage2.6_10L8H_d384_mps_optimized/scores"

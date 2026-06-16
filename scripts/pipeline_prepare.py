@@ -77,6 +77,7 @@ def _ensure_dataset(
     test_frac: float,
     block_size: int,
     force: bool,
+    pack_mode: str = "multi",
 ) -> None:
     """Run extraction/tokenization/build for a dataset."""
     dna = Path(entry["dna"])
@@ -147,12 +148,7 @@ def _ensure_dataset(
             "--out_dir",
             str(train.parent),
         ]
-        # optional packing mode (single|multi)
-        try:
-            pm = pack_mode
-        except NameError:
-            pm = "multi"
-        cmd += ["--pack_mode", pm]
+        cmd += ["--pack_mode", pack_mode]
         cmds.append(cmd)
     else:
         print(f"[prepare] skip build {entry['name']}")
@@ -165,6 +161,23 @@ def _ensure_dataset(
 def _stack_npz(paths: List[str], out_path: Path) -> None:
     if not paths:
         raise ValueError("No NPZ paths provided for stacking")
+
+    is_dynamic = False
+    with np.load(paths[0], allow_pickle=False) as blob:
+        if "lengths" in blob:
+            is_dynamic = True
+
+    if is_dynamic:
+        Xs = []
+        lengths_list = []
+        for path in paths:
+            with np.load(path, allow_pickle=False) as blob:
+                Xs.append(np.asarray(blob["X"]))
+                lengths_list.append(np.asarray(blob["lengths"]))
+        flat_X = np.concatenate(Xs)
+        lengths = np.concatenate(lengths_list)
+        np.savez_compressed(out_path, X=flat_X, lengths=lengths)
+        return
 
     total = 0
     x_tail = None
@@ -330,6 +343,7 @@ def main() -> None:
     if inconsistent_itos:
         print("[prepare] detected inconsistent itos across datasets; re-tokenizing all")
 
+    pack_mode = cfg.get("pack_mode", "multi")
     for ds in datasets:
         _ensure_dataset(
             ds,
@@ -338,6 +352,7 @@ def main() -> None:
             test_frac,
             block_size,
             bool(args.force or force_retokenize),
+            pack_mode,
         )
 
     combined_dir = Path("data/processed/combined") / args.run_id
@@ -379,6 +394,9 @@ def main() -> None:
     def _count_empty(npz_path: Path) -> int:
         try:
             with np.load(npz_path, allow_pickle=False) as data:
+                if "lengths" in data:
+                    lengths = np.asarray(data["lengths"])
+                    return int((lengths == 0).sum())
                 Y = np.asarray(data["Y"])  # (N, T)
                 valid = (Y != 0).sum(axis=1)
                 return int((valid == 0).sum())

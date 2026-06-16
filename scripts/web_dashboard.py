@@ -16,7 +16,7 @@ def get_theoretical_shape(dna_seq: str) -> dict[str, list[float]]:
     mgw, roll, ep = [], [], []
     for i in range(len(dna_seq)):
         window = dna_seq[max(0, i - 2) : min(len(dna_seq), i + 3)]
-        
+
         # Minor Groove Width (MGW)
         if "AAAA" in window:
             m_val = 3.5
@@ -24,7 +24,7 @@ def get_theoretical_shape(dna_seq: str) -> dict[str, list[float]]:
             m_val = 5.8
         else:
             m_val = 4.5
-            
+
         # Roll (bendability)
         if "GC" in window or "CG" in window:
             r_val = 5.0
@@ -32,7 +32,7 @@ def get_theoretical_shape(dna_seq: str) -> dict[str, list[float]]:
             r_val = 0.0
         else:
             r_val = 2.5
-            
+
         # Electrostatic Potential (EP)
         if "AAAA" in window:
             e_val = -10.0
@@ -677,7 +677,7 @@ def main():
                                                 ],
                                                 f"{critic_results['stability']['probability'] * 100:.1f}% prob",
                                             )
-                                        
+
                                         st.divider()
                                         st.subheader("🔍 Remote NCBI BLAST Alignment Annotator")
                                         if st.button("Annotate Generated Sequence via BLAST"):
@@ -698,46 +698,50 @@ def main():
                 elif task_mode == "Attention Weight Visualizer":
                     st.subheader("Attention Weight Visualizer (Step 3)")
                     dna_input = st.text_input("DNA Sequence Prefix (Space-separated codons or raw DNA)", "ATG GCT AAC TAA")
-                    
+
                     if st.button("Extract Attention Map"):
                         from src.eval.inference_playground import get_attention_weights
                         with st.spinner("Extracting attention weights..."):
                             attn_res = get_attention_weights(model, stoi, itos, device, dna_input)
-                            
+
                         if attn_res:
                             st.session_state["attn_tokens"] = attn_res["tokens"]
                             st.session_state["attn_weights"] = attn_res["attention"]
                             st.success("Attention maps extracted successfully!")
                         else:
                             st.error("Invalid or empty input sequence.")
-                            
+
                     if "attn_weights" in st.session_state:
                         tokens = st.session_state["attn_tokens"]
                         attn_maps = st.session_state["attn_weights"]
-                        
+
                         layer = st.selectbox("Select Layer", options=list(attn_maps.keys()))
                         n_heads = attn_maps[layer].shape[0]
                         head = st.selectbox("Select Head", options=[f"Head {h+1}" for h in range(n_heads)])
                         head_idx = int(head.split()[-1]) - 1
-                        
+
                         attn_matrix = attn_maps[layer][head_idx]
-                        
+
                         try:
                             import matplotlib.pyplot as plt
-                            import seaborn as sns
-                            
+
                             fig, ax = plt.subplots(figsize=(7, 6))
-                            sns.heatmap(
-                                attn_matrix,
-                                xticklabels=tokens,
-                                yticklabels=tokens,
-                                cmap="viridis",
-                                ax=ax,
-                                cbar=True,
-                                annot=len(tokens) <= 15
-                            )
+                            im = ax.imshow(attn_matrix, cmap="viridis")
+                            fig.colorbar(im, ax=ax)
+
+                            ax.set_xticks(range(len(tokens)))
+                            ax.set_yticks(range(len(tokens)))
+                            ax.set_xticklabels(tokens)
+                            ax.set_yticklabels(tokens)
                             plt.xticks(rotation=45, ha="right")
                             plt.yticks(rotation=0)
+
+                            if len(tokens) <= 15:
+                                for r in range(attn_matrix.shape[0]):
+                                    for c in range(attn_matrix.shape[1]):
+                                        val = attn_matrix[r, c]
+                                        color = "w" if val < 0.5 else "k"
+                                        ax.text(c, r, f"{val:.2f}", ha="center", va="center", color=color)
                             plt.title(f"Attention Weights ({layer}, {head})")
                             plt.tight_layout()
                             st.pyplot(fig)
@@ -750,23 +754,23 @@ def main():
                         "**Compare two synonymous sequences:** Mutating DNA/mRNA without altering the translated protein. "
                         "Learn how synonymous shifts alter **GC Content** and **3D DNAshape physical profiles**."
                     )
-                    
+
                     wt_input = st.text_input("Wild-type DNA Sequence (codons or raw string)", "ATG GCT AAC")
                     var_input = st.text_input("Variant DNA Sequence (synonymous codon candidate)", "ATG GCG AAU")
-                    
+
                     if st.button("Compare Synonymous Sequences"):
                         wt_prefix = wt_input.strip().upper()
                         if " " in wt_prefix:
                             wt_codons = [c.strip() for c in wt_prefix.split() if c.strip()]
                         else:
                             wt_codons = [wt_prefix[i:i+3] for i in range(0, len(wt_prefix)-2, 3)]
-                            
+
                         var_prefix = var_input.strip().upper()
                         if " " in var_prefix:
                             var_codons = [c.strip() for c in var_prefix.split() if c.strip()]
                         else:
                             var_codons = [var_prefix[i:i+3] for i in range(0, len(var_prefix)-2, 3)]
-                            
+
                         if not wt_codons or not var_codons:
                             st.error("One or both input sequences are empty or invalid.")
                         elif len(wt_codons) != len(var_codons):
@@ -775,7 +779,7 @@ def main():
                             from src.eval.inference_playground import translate_codons_to_aa
                             aa_wt = translate_codons_to_aa(wt_codons)
                             aa_var = translate_codons_to_aa(var_codons)
-                            
+
                             if aa_wt != aa_var:
                                 st.error("Mismatch: Sequences are not synonymous! They translate to different proteins.")
                                 st.write(f"- Wild-type translates to: `{aa_wt}`")
@@ -783,7 +787,7 @@ def main():
                             else:
                                 st.success(f"Success: Sequences are Synonymous! Both translate to:")
                                 st.code(aa_wt)
-                                
+
                                 wt_html = []
                                 var_html = []
                                 diff_count = 0
@@ -795,28 +799,28 @@ def main():
                                         wt_html.append(f"<span style='color: #2196F3; font-weight: bold;'>{c_wt}</span>")
                                         var_html.append(f"<span style='color: #FF9800; font-weight: bold;'>{c_var}</span>")
                                         diff_count += 1
-                                        
+
                                 st.markdown("### 🧬 Codon Alignment Map")
                                 st.markdown(f"**Wild-type:** {' '.join(wt_html)}", unsafe_allow_html=True)
                                 st.markdown(f"**Variant:** &nbsp;&nbsp;&nbsp;&nbsp;{' '.join(var_html)}", unsafe_allow_html=True)
                                 st.write(f"Identified **{diff_count}** synonymous codon differences.")
-                                
+
                                 raw_wt = "".join(wt_codons)
                                 raw_var = "".join(var_codons)
                                 gc_wt = (raw_wt.count("G") + raw_wt.count("C")) / len(raw_wt) if raw_wt else 0.0
                                 gc_var = (raw_var.count("G") + raw_var.count("C")) / len(raw_var) if raw_var else 0.0
-                                
+
                                 st.markdown("### 📊 GC Content Comparison")
                                 col_g1, col_g2 = st.columns(2)
                                 with col_g1:
                                     st.metric("Wild-type GC %", f"{gc_wt * 100:.1f}%")
                                 with col_g2:
                                     st.metric("Variant GC %", f"{gc_var * 100:.1f}%", f"{ (gc_var - gc_wt) * 100:+.1f}% delta")
-                                    
+
                                 st.markdown("### 🧬 3D DNAshape Physical Profile Comparison")
                                 shape_wt = get_theoretical_shape(raw_wt)
                                 shape_var = get_theoretical_shape(raw_var)
-                                
+
                                 df_shape_comp = pd.DataFrame({
                                     "Base Position": range(len(raw_wt)),
                                     "WT MGW (Å)": shape_wt["MGW"],
@@ -826,7 +830,7 @@ def main():
                                     "WT EP (kT/e)": shape_wt["EP"],
                                     "Var EP (kT/e)": shape_var["EP"]
                                 })
-                                
+
                                 st.line_chart(df_shape_comp, x="Base Position", y=["WT MGW (Å)", "Var MGW (Å)"])
                                 st.line_chart(df_shape_comp, x="Base Position", y=["WT Roll (°)", "Var Roll (°)"])
                                 st.line_chart(df_shape_comp, x="Base Position", y=["WT EP (kT/e)", "Var EP (kT/e)"])
@@ -837,7 +841,7 @@ def main():
     with tab4:
         st.header("📈 Live Training Monitor")
         st.info("Monitor the active pre-training and downstream metrics updates in real-time.")
-        
+
         runs_dir = Path("runs")
         active_runs = []
         if runs_dir.exists():
@@ -847,20 +851,20 @@ def main():
                     if curves_path.exists():
                         active_runs.append(d)
         active_runs = sorted(active_runs, reverse=True)
-        
+
         if not active_runs:
             st.warning("No runs with training curves found in runs/ directory.")
         else:
             selected_monitor_run = st.selectbox("Select Run to Monitor", options=active_runs)
-            
+
             if selected_monitor_run:
                 run_path = runs_dir / selected_monitor_run
                 curves_path = run_path / "scores" / "curves.csv"
                 metrics_path = run_path / "scores" / "metrics.json"
-                
+
                 st.subheader("📋 Latest Training Info")
                 col_i1, col_i2 = st.columns(2)
-                
+
                 with col_i1:
                     if metrics_path.exists():
                         try:
@@ -874,32 +878,32 @@ def main():
                             st.write("Could not parse metrics.json metadata.")
                     else:
                         st.write("No metadata metrics.json generated yet.")
-                        
+
                 with col_i2:
                     if curves_path.exists():
                         mtime = os.path.getmtime(curves_path)
                         import datetime
                         st.write(f"**Last Log Update:** {datetime.datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')}")
                         st.write(f"**Active Directory:** `{run_path}`")
-                        
+
                 st.divider()
-                
+
                 if curves_path.exists():
                     try:
                         df_curves = pd.read_csv(curves_path)
                         if not df_curves.empty:
                             st.subheader("📉 Training and Validation Loss Curves")
-                            
+
                             available_columns = df_curves.columns.tolist()
                             y_cols = []
                             if "train_loss" in available_columns:
                                 y_cols.append("train_loss")
                             if "val_loss" in available_columns:
                                 y_cols.append("val_loss")
-                                
+
                             if y_cols:
                                 st.line_chart(df_curves, x="epoch" if "epoch" in available_columns else "step", y=y_cols)
-                                
+
                             st.subheader("📋 Raw Curve Log Table")
                             st.dataframe(df_curves)
                         else:
@@ -908,7 +912,7 @@ def main():
                         st.error(f"Failed to read curves log: {exc}")
                 else:
                     st.warning("No curves.csv found in run directory.")
-                    
+
                 if st.button("🔄 Refresh Monitor Data"):
                     st.rerun()
 

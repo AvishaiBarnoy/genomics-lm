@@ -148,7 +148,9 @@ def main() -> None:
     if not out_vecs:
         raise SystemExit("No valid sequences after tokenization")
     X = np.stack(out_vecs, axis=0)
-    np.savez_compressed(args.out, X=X, ids=np.array(ids, dtype=object))
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(out_path, X=X, ids=np.array(ids, dtype=object))
     print(f"[extract] wrote {args.out} with X.shape={X.shape}")
 
 

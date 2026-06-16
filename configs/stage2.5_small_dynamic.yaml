@@ -1,0 +1,37 @@
+# Config for Small CodonLM training on dynamic master dataset
+# Designed to verify stop codon / termination learning from scratch
+
+# Model Architecture
+vocab_size: 69
+block_size: 512
+n_layer: 4
+n_head: 2
+n_embd: 256
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+use_sdpa: true
+
+# Loss Upweighting (Phase 3)
+# Set to > 1.0 to upweight stop codons (TAA, TAG, TGA) and <EOS_CDS>
+# eos_loss_weight: 5.0
+
+# Data Paths
+itos_path: "data/processed/itos_codon.txt"
+train_npz: "data/processed/stage2.5_master_pack_v2/train_bs512.npz"
+val_npz: "data/processed/stage2.5_master_pack_v2/val_bs512.npz"
+test_npz: "data/processed/stage2.5_master_pack_v2/test_bs512.npz"
+
+# Training
+batch_size: 8
+grad_accum_steps: 16
+epochs: 5
+lr: 0.0003
+min_lr: 0.00001
+weight_decay: 0.05
+warmup_steps: 100
+early_stop_patience: 2
+
+# Output
+out_dir: "runs/stage2.5_small_dynamic/checkpoints"
+scores_dir: "runs/stage2.5_small_dynamic/scores"

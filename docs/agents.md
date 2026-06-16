@@ -125,6 +125,20 @@ Each agent handles a specific part of the DNA/codon–language modelling pipelin
 
 ---
 
+## Feature Development Workflow
+
+New feature work should happen on a feature branch, not directly on `main`.
+
+1. Check the workspace first with `git status --short` and identify unrelated dirty files before editing.
+2. Create a scoped branch from the current integration point, using names like `feature/pdb-structural-finetuning` or `fix/termination-metadata`.
+3. Keep one track or feature per branch when practical. Update `conductor/tracks.md` and the relevant track `plan.md` at the start and closeout of the work.
+4. Commit focused source, config, docs, and small report artifacts. Avoid committing large run directories, PDB dumps, or generated caches unless the track explicitly requires them.
+5. Push the branch and use a pull request for review before merging to `main`.
+
+This workflow keeps experimental output, model-training changes, and documentation updates auditable while the project adds more structural fine-tuning and evaluation tracks.
+
+---
+
 ### 🧾 References  
 - See the project’s `ROADMAP.md` for high-level stages of the work.  
 - The `configs/` directory contains YAML files governing each agent’s parameters.  
@@ -142,4 +156,3 @@ Whenever a new logical component or “agent” is added to the pipeline (for ex
 ---
 
 _End of document._
-
