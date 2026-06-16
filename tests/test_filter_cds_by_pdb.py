@@ -4,8 +4,10 @@ import pytest
 
 from scripts.filter_cds_by_pdb import (
     filter_by_line_indices,
+    filter_by_uniprot_sequence,
     load_records,
     read_line_indices,
+    translate_dna,
     validate_join_keys,
     write_subset,
 )
@@ -52,9 +54,49 @@ def test_missing_line_index_raises(tmp_path):
         filter_by_line_indices(records, {0, 9})
 
 
-def test_join_validation_requires_enriched_cds_metadata():
+def test_join_validation_requires_metadata_or_sequence_key():
     with pytest.raises(ValueError, match="CDS metadata has no protein/gene join key"):
         validate_join_keys(
             meta_header=["line_idx", "genome"],
-            uniprot_header=["Entry", "Gene Names", "Sequence"],
+            uniprot_header=["Entry", "Gene Names"],
         )
+
+
+def test_uniprot_sequence_filter_matches_translated_structured_proteins(tmp_path):
+    dna = tmp_path / "cds_dna.txt"
+    meta = tmp_path / "cds_meta.tsv"
+    out_dir = tmp_path / "out"
+
+    dna.write_text("ATGGCTTAA\nATGCCCTAA\n")
+    meta.write_text("line_idx\tgenome\tlocus_tag\n0\tg1\tfoo\n1\tg1\tbar\n")
+
+    header, records = load_records(dna, meta)
+    selected = filter_by_uniprot_sequence(
+        records,
+        [
+            {
+                "Entry": "P00001",
+                "Entry Name": "MATCH_BACT",
+                "Protein names": "Mock structured protein",
+                "Gene Names": "foo",
+                "Sequence": "MA",
+                "Keywords": "3D-structure;Reference proteome",
+            },
+            {
+                "Entry": "P00002",
+                "Sequence": "MP",
+                "Keywords": "Reference proteome",
+            },
+        ],
+    )
+
+    assert [record.source_line_idx for record in selected] == [0]
+    assert selected[0].meta["uniprot_entry"] == "P00001"
+    assert translate_dna("ATGGCTTAA") == "MA"
+
+    write_subset(selected, header, out_dir, {"mode": "uniprot_sequence"})
+    with (out_dir / "cds_meta.tsv").open(newline="") as handle:
+        rows = list(csv.DictReader(handle, delimiter="\t"))
+    assert rows[0]["source_line_idx"] == "0"
+    assert rows[0]["aa_sequence"] == "MA"
+    assert rows[0]["uniprot_entry"] == "P00001"

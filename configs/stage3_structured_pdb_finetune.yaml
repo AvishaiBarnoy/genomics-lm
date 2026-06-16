@@ -9,7 +9,6 @@ vocab_size: 69
 block_size: 512
 n_layer: 10
 n_head: 8
-n_kv_head: 4
 n_embd: 384
 dropout: 0.1
 label_smoothing: 0.05
@@ -24,8 +23,8 @@ train_npz: "data/processed/structured_pdb_pack/train_bs512.npz"
 val_npz: "data/processed/structured_pdb_pack/val_bs512.npz"
 test_npz: "data/processed/structured_pdb_pack/test_bs512.npz"
 
-batch_size: 8
-grad_accum_steps: 16
+batch_size: 4
+grad_accum_steps: 32
 epochs: 3
 lr: 0.00001
 min_lr: 0.000001

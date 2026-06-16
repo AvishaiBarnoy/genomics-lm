@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Prepare a CDS subset for PDB/structure-focused fine-tuning.
 
-The current Stage 2.6 CDS metadata only contains ``line_idx`` and ``genome``.
-That is enough to filter by explicit curated line indices, but not enough to
-automatically join to UniProt/PDB metadata. This script supports the line-index
-path now and validates metadata joins so future enriched metadata fails loudly
-instead of producing a misleading empty subset.
+The preferred path is an exact translated-protein sequence match against a
+local UniProt TSV containing a ``Sequence`` column and structure evidence
+(``3D-structure`` keyword). Explicit curated line-index filters are still
+supported for manual experiments.
 """
 
 from __future__ import annotations
@@ -19,6 +18,25 @@ from typing import Iterable
 
 
 DEFAULT_JOIN_KEYS = ("protein_id", "locus_tag", "gene", "gene_name", "entry")
+
+CODON_TABLE = {
+    "TTT": "F", "TTC": "F", "TTA": "L", "TTG": "L",
+    "TCT": "S", "TCC": "S", "TCA": "S", "TCG": "S",
+    "TAT": "Y", "TAC": "Y", "TAA": "*", "TAG": "*",
+    "TGT": "C", "TGC": "C", "TGA": "*", "TGG": "W",
+    "CTT": "L", "CTC": "L", "CTA": "L", "CTG": "L",
+    "CCT": "P", "CCC": "P", "CCA": "P", "CCG": "P",
+    "CAT": "H", "CAC": "H", "CAA": "Q", "CAG": "Q",
+    "CGT": "R", "CGC": "R", "CGA": "R", "CGG": "R",
+    "ATT": "I", "ATC": "I", "ATA": "I", "ATG": "M",
+    "ACT": "T", "ACC": "T", "ACA": "T", "ACG": "T",
+    "AAT": "N", "AAC": "N", "AAA": "K", "AAG": "K",
+    "AGT": "S", "AGC": "S", "AGA": "R", "AGG": "R",
+    "GTT": "V", "GTC": "V", "GTA": "V", "GTG": "V",
+    "GCT": "A", "GCC": "A", "GCA": "A", "GCG": "A",
+    "GAT": "D", "GAC": "D", "GAA": "E", "GAG": "E",
+    "GGT": "G", "GGC": "G", "GGA": "G", "GGG": "G",
+}
 
 
 @dataclass(frozen=True)
@@ -42,6 +60,21 @@ def read_tsv(path: Path) -> tuple[list[str], list[dict[str, str]]]:
         if reader.fieldnames is None:
             raise ValueError(f"{path} has no header")
         return list(reader.fieldnames), list(reader)
+
+
+def translate_dna(dna: str) -> str:
+    """Translate DNA with the standard bacterial CDS convention."""
+    dna = dna.strip().upper().replace("U", "T")
+    aa: list[str] = []
+    for i in range(0, (len(dna) // 3) * 3, 3):
+        codon = dna[i : i + 3]
+        residue = CODON_TABLE.get(codon)
+        if residue is None:
+            return ""
+        if residue == "*":
+            break
+        aa.append(residue)
+    return "".join(aa)
 
 
 def read_line_indices(path: Path) -> set[int]:
@@ -90,19 +123,65 @@ def validate_join_keys(meta_header: list[str], uniprot_header: list[str]) -> Non
     meta_cols = {col.lower() for col in meta_header}
     uniprot_cols = {col.lower() for col in uniprot_header}
     usable_meta = sorted(meta_cols.intersection(DEFAULT_JOIN_KEYS))
-    usable_uniprot = sorted(uniprot_cols.intersection({"entry", "gene names", "gene names (primary)"}))
-    if not usable_meta:
+    has_sequence = "sequence" in uniprot_cols
+    usable_uniprot = sorted(
+        uniprot_cols.intersection({"entry", "gene names", "gene names (primary)", "sequence"})
+    )
+    if not usable_meta and not has_sequence:
         raise ValueError(
-            "Cannot auto-filter by UniProt/PDB yet: CDS metadata has no protein/gene "
-            f"join key. Found metadata columns: {', '.join(meta_header)}. "
-            "Re-run extraction with protein_id, locus_tag, or gene annotations, or "
-            "provide --structured_line_indices."
+            "Cannot auto-filter by UniProt/PDB: CDS metadata has no protein/gene "
+            "join key and UniProt TSV has no Sequence column. "
+            f"Found metadata columns: {', '.join(meta_header)}."
         )
     if not usable_uniprot:
         raise ValueError(
-            "UniProt TSV does not expose a supported join key. Expected Entry or "
+            "UniProt TSV does not expose a supported join key. Expected Sequence, Entry, or "
             f"Gene Names; found: {', '.join(uniprot_header)}."
         )
+
+
+def _has_structure_evidence(row: dict[str, str]) -> bool:
+    text = " ".join(
+        row.get(col, "")
+        for col in ("Keywords", "Features", "Cross-reference (PDB)", "PDB")
+    ).lower()
+    return "3d-structure" in text or "pdb" in text
+
+
+def filter_by_uniprot_sequence(
+    records: Iterable[CdsRecord],
+    uniprot_rows: Iterable[dict[str, str]],
+) -> list[CdsRecord]:
+    """Select CDS records whose translated AA exactly matches structured UniProt."""
+    sequence_to_rows: dict[str, list[dict[str, str]]] = {}
+    for row in uniprot_rows:
+        seq = row.get("Sequence", "").strip().upper()
+        if not seq or not _has_structure_evidence(row):
+            continue
+        sequence_to_rows.setdefault(seq, []).append(row)
+
+    selected: list[CdsRecord] = []
+    for record in records:
+        aa = translate_dna(record.dna)
+        if not aa:
+            continue
+        matches = sequence_to_rows.get(aa)
+        if not matches:
+            continue
+        match = matches[0]
+        meta = dict(record.meta)
+        meta.update(
+            {
+                "aa_sequence": aa,
+                "uniprot_entry": match.get("Entry", ""),
+                "uniprot_entry_name": match.get("Entry Name", ""),
+                "uniprot_protein_names": match.get("Protein names", ""),
+                "uniprot_gene_names": match.get("Gene Names", ""),
+                "uniprot_keywords": match.get("Keywords", ""),
+            }
+        )
+        selected.append(CdsRecord(record.source_line_idx, record.dna, meta))
+    return selected
 
 
 def write_subset(
@@ -119,7 +198,18 @@ def write_subset(
 
     dna_out.write_text("".join(f"{record.dna}\n" for record in selected))
 
+    extra_header = [
+        "aa_sequence",
+        "uniprot_entry",
+        "uniprot_entry_name",
+        "uniprot_protein_names",
+        "uniprot_gene_names",
+        "uniprot_keywords",
+    ]
     retained_header = [col for col in meta_header if col != "line_idx"]
+    for col in extra_header:
+        if any(col in record.meta for record in selected) and col not in retained_header:
+            retained_header.append(col)
     out_header = ["line_idx", "source_line_idx", *retained_header]
     with meta_out.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=out_header, delimiter="\t")
@@ -161,12 +251,10 @@ def main() -> None:
         selected = filter_by_line_indices(records, indices)
         mode = "line_indices"
     elif args.uniprot_tsv:
-        uniprot_header, _ = read_tsv(args.uniprot_tsv)
+        uniprot_header, uniprot_rows = read_tsv(args.uniprot_tsv)
         validate_join_keys(meta_header, uniprot_header)
-        raise NotImplementedError(
-            "UniProt/PDB matching is gated on enriched CDS metadata. Use "
-            "--structured_line_indices for the current Stage 2.6 corpus."
-        )
+        selected = filter_by_uniprot_sequence(records, uniprot_rows)
+        mode = "uniprot_sequence"
     else:
         raise SystemExit("Provide --structured_line_indices or --uniprot_tsv")
 
