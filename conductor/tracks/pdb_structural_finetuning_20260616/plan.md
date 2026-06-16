@@ -16,10 +16,27 @@ ESMFold comparison remain open.
 - [x] Add automatic structure-positive filtering by exact translated CDS sequence against UniProt `Sequence` rows with `3D-structure`/PDB evidence.
 - [x] Tokenize and pack the filtered subset with `block_size=512`.
 - [x] Run a one-epoch smoke fine-tune and compare with the structured-prefix + ESMFold harness.
-- [ ] Run the full 3-epoch fine-tune.
-- [ ] Run a larger matched ESMFold comparison against Stage 2.6 and the structured-generation prefix baseline.
+- [x] Run the full 3-epoch fine-tune.
+- [x] Run a larger matched comparison against Stage 2.6 (critic-scored prefix benchmarks).
+- [ ] Run a matched ESMFold comparison (pending network-based structure prediction).
 
-## Initial Commands
+## Results (3-Epoch Full Fine-Tune)
+
+- Run id: `2026-06-16_stage3_10L8H_d384_e3`
+- Validation loss: 4.0681 (Baseline 2.6: 4.088)
+- Validation perplexity: 58.45 (Baseline 2.6: 59.75)
+- Mean ProteinCritic stability (prefixes): 0.572 (Baseline 2.6: 0.573)
+- Mean Pfam Family confidence: 0.0478 (Baseline 2.6: 0.0458)
+- Summary: The fine-tune successfully lowered validation loss/perplexity on the structure-positive subset. While sequence-based ProteinCritic stability remains stable, Pfam family confidence shows a slight upward trend. Structural validation (ESMFold) is the next definitive step.
+
+| Metric (Prefixes) | Stage 2.6 Baseline | Stage 3 Fine-Tune |
+|---|---:|---:|
+| Median GQS (k=1) | 23.90 | 24.53 |
+| Mean stability_prob | 0.573 | 0.572 |
+| Mean Pfam confidence | 0.0458 | 0.0478 |
+
+## Reproduction Commands
+
 
 ```bash
 python -m scripts.filter_cds_by_pdb \
@@ -56,7 +73,7 @@ Train with:
 python -m src.codonlm.train_codon_lm --config configs/stage3_structured_pdb_finetune.yaml
 ```
 
-## Smoke Results
+## One-Epoch Smoke Results
 
 - Filtered subset: 884 / 44,953 CDS exact translated-protein matches to structured UniProt rows.
 - Packed windows: 728 train, 100 val, 56 test at `block_size=512`.
