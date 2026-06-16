@@ -6,8 +6,27 @@ from pathlib import Path
 import numpy as np
 import pytest
 import yaml
+from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
+from Bio.SeqRecord import SeqRecord
 
 def test_hybrid_pipeline_end_to_end(tmp_path):
+    gbff = tmp_path / "test.gbff"
+    seq = "A" * 60 + "ATG" + "GCT" * 40 + "TAA" + "C" * 80
+    record = SeqRecord(Seq(seq), id="test_genome", name="test", description="mock")
+    record.annotations["molecule_type"] = "DNA"
+    cds_start = 60
+    cds_end = 60 + 3 + (40 * 3) + 3
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(cds_start, cds_end, strand=1),
+            type="CDS",
+            qualifiers={"locus_tag": ["mock_0001"]},
+        )
+    )
+    SeqIO.write(record, gbff, "genbank")
+
     # 1. Setup mock/temporary directories and config
     config_data = {
         "block_size": 128,
@@ -17,7 +36,7 @@ def test_hybrid_pipeline_end_to_end(tmp_path):
         "datasets": [
             {
                 "name": "test_ds",
-                "gbff": "data/raw/Enterobacteriaceae/GCF_000005845.gbff",
+                "gbff": str(gbff),
                 "min_len": 90,
             }
         ]
