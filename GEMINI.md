@@ -90,6 +90,8 @@ python -m scripts.query_model <RUN_ID> --mode next --dna ATGAAACCC --topk 5
 
 ## Development Conventions
 *   **Run IDs**: Experiments are tracked via unique Run IDs. Outputs are stored in `runs/<RUN_ID>/checkpoints` and `runs/<RUN_ID>/scores`.
+*   **Feature Branches**: New feature work should start on a scoped branch such as `feature/<track-name>` or `fix/<issue-name>`. Check `git status --short` before branching, avoid mixing unrelated dirty files into commits, and push branches for review before merging to `main`.
+*   **Track Hygiene**: When a feature maps to a project track, update `conductor/tracks.md` and the track `plan.md` as part of the same branch. Keep generated run directories and large artifacts out of commits unless they are explicitly needed for a report.
 *   **Testing**: Run unit tests using `pytest`:
     ```bash
     pytest

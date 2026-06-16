@@ -24,6 +24,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [ ] **Track: NoProp Algorithm Integration**
 *Link: [./tracks/noprop_integration_20260608/](./tracks/noprop_integration_20260608/)*
+*Summary: Prototype architecture, trainer, config, and unit tests exist. No substantive training or memory-scaling validation has been completed; keep open until a real NoProp run is evaluated against standard backprop.*
 
 - [x] **Track: Model Querying Streamlit UI**
 *Link: [./tracks/querying_ui_20260608/](./tracks/querying_ui_20260608/)*
@@ -48,9 +49,41 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [ ] **Track: Progressive High-Capacity Scaling Ladder (Stage 2.7)**
 *Link: [./tracks/progressive_scaling_20260610/](./tracks/progressive_scaling_20260610/)*
+*Summary: d384 ladder completed through 4L2H -> 6L4H -> 10L8H, and Stage 2.6 10L8H_d384 became the best current CodonLM. Track remains open for d384/d512 comparison closeout and the missing cross-width checkpoint expansion utility.*
 
 - [x] **Track: Remote Bioinformatics Integrations (Maintenance)**
 *Link: [./tracks/remote_bioinformatics_20260610/](./tracks/remote_bioinformatics_20260610/)*
 
 - [x] **Track: Interactive UI Playgrounds & Live Monitor Upgrades (Maintenance)**
 *Link: [./tracks/ui_improvements_20260610/](./tracks/ui_improvements_20260610/)*
+
+- [x] **Track: Termination Fix & Dynamic Context Windows**
+*Link: [./tracks/termination_fix_20260611/](./tracks/termination_fix_20260611/)*
+
+- [x] **Track: Regression Probing for DNA Shape Decoding**
+*Link: [./tracks/regression_probes_20260614/](./tracks/regression_probes_20260614/)*
+
+- [x] **Track: Large Data-Scaling for Taxonomic Diversity**
+*Link: [./tracks/large_data_scaling_20260614/](./tracks/large_data_scaling_20260614/)*
+
+- [x] **Track: Training Speed & Memory Optimization**
+*Link: [./tracks/training_speed_optimization_20260615/](./tracks/training_speed_optimization_20260615/)*
+*Summary: All 5 phases implemented (GQA, mmap, BucketBatchSampler, CUDA device priority, SDPA path). Benchmark shows MPS batch=4 is dispatch-bound — optimizations benefit RAM/params, not throughput at this scale. CUDA batch≥32 expected to show ≥1.5× speedup.*
+
+- [x] **Track: AMR Classification Probe (Conference)**
+*Link: [./tracks/amr_classification_20260615/](./tracks/amr_classification_20260615/)*
+
+- [x] **Track: EC & AMR Downstream Evaluation (Conference)**
+*Summary: Completed EC Level-1 probe (AUROC=0.703), AMR probe (AUROC=0.967), k-mer baselines, UMAP+attention figures, SOTA table consolidation.*
+
+- [x] **Track: Generative Design Loop**
+*Link: [./tracks/generative_design_loop_20260615/](./tracks/generative_design_loop_20260615/)*
+*Summary: ReD sampling + MultiTask ProteinCritic scoring + ESMFold API. Closes the generation→structure evaluation loop. 50/50 sequences terminated, pairwise identity 9.2%, ESMFold pLDDT ≈ 0.4–0.6 (novel/disordered — improvement direction: critic-guided ReD).*
+
+- [x] **Track: Structured Protein Generation**
+*Link: [./tracks/structured_generation_20260616/](./tracks/structured_generation_20260616/)*
+*Summary: Closed as an experimental finding. Critic-guided ReD, family filtering, annealing, top-p sampling, and a structured-prefix harness were implemented; critic stability improved (+13.6%), but ESMFold pLDDT did not. Report: [./tracks/structured_generation_20260616/report.md](./tracks/structured_generation_20260616/report.md).*
+
+- [ ] **Track: PDB-Filtered Structural Fine-Tuning**
+*Link: [./tracks/pdb_structural_finetuning_20260616/](./tracks/pdb_structural_finetuning_20260616/)*
+*Summary: Opened as the direct path toward a structural training signal. Starter filter utility, tests, and a conservative Stage 3 fine-tuning config exist; the current blocker is that Stage 2.6 CDS metadata lacks protein/gene identifiers for automatic UniProt/PDB joins, so the first supported path uses curated source line indices.*
