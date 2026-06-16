@@ -59,7 +59,7 @@ def test_train_multi_task_wall_time_limit(tmp_path):
         "--run_id", run_id,
     ]
     
-    workspace_root = "/Users/User/github/genomics-lm"
+    workspace_root = Path(__file__).resolve().parents[1]
     runs_dir = Path(workspace_root) / "runs" / run_id
     
     # Ensure any previous temp run dir is clean
