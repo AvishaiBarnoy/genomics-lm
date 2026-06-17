@@ -12,7 +12,7 @@ future-token losses, next-token-preserving metrics, and whole-gene pack audits.
 - [x] Keep next-token perplexity separate from auxiliary-loss validation.
 - [x] Add whole-gene/truncation audit metadata for dynamic packs.
 - [x] Add a smoke config with offsets `+4`, `+8`, `+16`, `+32`.
-- [ ] Run a tiny smoke experiment with the long-range objective enabled.
+- [x] Run a wall-time-bounded MPS smoke experiment with the long-range objective enabled.
 - [ ] Compare validation next-token perplexity against standard training.
 - [ ] Rescore generated libraries with calibrated ProteinCritic selection rules.
 - [ ] Add generated-prefix replay or denoising corruption.
@@ -38,3 +38,14 @@ Accept the objective only if:
 - generation does not collapse into short peptides or non-terminating outputs;
 - calibrated ProteinCritic top-fraction enrichment improves for at least one
   structural/useful label without broad degradation.
+
+## Smoke Result
+
+- Run id: `2026-06-17_long_range_offsets_smoke_mps_b4`
+- Device/config: MPS, `batch_size=4`, offsets `+4/+8/+16/+32`, AMP disabled.
+- Result: the objective trained stably and saved `last.pt` at the 60-minute
+  wall-time limit, reaching optimizer step 30.
+- Limitation: the run did not complete an epoch or validation, so no
+  `val_next_loss`/perplexity comparison is available yet.
+- Finding: MPS AMP fails on the offset-loss backward path; full precision is
+  stable but too slow for full validation under the current smoke config.

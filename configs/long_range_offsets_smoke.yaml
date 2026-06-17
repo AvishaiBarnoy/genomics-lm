@@ -12,6 +12,7 @@ label_smoothing: 0.05
 use_checkpoint: true
 use_sdpa: true
 sep_mask_enabled: true
+amp: false
 
 transfer_from: "runs/2026-06-15_stage2.6_10L8H_d384_e10/checkpoints/best.pt"
 
