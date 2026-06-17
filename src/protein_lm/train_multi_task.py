@@ -125,13 +125,56 @@ def load_compatible_model_weights(model, checkpoint_path, map_location="cpu"):
     return len(compatible), skipped
 
 
+def compute_multi_label_pos_weight(dataset, task, max_weight=100.0):
+    labels = []
+    for sample in dataset.samples:
+        values = sample.get(task)
+        if values is None:
+            values = sample.get(f"{task}_labels")
+        if values is None:
+            continue
+        if isinstance(values, dict):
+            values = list(values.values())
+        labels.append(torch.tensor(values, dtype=torch.float32))
+    if not labels:
+        raise ValueError(f"No labels found for multi-label task: {task}")
+    matrix = torch.stack(labels)
+    positives = matrix.sum(dim=0)
+    negatives = matrix.shape[0] - positives
+    weights = torch.where(positives > 0, negatives / positives.clamp_min(1.0), torch.ones_like(positives))
+    return weights.clamp(min=1.0, max=float(max_weight))
+
+
+def save_training_checkpoint(path, epoch, model, optimizer, best_val_loss):
+    checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'best_val_loss': best_val_loss,
+    }
+    torch.save(checkpoint, path)
+
+
+def mps_memory_summary():
+    if not hasattr(torch, "mps"):
+        return ""
+    current_allocated = getattr(torch.mps, "current_allocated_memory", None)
+    driver_allocated = getattr(torch.mps, "driver_allocated_memory", None)
+    parts = []
+    if current_allocated:
+        parts.append(f"mps_current_mb={current_allocated() / 1024 / 1024:.1f}")
+    if driver_allocated:
+        parts.append(f"mps_driver_mb={driver_allocated() / 1024 / 1024:.1f}")
+    return " | " + " | ".join(parts) if parts else ""
+
+
 def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=None):
     with open(config_path, 'r') as f:
         cfg = yaml.safe_load(f)
         
     device_name = cfg.get("device", "mps" if torch.backends.mps.is_available() else "cpu")
     device = torch.device(device_name)
-    print(f"[*] Using device: {device}")
+    print(f"[*] Using device: {device}", flush=True)
 
     tokenizer = ProteinTokenizer()
     
@@ -152,7 +195,7 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
     multi_label_tasks = list(cfg.get("multi_label_tasks", []))
     for task in multi_label_tasks:
         task_dims[task] = len(vocabs[task])
-    print(f"[*] Task Dimensions: {task_dims}")
+    print(f"[*] Task Dimensions: {task_dims}", flush=True)
 
     # Build Config
     model_cfg = ProteinClassifierConfig(
@@ -166,7 +209,7 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
         use_checkpoint=cfg.get("use_checkpoint", False)
     )
 
-    print("[*] Building model...")
+    print("[*] Building model...", flush=True)
     model = MultiTaskProteinClassifier(model_cfg, task_dims).to(device)
 
     transfer_checkpoint = transfer_from or cfg.get("transfer_from")
@@ -177,11 +220,11 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
         if not transfer_checkpoint.exists():
             raise FileNotFoundError(f"Transfer checkpoint not found: {transfer_checkpoint}")
         loaded, skipped = load_compatible_model_weights(model, transfer_checkpoint, map_location=device)
-        print(f"[*] Transferred {loaded} compatible tensors from {transfer_checkpoint}")
+        print(f"[*] Transferred {loaded} compatible tensors from {transfer_checkpoint}", flush=True)
         if skipped:
-            print(f"[*] Skipped {len(skipped)} incompatible tensors, typically task-specific heads")
+            print(f"[*] Skipped {len(skipped)} incompatible tensors, typically task-specific heads", flush=True)
     
-    print("[*] Loading datasets...")
+    print("[*] Loading datasets...", flush=True)
     dynamic_padding = bool(cfg.get("dynamic_padding", False))
     train_ds = MultiTaskProteinDataset(
         cfg["train_data"],
@@ -212,33 +255,66 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
     else:
         train_loader = DataLoader(train_ds, batch_size=cfg.get("batch_size", 8), shuffle=True)
         val_loader = DataLoader(val_ds, batch_size=cfg.get("batch_size", 8))
+    print(
+        f"[*] Dataset sizes: train={len(train_ds)} val={len(val_ds)} "
+        f"train_batches={len(train_loader)} val_batches={len(val_loader)}",
+        flush=True,
+    )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(cfg.get("lr", 1e-4)))
     
     # CrossEntropyLoss with ignore_index=-1 handles the missing labels
     criterion = nn.CrossEntropyLoss(ignore_index=-1)
-    multi_label_criterion = nn.BCEWithLogitsLoss()
+    multi_label_criteria = {}
+    pos_weight_cfg = cfg.get("multi_label_pos_weight")
+    pos_weight_max = cfg.get("multi_label_pos_weight_max", 100.0)
+    for task in multi_label_tasks:
+        pos_weight = None
+        if pos_weight_cfg == "auto":
+            pos_weight = compute_multi_label_pos_weight(
+                train_ds, task, max_weight=pos_weight_max
+            ).to(device)
+        elif isinstance(pos_weight_cfg, dict) and task in pos_weight_cfg:
+            pos_weight = torch.tensor(pos_weight_cfg[task], dtype=torch.float32, device=device)
+        if pos_weight is not None:
+            print(
+                f"[*] Multi-label pos_weight for {task}: "
+                f"{[round(float(v), 4) for v in pos_weight.detach().cpu()]}",
+                flush=True,
+            )
+        multi_label_criteria[task] = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
     best_val_loss = float('inf')
     start_epoch = 0
     if resume_path and Path(resume_path).exists():
-        print(f"[*] Resuming from checkpoint: {resume_path}")
+        print(f"[*] Resuming from checkpoint: {resume_path}", flush=True)
         checkpoint = torch.load(resume_path, map_location=device)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         start_epoch = checkpoint['epoch'] + 1
         best_val_loss = checkpoint.get('best_val_loss', float('inf'))
-        print(f"[*] Resumed checkpoint. Next epoch: {start_epoch + 1} with best val loss: {best_val_loss:.4f}")
+        print(
+            f"[*] Resumed checkpoint. Next epoch: {start_epoch + 1} "
+            f"with best val loss: {best_val_loss:.4f}",
+            flush=True,
+        )
 
-    print("[*] Starting Multi-Task Training...")
+    print("[*] Starting Multi-Task Training...", flush=True)
     epochs = cfg.get("epochs", 5)
     grad_accum_steps = cfg.get("grad_accum_steps", 1)
-    print(f"[*] Gradient accumulation steps: {grad_accum_steps}")
+    print(f"[*] Gradient accumulation steps: {grad_accum_steps}", flush=True)
+    log_every_steps = cfg.get("log_every_steps", 100)
+    checkpoint_every_steps = cfg.get("checkpoint_every_steps", 0)
+    print(
+        f"[*] Progress logging every {log_every_steps} steps; "
+        f"step checkpoint every {checkpoint_every_steps or 'disabled'} steps",
+        flush=True,
+    )
     
     max_time_minutes = cfg.get("max_time_minutes", None)
     max_time_seconds = max_time_minutes * 60 if max_time_minutes else None
     if max_time_minutes:
-        print(f"[*] Wall-time limit configured: {max_time_minutes} minutes")
+        print(f"[*] Wall-time limit configured: {max_time_minutes} minutes", flush=True)
     
     start_time = time.perf_counter()
     
@@ -269,6 +345,8 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
             break
         model.train()
         train_loss = 0.0
+        recent_loss = 0.0
+        recent_steps = 0
         optimizer.zero_grad()
         
         for step, batch in enumerate(train_loader):
@@ -290,13 +368,15 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
             for task in multi_label_tasks:
                 targets = batch[task].to(device)
                 if targets.numel() and (targets >= 0).any():
-                    loss += multi_label_criterion(logits_dict[task], targets)
+                    loss += multi_label_criteria[task](logits_dict[task], targets)
                     tasks_added += 1
             
             if tasks_added > 0:
                 loss = loss / grad_accum_steps
                 loss.backward()
                 train_loss += loss.item() * grad_accum_steps
+                recent_loss += loss.item() * grad_accum_steps
+                recent_steps += 1
             
             if (step + 1) % grad_accum_steps == 0 or (step + 1) == len(train_loader):
                 optimizer.step()
@@ -307,17 +387,31 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
             elif (step + 1) % 250 == 0 and device.type == "mps":
                 torch.mps.empty_cache()
 
+            if log_every_steps and (step + 1) % log_every_steps == 0:
+                elapsed = time.perf_counter() - start_time
+                avg_recent_loss = recent_loss / max(recent_steps, 1)
+                print(
+                    f"[progress] epoch={epoch + 1}/{epochs} "
+                    f"step={step + 1}/{len(train_loader)} "
+                    f"elapsed_min={elapsed / 60:.1f} "
+                    f"recent_loss={avg_recent_loss:.4f} "
+                    f"batch_seq_len={input_ids.shape[1]}"
+                    f"{mps_memory_summary() if device.type == 'mps' else ''}",
+                    flush=True,
+                )
+                recent_loss = 0.0
+                recent_steps = 0
+
+            if checkpoint_every_steps and (step + 1) % checkpoint_every_steps == 0:
+                step_checkpoint = out_dir / "last_step_critic.pt"
+                save_training_checkpoint(step_checkpoint, epoch, model, optimizer, best_val_loss)
+                print(f"[checkpoint] Saved step checkpoint to {step_checkpoint}", flush=True)
+
             # Check wall-time limit at the end of every step
             if max_time_seconds and (time.perf_counter() - start_time) > max_time_seconds:
-                print(f"\n[info] Wall-time limit of {max_time_minutes} minutes reached mid-epoch.")
-                checkpoint = {
-                    'epoch': epoch,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'best_val_loss': best_val_loss,
-                }
-                torch.save(checkpoint, out_dir / "last_critic.pt")
-                print(f"[success] Gracefully saved checkpoint to {out_dir / 'last_critic.pt'}. Exiting.")
+                print(f"\n[info] Wall-time limit of {max_time_minutes} minutes reached mid-epoch.", flush=True)
+                save_training_checkpoint(out_dir / "last_critic.pt", epoch, model, optimizer, best_val_loss)
+                print(f"[success] Gracefully saved checkpoint to {out_dir / 'last_critic.pt'}. Exiting.", flush=True)
                 time_limit_reached = True
                 break
             
@@ -346,7 +440,7 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
                 for task in multi_label_tasks:
                     targets = batch[task].to(device)
                     if targets.numel() and (targets >= 0).any():
-                        batch_loss += multi_label_criterion(logits_dict[task], targets)
+                        batch_loss += multi_label_criteria[task](logits_dict[task], targets)
                         batch_tasks += 1
                 
                 if batch_tasks > 0:
@@ -357,7 +451,7 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
             val_loss /= val_tasks_total
         if device.type == "mps":
             torch.mps.empty_cache()
-        print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
+        print(f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}", flush=True)
         
         with open(log_csv, "a", newline="") as f:
             csv.writer(f).writerow([epoch + 1, f"{train_loss:.4f}", f"{val_loss:.4f}"])
@@ -368,17 +462,11 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
             improved = True
 
         # Save last checkpoint for resilience
-        checkpoint = {
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'best_val_loss': best_val_loss,
-        }
-        torch.save(checkpoint, out_dir / "last_critic.pt")
+        save_training_checkpoint(out_dir / "last_critic.pt", epoch, model, optimizer, best_val_loss)
 
         if improved:
             torch.save(model.state_dict(), out_dir / "best_critic.pt")
-            print("  -> Saved new best model.")
+            print("  -> Saved new best model.", flush=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

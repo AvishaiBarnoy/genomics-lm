@@ -328,5 +328,16 @@ Our local models deliver orders of magnitude higher performance density per para
     *   **ESMFold:** 30/30 submissions succeeded; mean pLDDT = 0.317, median = 0.320, max = 0.383, and 0/30 exceeded 0.7. Prefix prompting did not produce confident folds.
     *   **Next structural signal:** opened the PDB-Filtered Structural Fine-Tuning track with a subset filter and Stage 3 config. This is the direct route to teach the generator a foldable-protein distribution rather than only filtering after sampling.
 
+*   **Stage 12 Addendum — Structural-Aware ProteinCritic Calibration (2026-06-17):**
+    *   Added a safe structural-critic transfer path from the existing multi-task ProteinCritic checkpoint into the protein-type head, preserving compatible backbone weights while skipping incompatible task heads.
+    *   Trained a first structural-aware critic on Apple M2/MPS with `batch_size=4`, dynamic padding, and class-imbalance-aware `pos_weight` for rare labels such as `structured_pdb`, `signal_secreted`, and `disordered_low_complexity`.
+    *   Extended [`scripts/eval_multi_task_critic.py`](file:///Users/User/github/genomics-lm/scripts/eval_multi_task_critic.py) to report multi-label AP/AUC, threshold curves, and top-fraction enrichment instead of relying on a single hard `0.5` threshold.
+    *   **Result:** `pos_weight` improved rare-label ranking for `membrane`, `signal_secreted`, `disordered_low_complexity`, and slightly for `structured_pdb`, but worsened raw probability calibration. This means the weighted critic is better as a ranking/filtering tool than as a literal probability estimator.
+    *   **Operational conclusion:** Use calibrated top-k/top-fraction selection rules by label. `structured_pdb` remains too weak to be trusted as the primary foldability signal; PDB-filtered generator fine-tuning and matched ESMFold validation remain necessary.
+
+*   **Stage 12 Addendum — Protein-Functional CodonLM Objective Decision (2026-06-17):**
+    *   The failure mode is now framed as an objective/data mismatch, not just a capacity problem. CodonLM learns gene-like DNA and local codon grammar, but next-codon loss alone does not explicitly reward a translated protein that is folded, family-like, or biologically functional.
+    *   The next implementation track is the open **Long-Range CodonLM Objectives** track: add multi-offset future-token losses (`+4/+8/+16/+32`), audit whole-gene coverage and truncation, rescore generated libraries with calibrated critics, prepare hard negatives, and only then run a controlled `d384` vs. `d512` capacity ablation.
+
 ---
 *End of Log*

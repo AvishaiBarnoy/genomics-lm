@@ -90,8 +90,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [ ] **Track: Structural-Aware ProteinCritic**
 *Link: [./tracks/structural_aware_protein_critic_20260616/](./tracks/structural_aware_protein_critic_20260616/)*
-*Summary: Add protein-type and foldability labels to ProteinCritic, including soluble, membrane, signal/secreted, disordered/low-complexity, short peptide, enzyme, and structure-supported classes. Also adds dynamic protein batching and masked pooling so low pLDDT can be interpreted by expected protein type.*
+*Summary: Protein-type labels, dynamic protein batching, masked pooling, safe transfer training, imbalance-aware `pos_weight`, and calibrated threshold/top-fraction evaluation are implemented. The weighted critic improves rare-label ranking but hurts raw probability calibration; keep open for generated-library rescoring and integration into selection loops.*
 
 - [ ] **Track: Long-Range CodonLM Objectives**
 *Link: [./tracks/long_range_codon_objectives_20260616/](./tracks/long_range_codon_objectives_20260616/)*
-*Summary: Add config-gated multi-offset future-token losses, denoising/recovery training, and eventually structural auxiliary/preference losses so CodonLM learns longer-range protein constraints and becomes more robust to off-distribution generation.*
+*Summary: Next active implementation target. Add config-gated multi-offset future-token losses (`+4/+8/+16/+32`), whole-gene truncation audits, generated-library rescoring with calibrated critics, hard-negative preparation, and a final d384/d512 capacity ablation only after objective/data changes are evaluated.*

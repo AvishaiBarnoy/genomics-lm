@@ -25,6 +25,10 @@ grad_accum_steps: 8
 epochs: 5
 lr: 0.00005
 max_time_minutes: 240
+log_every_steps: 100
+checkpoint_every_steps: 1000
+multi_label_pos_weight: auto
+multi_label_pos_weight_max: 100
 
 dynamic_padding: true
 multi_label_tasks:
