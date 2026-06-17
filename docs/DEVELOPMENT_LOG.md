@@ -328,5 +328,11 @@ Our local models deliver orders of magnitude higher performance density per para
     *   **ESMFold:** 30/30 submissions succeeded; mean pLDDT = 0.317, median = 0.320, max = 0.383, and 0/30 exceeded 0.7. Prefix prompting did not produce confident folds.
     *   **Next structural signal:** opened the PDB-Filtered Structural Fine-Tuning track with a subset filter and Stage 3 config. This is the direct route to teach the generator a foldable-protein distribution rather than only filtering after sampling.
 
+*   **Stage 12 Addendum — Long-Range Functional Objective Track (2026-06-17):**
+    *   Opened the **Long-Range CodonLM Objectives** track to test whether functional protein generation is limited by the causal next-token objective before scaling model width.
+    *   Implemented config-gated multi-offset auxiliary losses (`+4/+8/+16/+32`) while preserving next-token cross entropy as the primary perplexity metric.
+    *   Added whole-gene pack audits so runs explicitly report the fraction of examples clipped at `block_size`, clarifying when training is whole-gene versus whole-or-truncated.
+    *   The working hypothesis is objective/data mismatch first, capacity second: `d512` should be tested only after the `d384` objective ablation shows useful protein-generation movement without damaging termination or next-token perplexity.
+
 ---
 *End of Log*

@@ -87,3 +87,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [ ] **Track: PDB-Filtered Structural Fine-Tuning**
 *Link: [./tracks/pdb_structural_finetuning_20260616/](./tracks/pdb_structural_finetuning_20260616/)*
 *Summary: Opened as the direct path toward a structural training signal. Starter filter utility, tests, and a conservative Stage 3 fine-tuning config exist; the current blocker is that Stage 2.6 CDS metadata lacks protein/gene identifiers for automatic UniProt/PDB joins, so the first supported path uses curated source line indices.*
+
+- [ ] **Track: Long-Range CodonLM Objectives**
+*Link: [./tracks/long_range_codon_objectives_20260616/](./tracks/long_range_codon_objectives_20260616/)*
+*Summary: Active implementation target for protein-functional generation. Adds config-gated multi-offset future-token losses (`+4/+8/+16/+32`), whole-gene truncation audits, and next-token-preserving metrics before generated-library rescoring, hard negatives, and d384/d512 ablation.*

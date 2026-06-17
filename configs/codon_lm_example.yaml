@@ -20,6 +20,17 @@ n_kv_head: 4                # Grouped Query Attention (GQA) Key-Value head count
 tie_embeddings: true        # Share weights between token embeddings and the language model output head
 
 # ---------------------------------------------------------------------
+# Optional Long-Range Objective
+# ---------------------------------------------------------------------
+multi_offset_loss_enabled: false       # If true, add future-token auxiliary losses beyond next-token prediction
+multi_offset_targets: [4, 8, 16, 32]   # Predict tokens n+4/n+8/n+16/n+32 from the current hidden state
+multi_offset_weights:                  # Auxiliary weights; next-token CE remains the primary loss
+  4: 0.10
+  8: 0.05
+  16: 0.03
+  32: 0.02
+
+# ---------------------------------------------------------------------
 # Transfer Learning / Warm Start
 # ---------------------------------------------------------------------
 # Path to pre-trained weights.pt checkpoint. Restores model weights but ignores optimizer states,
