@@ -1,76 +1,23 @@
-# Long-Range CodonLM Objectives Spec
+# Long-Range CodonLM Objectives
 
-## Objective
+## Goal
 
-Teach CodonLM to represent longer-range protein constraints and recover from
-off-distribution generation, instead of relying only on next-codon prediction.
+Teach CodonLM longer-range coding constraints without replacing the standard
+causal next-token objective. The first implementation adds future-token
+auxiliary losses and whole-gene truncation audits so we can test whether the
+current `d384` model is objective-limited before scaling to `d512`.
 
-## Motivation
+## Scope
 
-Next-token language modeling learns local codon grammar well, and our probes
-show it captures DNA electrostatic and 3D shape features. But foldable protein
-generation requires longer-range amino-acid constraints: helices, beta-sheet
-pairing, hydrophobic cores, membrane topology, domain length, contact order, and
-termination placement.
+- Add config-gated multi-offset losses for `n+4`, `n+8`, `n+16`, and `n+32`.
+- Keep next-token cross entropy as the primary optimization and perplexity metric.
+- Mask padding and future targets that cross `<EOS_CDS>` or `<SEP>` boundaries.
+- Report offset losses separately from next-token perplexity.
+- Audit dynamic packs for clipped-at-`block_size` long genes.
 
-Generation is also off-distribution: during training each prefix comes from a
-real biological sequence, while during sampling the model must condition on its
-own imperfect previous codons.
+## Non-Goals
 
-## Candidate Objectives
-
-### Multi-Offset Future Prediction
-
-Add auxiliary prediction losses at multiple codon offsets:
-
-- `+2`
-- `+4`
-- `+8`
-- `+16`
-- `+32`
-
-This encourages hidden states to encode more than the immediate next codon.
-Offsets should be ablated; the initial safe set is `+4`, `+16`, `+32`.
-
-### Denoising / Recovery
-
-Corrupt real CDS prefixes and train the model to recover:
-
-- random synonymous swaps
-- random codon masking
-- short local codon shuffles
-- generated-prefix replay from previous weak models
-
-### Structural Auxiliary Heads
-
-Use translated proteins and external labels to predict:
-
-- protein type from Structural-Aware ProteinCritic
-- structure-supported vs not structure-supported
-- predicted foldability / pLDDT bucket
-- optional contact-order/contact-density labels when PDB-derived labels are available
-
-### Preference Or Reward Training
-
-Construct paired generations from the same prompt:
-
-- preferred: higher ESMFold pLDDT / higher foldability score
-- rejected: lower ESMFold pLDDT / disordered soluble candidate
-
-Start with offline preference loss before attempting online ESMFold REINFORCE.
-
-## Acceptance Criteria
-
-- Multi-offset loss can be enabled by config without changing default training.
-- Unit tests verify target shifting and masking near sequence ends.
-- A small ablation compares baseline next-token vs multi-offset training on validation perplexity and generation metrics.
-- Off-distribution recovery training improves termination and reduces obviously invalid continuations.
-- Structural auxiliary labels improve at least one downstream generation metric without collapsing diversity.
-
-## Risks
-
-- Multi-offset prediction may improve statistics without improving foldability.
-- Strong auxiliary losses may hurt codon dialect or DNAshape representations.
-- Reward training can collapse sequence diversity if not KL-regularized.
-
-Mitigation: use replay from general CDS data and evaluate original Stage 2.6 metrics after each experiment.
+- Do not replace causal LM training.
+- Do not start preference/RL training in the first pass.
+- Do not approve `d512` scaling until objective/data ablations improve generated
+  protein metrics without damaging termination or next-token perplexity.

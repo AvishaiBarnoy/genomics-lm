@@ -339,5 +339,11 @@ Our local models deliver orders of magnitude higher performance density per para
     *   The failure mode is now framed as an objective/data mismatch, not just a capacity problem. CodonLM learns gene-like DNA and local codon grammar, but next-codon loss alone does not explicitly reward a translated protein that is folded, family-like, or biologically functional.
     *   The next implementation track is the open **Long-Range CodonLM Objectives** track: add multi-offset future-token losses (`+4/+8/+16/+32`), audit whole-gene coverage and truncation, rescore generated libraries with calibrated critics, prepare hard negatives, and only then run a controlled `d384` vs. `d512` capacity ablation.
 
+*   **Stage 12 Addendum — Long-Range Functional Objective Track (2026-06-17):**
+    *   Opened the **Long-Range CodonLM Objectives** track to test whether functional protein generation is limited by the causal next-token objective before scaling model width.
+    *   Implemented config-gated multi-offset auxiliary losses (`+4/+8/+16/+32`) while preserving next-token cross entropy as the primary perplexity metric.
+    *   Added whole-gene pack audits so runs explicitly report the fraction of examples clipped at `block_size`, clarifying when training is whole-gene versus whole-or-truncated.
+    *   The working hypothesis is objective/data mismatch first, capacity second: `d512` should be tested only after the `d384` objective ablation shows useful protein-generation movement without damaging termination or next-token perplexity.
+
 ---
 *End of Log*

@@ -2,50 +2,39 @@
 
 ## Status
 
-Open. This track depends on the PDB-filtered structural fine-tuning results and
-will benefit from the Structural-Aware ProteinCritic labels.
+In progress. The first implementation pass adds config-gated multi-offset
+future-token losses, next-token-preserving metrics, and whole-gene pack audits.
 
 ## Tasks
 
-- [ ] Add a config-gated multi-offset LM loss.
-- [ ] Add tests for offset target creation and end-of-sequence masking.
-- [ ] Run a tiny smoke experiment with offsets `+4`, `+16`, `+32`.
-- [ ] Compare validation loss/perplexity against standard next-token training.
+- [x] Add a config-gated multi-offset LM loss.
+- [x] Add tests for offset target creation and end-of-sequence masking.
+- [x] Keep next-token perplexity separate from auxiliary-loss validation.
+- [x] Add whole-gene/truncation audit metadata for dynamic packs.
+- [x] Add a smoke config with offsets `+4`, `+8`, `+16`, `+32`.
+- [ ] Run a tiny smoke experiment with the long-range objective enabled.
+- [ ] Compare validation next-token perplexity against standard training.
+- [ ] Rescore generated libraries with calibrated ProteinCritic selection rules.
 - [ ] Add generated-prefix replay or denoising corruption.
-- [ ] Evaluate whether recovery training improves termination without shortening genes.
-- [ ] Add hooks for structural auxiliary labels from ProteinCritic.
-- [ ] Build an offline preference dataset from ESMFold-scored generations.
-- [ ] Run a conservative preference-training smoke with KL/replay regularization.
+- [ ] Build an offline hard-negative dataset from generated and corrupted ORFs.
+- [ ] Run a conservative d384-vs-d512 capacity ablation only after objective/data metrics improve.
 
 ## Biology-Informed Priors
 
-- Helical local structure often involves nearby residues such as `i -> i+3/i+4`.
-- Medium/long-range contacts are important for fold topology, beta sheets, and cores.
-- Contact order captures average sequence separation between contacting residues; single-domain proteins commonly span a broad relative contact-order range.
-- Therefore the objective should not only predict `n+2` or `n+10`; it should combine multi-offset sequence losses with structural/foldability labels.
+- Helical local structure often creates useful residue relationships around
+  nearby offsets such as `i -> i+3/i+4`.
+- Medium-range sequence constraints matter for motifs, beta-strand pairing,
+  domain cores, and topology, but they are weakly supervised by pure next-token
+  loss.
+- The multi-offset objective is therefore a diagnostic training pressure, not a
+  complete structural objective.
 
-## Initial Experiments
+## Initial Experiment
 
-1. **Offset-only ablation**
-   - Base: Stage 2.6 or Stage 3 checkpoint.
-   - Data: PDB-filtered subset plus general-CDS replay.
-   - Loss: next-token + weighted `+4/+16/+32`.
+Use `configs/long_range_offsets_smoke.yaml` from a backed-up Stage 2.6 checkpoint.
+Accept the objective only if:
 
-2. **Denoising/recovery ablation**
-   - Corrupt real CDS prefixes.
-   - Train model to continue/recover valid CDS.
-   - Measure termination, length, and ProteinCritic categories.
-
-3. **Preference smoke**
-   - Use ESMFold-scored generated libraries.
-   - Prefer higher-pLDDT sequences from the same prompt.
-   - Include KL/replay to avoid diversity collapse.
-
-## Metrics
-
-- Original validation perplexity.
-- PDB-filtered validation perplexity.
-- termination rate and length distribution.
-- ProteinCritic stability and protein-type labels.
-- mean/max ESMFold pLDDT on matched top-k.
-- diversity: pairwise identity and k-mer coverage.
+- next-token validation perplexity regresses by no more than 2%;
+- generation does not collapse into short peptides or non-terminating outputs;
+- calibrated ProteinCritic top-fraction enrichment improves for at least one
+  structural/useful label without broad degradation.

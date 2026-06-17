@@ -1,0 +1,48 @@
+# Smoke config for the Long-Range CodonLM Objectives track.
+# Uses the existing Stage 2.6 dynamic master pack and a small d384-compatible
+# run shape. For full runs, start from the latest backed-up Stage 2.6 checkpoint.
+
+vocab_size: 69
+block_size: 512
+n_layer: 10
+n_head: 8
+n_embd: 384
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+use_sdpa: true
+sep_mask_enabled: true
+
+transfer_from: "runs/2026-06-15_stage2.6_10L8H_d384_e10/checkpoints/best.pt"
+
+itos_path: "data/processed/itos_codon.txt"
+train_npz: "data/processed/stage2.6_large_master_pack/train_bs512.npz"
+val_npz: "data/processed/stage2.6_large_master_pack/val_bs512.npz"
+test_npz: "data/processed/stage2.6_large_master_pack/test_bs512.npz"
+
+multi_offset_loss_enabled: true
+multi_offset_targets: [4, 8, 16, 32]
+multi_offset_weights:
+  4: 0.10
+  8: 0.05
+  16: 0.03
+  32: 0.02
+
+batch_size: 4
+grad_accum_steps: 32
+epochs: 1
+lr: 0.00001
+min_lr: 0.000001
+weight_decay: 0.05
+warmup_steps: 50
+early_stop_patience: 10
+max_time_minutes: 60
+
+use_mmap: true
+bucket_batching: true
+n_buckets: 8
+num_workers: 0
+pin_memory: false
+
+out_dir: "runs/long_range_offsets_smoke/checkpoints"
+scores_dir: "runs/long_range_offsets_smoke/scores"

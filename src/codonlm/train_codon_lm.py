@@ -34,6 +34,8 @@ from torch.utils.data import DataLoader, Dataset
 from .model_tiny_gpt import TinyGPT
 
 RUN_ID_ENV = "RUN_ID"
+PAD_ID = 0
+DEFAULT_BOUNDARY_IDS = (2, 3)  # <EOS_CDS>, <SEP>
 
 
 class WallTimeLimitException(Exception):
@@ -93,6 +95,104 @@ def _prepare_output_dirs(base_ckpt_dir: str, base_scores_dir: str, run_id: Optio
     ckpt_root.mkdir(parents=True, exist_ok=True)
     scores_root.mkdir(parents=True, exist_ok=True)
     return ckpt_root, scores_root
+
+
+def _normalize_offset_weights(offsets, weights_cfg=None):
+    offsets = [int(offset) for offset in offsets]
+    if not offsets:
+        return {}
+    if weights_cfg is None:
+        return {offset: 1.0 / len(offsets) for offset in offsets}
+    if isinstance(weights_cfg, dict):
+        return {offset: float(weights_cfg.get(offset, weights_cfg.get(str(offset), 0.0))) for offset in offsets}
+    if isinstance(weights_cfg, (list, tuple)):
+        if len(weights_cfg) != len(offsets):
+            raise ValueError("multi_offset_weights list must match multi_offset_targets length")
+        return {offset: float(weight) for offset, weight in zip(offsets, weights_cfg)}
+    scalar = float(weights_cfg)
+    return {offset: scalar for offset in offsets}
+
+
+def offset_target_mask(yb: torch.Tensor, offset: int, boundary_ids=DEFAULT_BOUNDARY_IDS) -> torch.Tensor:
+    """Return valid positions for predicting seq[t + offset] from logits at t."""
+    if offset < 1:
+        raise ValueError("offset must be >= 1")
+    if offset > yb.shape[1]:
+        return torch.zeros((yb.shape[0], 0), dtype=torch.bool, device=yb.device)
+
+    target = yb[:, offset - 1 :]
+    valid = target != PAD_ID
+    boundary = torch.zeros_like(yb, dtype=torch.bool)
+    for boundary_id in boundary_ids:
+        boundary |= yb == int(boundary_id)
+
+    # Do not train targets that require looking beyond an EOS/SEP boundary.
+    # The target boundary itself is allowed; only earlier boundaries invalidate it.
+    for shift in range(offset - 1):
+        valid &= ~boundary[:, shift : shift + target.shape[1]]
+    return valid
+
+
+def multi_offset_lm_loss(
+    logits: torch.Tensor,
+    yb: torch.Tensor,
+    offset_weights: dict[int, float],
+    label_smoothing: float = 0.0,
+    loss_weights: torch.Tensor | None = None,
+    boundary_ids=DEFAULT_BOUNDARY_IDS,
+):
+    losses = {}
+    total = logits.new_tensor(0.0)
+    for offset, weight in offset_weights.items():
+        if weight == 0.0 or offset <= 1 or offset > yb.shape[1]:
+            continue
+        target = yb[:, offset - 1 :]
+        pred = logits[:, : target.shape[1], :]
+        valid = offset_target_mask(yb, offset, boundary_ids=boundary_ids)
+        if not bool(valid.any()):
+            continue
+        pred_flat = pred[valid].float()
+        target_flat = target[valid]
+        offset_loss = torch.nn.functional.cross_entropy(
+            pred_flat,
+            target_flat,
+            ignore_index=PAD_ID,
+            label_smoothing=label_smoothing,
+            weight=loss_weights,
+        )
+        losses[offset] = offset_loss
+        total = total + (float(weight) * offset_loss)
+    return total, losses
+
+
+def dataset_length_audit(dataset, block_size: int) -> dict:
+    if len(dataset) == 0:
+        return {
+            "n_sequences": 0,
+            "min": None,
+            "p50": None,
+            "p90": None,
+            "p99": None,
+            "max": None,
+            "at_block_size": 0,
+            "at_block_size_frac": 0.0,
+            "mode": "dynamic" if getattr(dataset, "is_dynamic", False) else "fixed",
+        }
+    if getattr(dataset, "is_dynamic", False):
+        lengths = np.asarray(dataset.seq_lengths, dtype=np.int64)
+    else:
+        lengths = np.full(len(dataset), int(block_size), dtype=np.int64)
+    return {
+        "n_sequences": int(len(lengths)),
+        "min": int(lengths.min()),
+        "p50": float(np.percentile(lengths, 50)),
+        "p90": float(np.percentile(lengths, 90)),
+        "p99": float(np.percentile(lengths, 99)),
+        "max": int(lengths.max()),
+        "at_block_size": int((lengths >= int(block_size)).sum()),
+        "at_block_size_frac": float((lengths >= int(block_size)).mean()),
+        "mode": "dynamic" if getattr(dataset, "is_dynamic", False) else "fixed",
+    }
 
 
 class PackedDataset(Dataset):
@@ -160,6 +260,12 @@ class PackedDataset(Dataset):
         if self.is_dynamic:
             return self.seqs[i]
         return self.X[i], self.Y[i]
+
+    @property
+    def seq_lengths(self) -> np.ndarray:
+        if self.is_dynamic:
+            return np.array([len(seq) for seq in self.seqs], dtype=np.int32)
+        return np.full(len(self), self.X.shape[1], dtype=np.int32)
 
 
 class MmapPackedDataset(Dataset):
@@ -386,6 +492,16 @@ def main():
     val_ds = DatasetCls(val_paths)
     if use_mmap:
         print(f"[loader] using MmapPackedDataset (memory-mapped, on-demand paging)")
+    train_audit = dataset_length_audit(train_ds, int(cfg["block_size"]))
+    val_audit = dataset_length_audit(val_ds, int(cfg["block_size"]))
+    cfg["dataset_audit"] = {"train": train_audit, "val": val_audit}
+    cfg["whole_gene_status"] = (
+        "whole-or-truncated"
+        if train_audit["at_block_size"] or val_audit["at_block_size"]
+        else "whole-under-block-size"
+    )
+    print(f"[audit] train_lengths={train_audit}")
+    print(f"[audit] val_lengths={val_audit}")
 
     num_workers = int(cfg.get("num_workers", 0))
     pin_memory = bool(cfg.get("pin_memory", False))
@@ -441,6 +557,15 @@ def main():
     val_loader = DataLoader(val_ds, batch_size=cfg["batch_size"], collate_fn=collate_fn, **dl_kwargs)
 
     sep_mask_enabled = bool(cfg.get("sep_mask_enabled", True))
+    multi_offset_enabled = bool(cfg.get("multi_offset_loss_enabled", False))
+    multi_offset_targets = [int(x) for x in cfg.get("multi_offset_targets", [])]
+    multi_offset_weights = (
+        _normalize_offset_weights(multi_offset_targets, cfg.get("multi_offset_weights"))
+        if multi_offset_enabled
+        else {}
+    )
+    if multi_offset_weights:
+        print(f"[loss] multi_offset_weights={multi_offset_weights}")
 
     eos_loss_weight = cfg.get("eos_loss_weight", None)
     loss_weights = None
@@ -609,7 +734,19 @@ def main():
     log_csv.parent.mkdir(parents=True, exist_ok=True)
     with log_csv.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["step","train_loss","val_loss","perplexity","lr"])
+        offset_cols = []
+        for offset in sorted(multi_offset_weights):
+            offset_cols.extend([f"train_offset_{offset}", f"val_offset_{offset}"])
+        writer.writerow([
+            "step",
+            "train_loss",
+            "val_loss",
+            "train_next_loss",
+            "val_next_loss",
+            "perplexity",
+            "lr",
+            *offset_cols,
+        ])
 
     start_epoch = 0
     best = float("inf")
@@ -655,7 +792,9 @@ def main():
         nonlocal step
         mps_autocast_ok = True
         model.train(split=="train")
-        total, n = 0.0, 0
+        total, next_total, n = 0.0, 0.0, 0
+        offset_totals = {offset: 0.0 for offset in multi_offset_weights}
+        offset_counts = {offset: 0 for offset in multi_offset_weights}
         optim.zero_grad(set_to_none=True)
         skipped = 0
         start_time = time.perf_counter()
@@ -667,23 +806,38 @@ def main():
             xb, yb = xb.to(device), yb.to(device)
             def fwd():
                 """Helper to run model forward pass and return scaled loss."""
-                logits_, loss_ = model(xb, yb)
-                return logits_, loss_ / gacc
+                logits_, next_loss_ = model(xb, yb)
+                total_loss_ = next_loss_
+                offset_losses_ = {}
+                if multi_offset_weights:
+                    offset_total_, offset_losses_ = multi_offset_lm_loss(
+                        logits_,
+                        yb,
+                        multi_offset_weights,
+                        label_smoothing=float(cfg.get("label_smoothing", 0.0)),
+                        loss_weights=(
+                            model.loss_weights
+                            if not torch.all(model.loss_weights == 1.0).item()
+                            else None
+                        ),
+                    )
+                    total_loss_ = total_loss_ + offset_total_
+                return total_loss_ / gacc, next_loss_, offset_losses_
 
             if amp and mps_autocast_ok:
                 try:
                     with torch.amp.autocast(device_type=device.type, dtype=torch.float16, enabled=True):
-                        logits, loss = fwd()
+                        loss, next_loss, offset_losses = fwd()
                 except RuntimeError as e:
                     msg = str(e).lower()
                     if "unsupported autocast device_type" in msg or "autocast" in msg and device.type == "mps":
                         # Fallback: disable MPS autocast for this run
                         mps_autocast_ok = False
-                        logits, loss = fwd()
+                        loss, next_loss, offset_losses = fwd()
                     else:
                         raise
             else:
-                logits, loss = fwd()
+                loss, next_loss, offset_losses = fwd()
             # Guard against NaNs/infs (e.g., degenerate batches); skip update for this micro-step
             if not torch.isfinite(loss):
                 skipped += 1
@@ -701,10 +855,18 @@ def main():
                     if use_cosine:
                         scheduler.step()
             total += loss.item()*gacc
+            next_total += float(next_loss.detach().item())
+            for offset, offset_loss in offset_losses.items():
+                offset_totals[offset] += float(offset_loss.detach().item())
+                offset_counts[offset] += 1
             n += 1
             if max_time_seconds and (time.perf_counter() - train_start_time) > max_time_seconds:
                 raise WallTimeLimitException()
-        return (total / max(n,1), skipped)
+        offset_avgs = {
+            offset: (offset_totals[offset] / max(offset_counts[offset], 1))
+            for offset in offset_totals
+        }
+        return (total / max(n,1), next_total / max(n, 1), skipped, offset_avgs)
 
     history = []
 
@@ -733,16 +895,25 @@ def main():
             ep_wall0 = time.perf_counter()
             ep_cpu0 = time.process_time()
             epoch_idx = epoch + 1
-            train_loss, train_skips = one_pass("train", train_loader)
+            train_loss, train_next_loss, train_skips, train_offsets = one_pass("train", train_loader)
             with torch.no_grad():
-                val_loss, val_skips = one_pass("val", val_loader)
-            ppl = math.exp(min(20.0, val_loss))
+                val_loss, val_next_loss, val_skips, val_offsets = one_pass("val", val_loader)
+            ppl = math.exp(min(20.0, val_next_loss))
             if not use_cosine:
                 scheduler.step(val_loss)
             lr_now = optim.param_groups[0]["lr"]
-            msg = f"[epoch {epoch_idx}] train {train_loss:.3f} | val {val_loss:.3f} | ppl {ppl:.2f} | lr {lr_now:.2e}"
+            msg = (
+                f"[epoch {epoch_idx}] train {train_loss:.3f} | val {val_loss:.3f} "
+                f"| next_val {val_next_loss:.3f} | ppl {ppl:.2f} | lr {lr_now:.2e}"
+            )
             if train_skips or val_skips:
                 msg += f" | skips train={train_skips} val={val_skips}"
+            if multi_offset_weights:
+                offset_msg = " ".join(
+                    f"o{offset}:train={train_offsets.get(offset, 0.0):.3f}/val={val_offsets.get(offset, 0.0):.3f}"
+                    for offset in sorted(multi_offset_weights)
+                )
+                msg += f" | offsets {offset_msg}"
             print(msg)
             ep_wall1 = time.perf_counter()
             ep_cpu1 = time.process_time()
@@ -773,12 +944,28 @@ def main():
             if cfg.get("save_epochs", False):
                 torch.save(ckpt_payload, ckpt_dir / f"epoch_{epoch_idx}.pt")
             with log_csv.open("a", newline="") as f:
-                csv.writer(f).writerow([epoch_idx, f"{train_loss:.4f}", f"{val_loss:.4f}", f"{ppl:.3f}", f"{lr_now:.3e}"])
+                row = [
+                    epoch_idx,
+                    f"{train_loss:.4f}",
+                    f"{val_loss:.4f}",
+                    f"{train_next_loss:.4f}",
+                    f"{val_next_loss:.4f}",
+                    f"{ppl:.3f}",
+                    f"{lr_now:.3e}",
+                ]
+                for offset in sorted(multi_offset_weights):
+                    row.extend([
+                        f"{train_offsets.get(offset, 0.0):.4f}",
+                        f"{val_offsets.get(offset, 0.0):.4f}",
+                    ])
+                csv.writer(f).writerow(row)
 
             history.append({
                 "epoch": epoch_idx,
                 "train_loss": train_loss,
                 "val_loss": val_loss,
+                "train_next_loss": train_next_loss,
+                "val_next_loss": val_next_loss,
                 "perplexity": ppl,
                 "lr": lr_now,
             })
@@ -826,6 +1013,8 @@ def main():
                 "last_epoch": history[-1]["epoch"],
                 "last_val_loss": history[-1]["val_loss"],
                 "last_train_loss": history[-1]["train_loss"],
+                "last_val_next_loss": history[-1].get("val_next_loss"),
+                "last_train_next_loss": history[-1].get("train_next_loss"),
                 "last_perplexity": history[-1]["perplexity"],
             })
             metrics_path = scores_dir / "metrics.json"
@@ -856,6 +1045,8 @@ def main():
             "last_epoch": history[-1]["epoch"],
             "last_val_loss": history[-1]["val_loss"],
             "last_train_loss": history[-1]["train_loss"],
+            "last_val_next_loss": history[-1].get("val_next_loss"),
+            "last_train_next_loss": history[-1].get("train_next_loss"),
             "last_perplexity": history[-1]["perplexity"],
         })
 
