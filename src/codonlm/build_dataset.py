@@ -11,6 +11,7 @@ Args:
 
 from pathlib import Path
 import argparse
+import csv
 import numpy as np
 import random
 from typing import List
@@ -42,11 +43,19 @@ def main():
     seqs = list(load_lines(args.ids))
     # load groups
     groups = []
-    with open(args.group_meta) as f:
-        next(f)
-        for line in f:
-            i,g = line.strip().split("\t")
-            groups.append(g)
+    with open(args.group_meta, newline="") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        if reader.fieldnames is None:
+            raise ValueError(f"group_meta has no header: {args.group_meta}")
+        group_col = "genome" if "genome" in reader.fieldnames else None
+        if group_col is None and "genome_id" in reader.fieldnames:
+            group_col = "genome_id"
+        if group_col is None:
+            raise ValueError(
+                f"group_meta must contain a genome or genome_id column; found {reader.fieldnames}"
+            )
+        for row in reader:
+            groups.append(row[group_col])
     assert len(groups)==len(seqs), "meta and ids must align"
 
     # split by unique groups (fallback to sequence-level split if too few groups)

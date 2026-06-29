@@ -38,7 +38,11 @@ class MultiTaskProteinClassifier(nn.Module):
             for name, dim in task_dims.items()
         })
 
-    def forward(self, input_ids: torch.LongTensor) -> dict:
+    def forward(
+        self,
+        input_ids: torch.LongTensor,
+        attention_mask: torch.Tensor | None = None,
+    ) -> dict:
         """
         Returns a dictionary of logits for each task.
         """
@@ -54,18 +58,25 @@ class MultiTaskProteinClassifier(nn.Module):
             for block in self.backbone.transformer_blocks:
                 try:
                     # Pass use_reentrant=False to silence deprecation warnings in newer PyTorch
-                    x = checkpoint(block, x, use_reentrant=False)
+                    x = checkpoint(
+                        block,
+                        x,
+                        src_key_padding_mask=(attention_mask == 0) if attention_mask is not None else None,
+                        use_reentrant=False,
+                    )
                 except TypeError:
                     x = checkpoint(block, x)
         else:
             for block in self.backbone.transformer_blocks:
-                x = block(x)
+                x = block(
+                    x,
+                    src_key_padding_mask=(attention_mask == 0) if attention_mask is not None else None,
+                )
 
-        # Global Average Pooling (better for functional classification than just BOS)
-        # Or just use BOS for structural tasks.
-        mean_rep = x.mean(dim=1)
-        
-        # Combine? Let's stick to mean-pooling for now.
-        pooled = mean_rep
+        if attention_mask is None:
+            pooled = x.mean(dim=1)
+        else:
+            mask = attention_mask.to(dtype=x.dtype, device=x.device).unsqueeze(-1)
+            pooled = (x * mask).sum(dim=1) / mask.sum(dim=1).clamp_min(1.0)
 
         return {name: head(pooled) for name, head in self.heads.items()}

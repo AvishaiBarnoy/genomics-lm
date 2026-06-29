@@ -111,6 +111,7 @@ All steps read `runs/<run_id>/artifacts.npz` (plus optional labels) and write ch
   * *Phase 3: Gene Essentiality Classification* - linear probing on sequence embeddings.
   * *Phase 4: Comparative Reports* - compute efficiency density reporting vs. Evo 1 and GenSLM.
 * [ ] **Hybrid DNA-Protein Critic Benchmark**: Integrate the Multi-Task Critic as a bidirectional re-feeding filter (Phase 5 of SOTA Benchmarking).
+* [ ] **Protein-Functional CodonLM Objective Track**: Add long-range multi-offset losses, whole-gene truncation audits, calibrated ProteinCritic rescoring, generated hard negatives, and a final d384/d512 ablation to test whether functional protein generation is objective-limited before scaling capacity.
 * [ ] **Protein Latent Energy-Based Model**: Implement latent Langevin dynamics and NCE training for stability design.
 * [ ] **Multi-Frame Overlapping Gene Modeling**: Sum frame-shift positional context embeddings to predict overprinted genes in viral/bacterial genomes.
 * [ ] **Training Speed & Memory Optimization**: Implement GQA, memory-mapped data loaders, and batch bucketing by length to optimize pre-training throughput.

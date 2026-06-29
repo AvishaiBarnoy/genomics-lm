@@ -86,4 +86,12 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [ ] **Track: PDB-Filtered Structural Fine-Tuning**
 *Link: [./tracks/pdb_structural_finetuning_20260616/](./tracks/pdb_structural_finetuning_20260616/)*
-*Summary: Opened as the direct path toward a structural training signal. Starter filter utility, tests, and a conservative Stage 3 fine-tuning config exist; the current blocker is that Stage 2.6 CDS metadata lacks protein/gene identifiers for automatic UniProt/PDB joins, so the first supported path uses curated source line indices.*
+*Summary: Operational structural-training-signal path. Metadata enrichment and exact translated-CDS-to-UniProt structure filtering are implemented; 884/44,953 CDS were selected and the full 3-epoch Stage 3 run improved structure-subset validation loss/perplexity (4.088 → 4.068; ppl 59.75 → 58.45). Next required step is a matched ESMFold comparison to determine whether this improves pLDDT.*
+
+- [ ] **Track: Structural-Aware ProteinCritic**
+*Link: [./tracks/structural_aware_protein_critic_20260616/](./tracks/structural_aware_protein_critic_20260616/)*
+*Summary: Protein-type labels, dynamic protein batching, masked pooling, safe transfer training, imbalance-aware `pos_weight`, and calibrated threshold/top-fraction evaluation are implemented. The weighted critic improves rare-label ranking but hurts raw probability calibration; keep open for generated-library rescoring and integration into selection loops.*
+
+- [ ] **Track: Long-Range CodonLM Objectives**
+*Link: [./tracks/long_range_codon_objectives_20260616/](./tracks/long_range_codon_objectives_20260616/)*
+*Summary: Next active implementation target. Add config-gated multi-offset future-token losses (`+4/+8/+16/+32`), whole-gene truncation audits, generated-library rescoring with calibrated critics, hard-negative preparation, and a final d384/d512 capacity ablation only after objective/data changes are evaluated.*

@@ -20,6 +20,7 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
+import yaml
 
 from src.codonlm.model_tiny_gpt import TinyGPT
 
@@ -63,9 +64,17 @@ def _load_checkpoint(run_dir: Path) -> Tuple[Dict, Dict]:
 def _load_vocab(run_dir: Path) -> Tuple[List[str], Dict[str, int]]:
     itos_path = run_dir / "itos.txt"
     if not itos_path.exists():
-        raise FileNotFoundError(
-            f"Missing itos.txt at {itos_path}. Run analysis/post_process first or provide labels."
-        )
+        cfg_path = run_dir / "checkpoints" / "config.yaml"
+        if cfg_path.exists():
+            cfg = yaml.safe_load(cfg_path.read_text()) or {}
+            fallback = cfg.get("itos_path")
+            if fallback and Path(fallback).exists():
+                itos_path = Path(fallback)
+        if not itos_path.exists():
+            raise FileNotFoundError(
+                f"Missing itos.txt at {run_dir / 'itos.txt'} and no usable itos_path "
+                "was found in checkpoints/config.yaml."
+            )
     tokens = [
         line.strip() for line in itos_path.read_text().splitlines() if line.strip()
     ]
