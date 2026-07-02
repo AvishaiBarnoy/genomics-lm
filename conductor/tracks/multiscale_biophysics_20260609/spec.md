@@ -26,8 +26,17 @@ Moving to a full nucleotide model increases token count by $3\times$ and attenti
 * **Goal**: Enable single-nucleotide resolution *only* at regulatory boundaries (promoters, operators, terminators) while keeping coding regions compressed.
 * **Vocabulary**: Blend of 64 codons + 4 single nucleotides + structural boundary tags.
 * **Grammar**: The dataset tokenizes coding sequences (CDS) as codons ($3\times$ compression) and intergenic/UTR regions as single nucleotides (1 bp resolution).
+* **Transfer-learning shortcut**: initialize the hybrid model from the latest codon-only CodonLM checkpoint, copying all shared transformer weights and shared token rows by token name. This preserves learned coding-sequence grammar while only learning the new UTR/nucleotide rows and boundary behavior during a short fine-tune.
 
 ### C. Energy-Based mRNA Optimizer (EBM)
 * **Goal**: Train a global, bidirectional model to optimize synonymous codon sequences for thermodynamic stability.
 * **Boltzmann Distribution**: $P(x) \propto e^{-E(x)/kT}$ where energy directly maps to folding free energy ($\Delta G$).
 * **Langevin Dynamics**: Use gradient-guided MCMC to optimize candidate sequences by lowering structural energy.
+
+---
+
+## 3. Success Criteria
+1. **Grammar Validity:** 100% syntactical validation on hybrid sequences (all coding regions use codons, all UTR regions use single nucleotides, bounded exactly by structural boundary tags).
+2. **Initialization Fidelity:** Load and map $\ge 95\%$ of baseline transformer weights by token name during transfer learning.
+3. **Inference Overhead:** Dual-track late fusion incurs $\le 15\%$ increase in total number of model FLOPs/forward-calls compared to baseline.
+4. **Physical Structure Reconstruction:** Generated UTR regions demonstrate non-zero structural motif replication (e.g. reproducing poly-T and hairpin motifs matching reference statistics).

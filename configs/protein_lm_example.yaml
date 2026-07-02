@@ -24,6 +24,9 @@ training:
   lr: 0.0003                # Learning rate peak
   weight_decay: 0.01        # L2 weight decay strength
   epochs: 10                # Number of training epochs
+  max_time_minutes: 180     # Bounded wall-time limit
+  checkpoint_every_steps: 25 # Save last.pt every N optimizer steps for resilience
+  checkpoint_every_minutes: 0 # Optional time-based periodic checkpoint interval
 
 # Data File Paths
 data:
@@ -55,6 +58,8 @@ grad_accum_steps: 16        # Gradient accumulation steps (Simulates Batch Size 
 epochs: 12                  # Total training epochs
 lr: 0.0001                  # Learning rate peak
 max_time_minutes: 180       # Bounded wall-time limit (exit gracefully if reached mid-epoch)
+checkpoint_every_steps: 25  # Save last_critic.pt every N optimizer steps for crash/sleep resilience
+checkpoint_every_minutes: 0 # Optional time-based periodic checkpoint interval
 
 # Output Destination
 out_dir: "runs/protein_critic_12L8H/checkpoints" # Folder to save best_critic.pt and last_critic.pt

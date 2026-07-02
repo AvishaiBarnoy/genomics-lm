@@ -1,0 +1,66 @@
+# Generated-prefix replay correction for the physical termination run.
+#
+# First build replay records from the failed hard-cap generations:
+# python -m scripts.build_generated_prefix_replay \
+#   --run_id 2026-06-19_physical_termination_transfer_mps_b4_e1 \
+#   --ckpt best.pt \
+#   --device mps \
+#   --preset quick \
+#   --out runs/2026-06-19_physical_termination_transfer_mps_b4_e1/scores/generated_prefix_replay.jsonl
+#
+# Then train from the physical-termination checkpoint:
+# caffeinate -i python -m src.codonlm.train_codon_lm \
+#   --config configs/physical_termination_replay.yaml \
+#   --run_id 2026-06-24_physical_termination_replay_mps_b4_e1
+
+vocab_size: 74
+block_size: 512
+n_layer: 10
+n_head: 8
+n_embd: 384
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+use_sdpa: true
+sep_mask_enabled: false
+amp: false
+
+transfer_from: "runs/2026-06-19_physical_termination_transfer_mps_b4_e1/checkpoints/best.pt"
+
+itos_path: "data/processed/ecoli_k12_hybrid/itos_hybrid.txt"
+train_npz: "data/processed/combined_hybrid/2026-06-19_physical_termination_transfer_mps_b4/train_bs512.npz"
+val_npz: "data/processed/combined_hybrid/2026-06-19_physical_termination_transfer_mps_b4/val_bs512.npz"
+test_npz: "data/processed/combined_hybrid/2026-06-19_physical_termination_transfer_mps_b4/test_bs512.npz"
+
+termination_loss_enabled: true
+termination_loss_weight: 0.1
+termination_stop_ids: [2]
+termination_bucket_edges: [0, 3, 10, 30]
+termination_n_classes: 5
+
+replay_loss_enabled: true
+replay_loss_weight: 0.2
+replay_batch_size: 4
+replay_data: "runs/2026-06-19_physical_termination_transfer_mps_b4_e1/scores/generated_prefix_replay.jsonl"
+
+batch_size: 4
+grad_accum_steps: 32
+epochs: 1
+lr: 0.000002
+min_lr: 0.0000002
+weight_decay: 0.05
+warmup_steps: 25
+early_stop_patience: 10
+force_gpu: true
+checkpoint_every_steps: 25
+checkpoint_every_minutes: 15
+
+use_mmap: true
+bucket_batching: true
+n_buckets: 8
+num_workers: 0
+pin_memory: false
+
+out_dir: "runs/physical_termination_replay/checkpoints"
+scores_dir: "runs/physical_termination_replay/scores"
+

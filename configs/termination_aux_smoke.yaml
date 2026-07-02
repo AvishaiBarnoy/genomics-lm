@@ -1,0 +1,49 @@
+# Termination auxiliary objective smoke config.
+# Starts from the latest backed-up Stage 2.6 checkpoint and adds a supervised
+# distance-to-stop signal while keeping the main CodonLM objective intact.
+
+vocab_size: 69
+block_size: 512
+n_layer: 10
+n_head: 8
+n_embd: 384
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+use_sdpa: true
+sep_mask_enabled: true
+amp: false
+
+transfer_from: "runs/2026-06-15_stage2.6_10L8H_d384_e10/checkpoints/best.pt"
+
+itos_path: "data/processed/itos_codon.txt"
+train_npz: "data/processed/stage2.6_large_master_pack/train_bs512.npz"
+val_npz: "data/processed/stage2.6_large_master_pack/val_bs512.npz"
+test_npz: "data/processed/stage2.6_large_master_pack/test_bs512.npz"
+
+termination_loss_enabled: true
+termination_loss_weight: 0.1
+termination_stop_ids: [2]
+termination_bucket_edges: [0, 3, 10, 30]
+termination_n_classes: 5
+
+batch_size: 4
+grad_accum_steps: 32
+epochs: 2
+lr: 0.00001
+min_lr: 0.000001
+weight_decay: 0.05
+warmup_steps: 50
+early_stop_patience: 10
+force_gpu: true
+checkpoint_every_steps: 10
+checkpoint_every_minutes: 0
+
+use_mmap: true
+bucket_batching: true
+n_buckets: 8
+num_workers: 0
+pin_memory: false
+
+out_dir: "runs/termination_aux_smoke/checkpoints"
+scores_dir: "runs/termination_aux_smoke/scores"

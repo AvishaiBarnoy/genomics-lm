@@ -27,3 +27,26 @@ def test_sdpa_forward():
     logits, _ = m(x)
     assert logits.shape == (2, 8, 32)
 
+
+def test_termination_aux_forward_preserves_default_api():
+    m = TinyGPT(
+        vocab_size=32,
+        block_size=16,
+        n_layer=1,
+        n_head=2,
+        n_embd=16,
+        dropout=0.0,
+        termination_aux=True,
+        termination_n_classes=5,
+    )
+    x = torch.randint(0, 32, (2, 8))
+    y = torch.randint(0, 32, (2, 8))
+
+    logits, loss = m(x, y)
+    assert logits.shape == (2, 8, 32)
+    assert loss is not None
+
+    logits, loss, aux = m(x, y, return_aux=True)
+    assert logits.shape == (2, 8, 32)
+    assert loss is not None
+    assert aux["termination_logits"].shape == (2, 8, 5)

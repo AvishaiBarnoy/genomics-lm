@@ -22,6 +22,7 @@ import numpy as np
 import torch
 import yaml
 
+from src.codonlm.checkpoints import build_codon_model_from_cfg, load_codon_checkpoint
 from src.codonlm.model_tiny_gpt import TinyGPT
 
 
@@ -34,31 +35,13 @@ def dev() -> torch.device:
 
 
 def _load_checkpoint(run_dir: Path) -> Tuple[Dict, Dict]:
-    # Try consolidated layout checkpoints path first
-    ckpt_path = run_dir / "checkpoints" / "best.pt"
-    if not ckpt_path.exists():
-        ckpt_path = run_dir / "checkpoints" / "weights.pt"
-    if not ckpt_path.exists():
-        ckpt_path = run_dir / "checkpoints" / "best_critic.pt"
-
-    # Try legacy run_dir base path
-    if not ckpt_path.exists():
-        ckpt_path = run_dir / "weights.pt"
-
-    # Try old outputs/checkpoints fallback
-    if not ckpt_path.exists():
-        alt = Path("outputs/checkpoints") / run_dir.name / "best.pt"
-        if alt.exists():
-            ckpt_path = alt
-
-    if not ckpt_path.exists():
-        raise FileNotFoundError(
-            f"Checkpoint not found under {run_dir} or legacy outputs/checkpoints/{run_dir.name}/best.pt"
-        )
-    state = torch.load(ckpt_path, map_location="cpu")
-    if isinstance(state, dict) and "model" in state:
-        return state["model"], state.get("cfg", {})
-    return state, {}
+    try:
+        state_dict, cfg, _ = load_codon_checkpoint(run_dir)
+        return state_dict, cfg
+    except FileNotFoundError:
+        alt = Path("outputs/checkpoints") / run_dir.name
+        state_dict, cfg, _ = load_codon_checkpoint(alt)
+        return state_dict, cfg
 
 
 def _load_vocab(run_dir: Path) -> Tuple[List[str], Dict[str, int]]:
@@ -103,26 +86,30 @@ def dna_to_ids(dna: str, stoi: Dict[str, int]) -> List[int]:
     return arr
 
 
+def dna_prefix_to_ids(dna: str, stoi: Dict[str, int]) -> List[int]:
+    dna = dna.strip().upper().replace("U", "T")
+    if len(dna) < 3:
+        return []
+    L = len(dna) // 3 * 3
+    bos = stoi.get("<BOS_CDS>", None)
+    arr: List[int] = []
+    if bos is not None:
+        arr.append(bos)
+    for i in range(0, L, 3):
+        codon = dna[i : i + 3]
+        idx = stoi.get(codon)
+        if idx is None:
+            raise ValueError(f"Unknown codon: {codon}")
+        arr.append(idx)
+    return arr
+
+
 def ids_to_codons(ids: List[int], itos: List[str]) -> List[str]:
     return [itos[i] if 0 <= i < len(itos) else f"<{i}>" for i in ids]
 
 
 def build_model_from_state(state_dict: Dict, cfg: Dict) -> TinyGPT:
-    # Pull model dims from cfg saved in checkpoint
-    required = ["vocab_size", "block_size", "n_layer", "n_head", "n_embd"]
-    missing = [k for k in required if k not in cfg]
-    if missing:
-        raise RuntimeError(f"Checkpoint missing model config fields: {missing}")
-    model = TinyGPT(
-        vocab_size=int(cfg["vocab_size"]),
-        block_size=int(cfg["block_size"]),
-        n_layer=int(cfg["n_layer"]),
-        n_head=int(cfg["n_head"]),
-        n_embd=int(cfg["n_embd"]),
-        dropout=float(cfg.get("dropout", 0.0)),
-        use_checkpoint=False,
-        label_smoothing=float(cfg.get("label_smoothing", 0.0)),
-    )
+    model = build_codon_model_from_cfg(cfg)
     model.load_state_dict(state_dict, strict=False)
     model.eval()
     return model

@@ -9,6 +9,12 @@ from pathlib import Path
 from src.protein_lm.tokenizer import ProteinTokenizer
 from src.protein_lm.models_multi import MultiTaskProteinClassifier
 from src.protein_lm.config import ProteinClassifierConfig
+from src.training.runtime import (
+    PeriodicCheckpointPolicy,
+    RunLogger,
+    WallTimer,
+    save_checkpoint_atomic,
+)
 
 class MultiTaskProteinDataset(Dataset):
     def __init__(self, jsonl_path, tokenizer, max_length=512, dynamic_padding=False, multi_label_tasks=None):
@@ -286,6 +292,7 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
 
     best_val_loss = float('inf')
     start_epoch = 0
+    optimizer_step = 0
     if resume_path and Path(resume_path).exists():
         print(f"[*] Resuming from checkpoint: {resume_path}", flush=True)
         checkpoint = torch.load(resume_path, map_location=device)
@@ -293,6 +300,7 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         start_epoch = checkpoint['epoch'] + 1
         best_val_loss = checkpoint.get('best_val_loss', float('inf'))
+        optimizer_step = int(checkpoint.get('optimizer_step', 0))
         print(
             f"[*] Resumed checkpoint. Next epoch: {start_epoch + 1} "
             f"with best val loss: {best_val_loss:.4f}",
@@ -312,11 +320,8 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
     )
     
     max_time_minutes = cfg.get("max_time_minutes", None)
-    max_time_seconds = max_time_minutes * 60 if max_time_minutes else None
     if max_time_minutes:
         print(f"[*] Wall-time limit configured: {max_time_minutes} minutes", flush=True)
-    
-    start_time = time.perf_counter()
     
     if not run_id:
         run_id = cfg.get("run_id", None)
@@ -332,6 +337,8 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
     
     out_dir.mkdir(parents=True, exist_ok=True)
     scores_dir.mkdir(parents=True, exist_ok=True)
+    run_logger = RunLogger(runs_dir / "logs" / "train.log")
+    run_logger.__enter__()
     
     log_csv = scores_dir / "curves.csv"
     import csv
@@ -340,6 +347,28 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
             csv.writer(f).writerow(["epoch", "train_loss", "val_loss"])
     
     time_limit_reached = False
+    wall_timer = WallTimer(max_time_minutes)
+    checkpoint_policy = PeriodicCheckpointPolicy(
+        every_steps=int(cfg.get("checkpoint_every_steps", 0) or 0),
+        every_minutes=float(cfg.get("checkpoint_every_minutes", 0.0) or 0.0),
+    )
+    def checkpoint_payload(epoch_idx: int) -> dict:
+        return {
+            'epoch': epoch_idx,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'best_val_loss': best_val_loss,
+            'optimizer_step': optimizer_step,
+            'cfg': cfg,
+        }
+
+    def save_last(epoch_idx: int, reason: str) -> None:
+        payload = checkpoint_payload(epoch_idx)
+        payload["checkpoint_reason"] = reason
+        save_checkpoint_atomic(payload, out_dir / "last_critic.pt")
+        checkpoint_policy.mark_saved(optimizer_step)
+        print(f"[checkpoint] saved {out_dir / 'last_critic.pt'} reason={reason} step={optimizer_step}")
+
     for epoch in range(start_epoch, epochs):
         if time_limit_reached:
             break
@@ -381,9 +410,12 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
             if (step + 1) % grad_accum_steps == 0 or (step + 1) == len(train_loader):
                 optimizer.step()
                 optimizer.zero_grad()
+                optimizer_step += 1
                 
                 if device.type == "mps":
                     torch.mps.empty_cache()
+                if checkpoint_policy.should_save(optimizer_step):
+                    save_last(epoch, reason="periodic")
             elif (step + 1) % 250 == 0 and device.type == "mps":
                 torch.mps.empty_cache()
 
@@ -408,9 +440,9 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
                 print(f"[checkpoint] Saved step checkpoint to {step_checkpoint}", flush=True)
 
             # Check wall-time limit at the end of every step
-            if max_time_seconds and (time.perf_counter() - start_time) > max_time_seconds:
+            if wall_timer.expired():
                 print(f"\n[info] Wall-time limit of {max_time_minutes} minutes reached mid-epoch.", flush=True)
-                save_training_checkpoint(out_dir / "last_critic.pt", epoch, model, optimizer, best_val_loss)
+                save_last(epoch, reason="wall_time")
                 print(f"[success] Gracefully saved checkpoint to {out_dir / 'last_critic.pt'}. Exiting.", flush=True)
                 time_limit_reached = True
                 break
@@ -462,10 +494,10 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
             improved = True
 
         # Save last checkpoint for resilience
-        save_training_checkpoint(out_dir / "last_critic.pt", epoch, model, optimizer, best_val_loss)
+        save_last(epoch, reason="epoch")
 
         if improved:
-            torch.save(model.state_dict(), out_dir / "best_critic.pt")
+            save_checkpoint_atomic(model.state_dict(), out_dir / "best_critic.pt")
             print("  -> Saved new best model.", flush=True)
 
 if __name__ == "__main__":

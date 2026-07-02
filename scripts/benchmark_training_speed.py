@@ -44,44 +44,17 @@ def _build_model(cfg: dict, device: torch.device):
 
 
 def _build_loader(cfg: dict):
-    from src.codonlm.train_codon_lm import (
-        PackedDataset, MmapPackedDataset, BucketBatchSampler,
+    from src.codonlm.data_loading import (
+        build_codon_lm_dataloaders,
+        build_codon_lm_datasets,
     )
-    from torch.utils.data import DataLoader
 
     train_npz = cfg.get("train_npz", cfg.get("train_paths", []))
     if isinstance(train_npz, str):
         train_npz = [train_npz]
 
-    use_mmap = bool(cfg.get("use_mmap", False))
-    DatasetCls = MmapPackedDataset if use_mmap else PackedDataset
-    ds = DatasetCls(train_npz)
-
-    collate_fn = None
-    if getattr(ds, "is_dynamic", False):
-        def collate_fn(batch):
-            lengths = [len(s) for s in batch]
-            max_len = max(lengths)
-            xs, ys = [], []
-            for seq in batch:
-                x = seq[:-1]; y = seq[1:]
-                pad = (max_len - 1) - len(x)
-                if pad > 0:
-                    x = torch.cat([x, torch.zeros(pad, dtype=torch.long)])
-                    y = torch.cat([y, torch.zeros(pad, dtype=torch.long)])
-                xs.append(x); ys.append(y)
-            return torch.stack(xs), torch.stack(ys)
-
-    bucket_batching = bool(cfg.get("bucket_batching", False))
-    batch_size = cfg["batch_size"]
-
-    if bucket_batching and getattr(ds, "is_dynamic", False) and hasattr(ds, "seq_lengths"):
-        lengths = ds.seq_lengths
-        sampler = BucketBatchSampler(lengths, batch_size=batch_size, n_buckets=8, shuffle=True)
-        loader = DataLoader(ds, batch_sampler=sampler, collate_fn=collate_fn)
-    else:
-        loader = DataLoader(ds, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
-
+    ds, val_ds = build_codon_lm_datasets(train_npz, train_npz, use_mmap=bool(cfg.get("use_mmap", False)))
+    loader, _, _, _ = build_codon_lm_dataloaders(ds, val_ds, cfg)
     return loader
 
 

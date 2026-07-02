@@ -28,3 +28,7 @@ This track governs the preparation, drafting, review, and rehearsal of the `geno
     *   Multi-task Protein Critic classification (stability, Pfam, EC).
     *   Attention weight maps.
 4.  **Dry-Run Verification:** A recorded or timed rehearsal of the talk (targeting 30–40 minutes depending on the hayaData slot structure).
+
+## 4. Success Criteria
+1. **Deterministic Figure Output:** All manuscript figures (UMAP embedding projections, head-level attention heatmaps, and structural regression charts) generate and save with zero runtime errors.
+2. **Slide Compilation:** A reproducible slide deck compiles to PDF under `outputs/reports/hayadata/`.

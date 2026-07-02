@@ -1,4 +1,15 @@
-from scripts.eval_generation_prefix import _ngram_repeat_ratio, _codon_to_aa, _score_stop_behavior
+import torch
+from pathlib import Path
+
+from scripts import query_model as Q
+from scripts.eval_generation_prefix import (
+    _codon_to_aa,
+    _load_vocab_for_run,
+    _model_spec_from,
+    _ngram_repeat_ratio,
+    _score_stop_behavior,
+    _select_device,
+)
 
 
 def test_ngram_repeat_ratio_simple():
@@ -24,3 +35,50 @@ def test_stop_behavior_scoring():
     score2, valid2, _ = _score_stop_behavior(codons2, truth_len_codons=4)
     assert not valid2 and 0.0 <= score2 < 1.0
 
+
+def test_select_device_cpu():
+    assert _select_device("cpu") == torch.device("cpu")
+
+
+def test_model_spec_falls_back_to_checkpoint_cfg():
+    ckpt = {
+        "cfg": {
+            "vocab_size": 69,
+            "block_size": 512,
+            "n_layer": 10,
+            "n_head": 8,
+            "n_embd": 384,
+        }
+    }
+    assert _model_spec_from({"model_spec": {}}, ckpt) == {
+        "vocab_size": 69,
+        "block_size": 512,
+        "n_layer": 10,
+        "n_head": 8,
+        "n_embd": 384,
+    }
+
+
+def test_load_vocab_falls_back_to_cfg_itos_path(tmp_path: Path):
+    repo = tmp_path
+    run_dir = tmp_path / "runs" / "run_without_root_vocab"
+    run_dir.mkdir(parents=True)
+    vocab_path = tmp_path / "data" / "processed" / "itos_codon.txt"
+    vocab_path.parent.mkdir(parents=True)
+    vocab_path.write_text("<PAD>\n<BOS_CDS>\nATG\n")
+
+    itos, stoi = _load_vocab_for_run(
+        run_dir,
+        repo,
+        {"itos_path": "data/processed/itos_codon.txt"},
+    )
+
+    assert itos == ["<PAD>", "<BOS_CDS>", "ATG"]
+    assert stoi["ATG"] == 2
+
+
+def test_dna_prefix_to_ids_omits_eos_marker():
+    stoi = {"<BOS_CDS>": 1, "<EOS_CDS>": 2, "ATG": 3, "AAA": 4}
+
+    assert Q.dna_to_ids("ATGAAA", stoi) == [1, 3, 4, 2]
+    assert Q.dna_prefix_to_ids("ATGAAA", stoi) == [1, 3, 4]

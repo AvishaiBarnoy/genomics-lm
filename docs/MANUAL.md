@@ -52,8 +52,9 @@ You can configure training runs using YAML files under `configs/`. Complete temp
 *   **Data Packing & Masking:**
     *   `pack_mode`: Dataset format, either `single` (one CDS per window) or `multi` (sequences packed).
     *   `sep_mask_enabled`: Enable attention masking across `<SEP>` boundaries in packed mode.
-*   **Transfer Learning / Resumption:**
+*   **Transfer Learning / Resumption / Freezing:**
     *   `transfer_from`: Path to pre-trained weights `.pt` file to initialize model parameters while discarding optimizer state.
+    *   `freeze_backbone`: Set to `true` to freeze all transformer layers and standard prediction heads, training only the auxiliary projection heads.
 *   **Optimizer & Scheduler:**
     *   `optimizer`: Select `"adamw"` or `"adafactor"` (reduces memory footprint).
     *   `lr`: Peak learning rate.
@@ -65,9 +66,83 @@ You can configure training runs using YAML files under `configs/`. Complete temp
     *   `grad_accum_steps`: Accumulate gradients over this many steps to simulate large batch sizes.
     *   `early_stop_patience`: Stop training after this many epochs without validation loss improvements.
     *   `max_time_minutes`: Limit training run duration. Saves checkpoint and exits gracefully if exceeded.
+    *   `batch_optimizer`: Optional section for benchmarking `batch_size` / `grad_accum_steps` candidates before a long run.
 *   **Output Directories:**
     *   `out_dir`: Location to save checkpoints.
     *   `scores_dir`: Location to save diagnostics.
+*   **Look-Ahead Multi-Offset Projections (Stage 2.6+):**
+    *   `multi_offset_loss_enabled`: Set to `true` to train auxiliary future-prediction heads.
+    *   `multi_offset_targets`: List of integer offsets to predict (e.g. `[2, 4, 8, 16, 32]`).
+    *   `multi_offset_weights`: Map of target offsets to their loss scaling factors (e.g. `2: 0.10, 4: 0.10`).
+
+### Batch/Accumulation Optimizer
+
+Before a long CodonLM run, benchmark physical batch size and gradient
+accumulation settings on the real model/dataset:
+
+```bash
+python -m scripts.optimize_train_batching \
+  --config configs/physical_termination_transfer.yaml \
+  --run_id 2026-06-19_physical_termination_transfer_mps_b4_e1 \
+  --benchmark
+```
+
+To benchmark and then automatically start/resume training with the fastest safe
+setting:
+
+```bash
+caffeinate -i python -m scripts.optimize_train_batching \
+  --config configs/physical_termination_transfer.yaml \
+  --run_id 2026-06-19_physical_termination_transfer_mps_b4_e1 \
+  --resume runs/2026-06-19_physical_termination_transfer_mps_b4_e1/checkpoints/last.pt \
+  --optimize
+```
+
+For normal long runs, prefer `main.sh`. If the config contains an enabled
+`batch_optimizer` block, `main.sh` routes training through
+`scripts.optimize_train_batching`; otherwise it calls `src.codonlm.train_codon_lm`
+directly. Cached optimizer results are reused unless `--force` is passed or
+`batch_optimizer.force: true` is set:
+
+```bash
+caffeinate -i ./main.sh \
+  --config configs/physical_termination_transfer.yaml \
+  --resume runs/2026-06-19_physical_termination_transfer_mps_b4_e1/checkpoints/last.pt
+```
+
+The same behavior can be configured in YAML:
+
+```yaml
+batch_optimizer:
+  enabled: true
+  mode: benchmark        # benchmark | optimize
+  force: false           # true reruns benchmark even if cached results match
+  include_current: true  # also benchmark top-level batch_size/grad_accum_steps
+  candidates:
+    - [2, 16]
+    - [4, 16]
+    - [4, 32]
+    - [8, 16]
+    - [8, 32]
+  warmup_steps: 20
+  measure_steps: 100
+  force_gpu: true
+```
+
+Outputs are written to `runs/<RUN_ID>/scores/batch_optimizer/`. By default,
+`include_current: true` prepends the top-level `batch_size` / `grad_accum_steps`
+pair to the candidate list and deduplicates it, so the known manual setting is
+always tested. Matching cached benchmark results are reused on later runs; set
+`batch_optimizer.force: true` or pass `--force` to rerun the sweep. The optimizer
+uses subprocesses for each candidate so OOM/allocation failures can be recorded
+without aborting the whole benchmark. With `force_gpu: true`, it fails fast if
+the run would fall back to CPU instead of MPS/CUDA.
+
+When resuming mid-epoch, do not force a new sweep unless needed. If `--force`
+selects a different `batch_size` or `grad_accum_steps` than the checkpoint used,
+the trainer restores model/optimizer state but ignores the old mid-epoch skip
+position and restarts the current epoch from batch 0. That is safe, but it
+replays already-seen examples.
 
 ### Stage‑2 Classifiers
 
@@ -103,6 +178,18 @@ python -m scripts.infer_score_mutations --run_dir runs/<RUN_ID>/checkpoints --se
     --max_aa_len 400 --require_terminal_stop --special_margin 6
 - Constraint: k + target_aa_len + special_margin ≤ block_size (from the model config). Lower target_aa_len or increase block_size if violated.
 - Outputs add AA length stats (mean/median), terminal stop rate, hard‑cap rate, and an extra plot `aa_len_vs_k.png`.
+- Runs trained with the termination auxiliary head can test decoder-side stop
+  guidance:
+  - python -m scripts.eval_generation_prefix --run_id <RUN_ID> --ckpt best.pt \
+    --device mps --preset quick --termination_bias --termination_stop_bias 5.0 \
+    --termination_trigger_class_max 4 --termination_bias_window 5
+  The bias window gates stop pressure to the last N codons before the target
+  length so stop guidance does not collapse into short peptides.
+- Runs trained with multi-offset prior projection heads can evaluate look-ahead prior-guided decoding:
+  - python -m scripts.eval_generation_prefix --run_id <RUN_ID> --ckpt best.pt \
+    --device cpu --preset quick --multi_offset_prior \
+    --multi_offset_prior_weights '{"2": 0.05, "4": 0.05, "8": 0.05, "16": 0.03, "32": 0.02}'
+  The look-ahead weights bias decoding logits towards target structural features (e.g. helices at $x=4$ and sheets at $x=2$).
 
 ### Benchmarking & Evaluation
 

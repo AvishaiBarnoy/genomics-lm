@@ -14,7 +14,6 @@ import argparse
 import sys
 import subprocess
 import os
-from pathlib import Path
 
 def run_cmd(cmd, env=None):
     print(f"\n[*] Executing: {' '.join(cmd)}")
@@ -42,10 +41,10 @@ def main():
     mode = args.mode
     device = args.device
 
-    print(f"===========================================================")
+    print("===========================================================")
     print(f"Starting Unified Evaluation Suite for: {run_id}")
     print(f"Mode: {mode.upper()} | Device: {device.upper()}")
-    print(f"===========================================================")
+    print("===========================================================")
 
     # Ensure python paths/etc
     python_bin = sys.executable
@@ -92,6 +91,8 @@ def main():
     cmd_gen = [
         python_bin, "-m", "scripts.eval_generation_prefix",
         "--run_id", run_id,
+        "--device", device,
+        "--preset", "quick",
         "--max_genes", str(args.max_genes),
         "--samples", str(args.samples),
         "--max_new", "100"

@@ -2,10 +2,7 @@
 
 ## Goal
 
-Teach CodonLM longer-range coding constraints without replacing the standard
-causal next-token objective. The first implementation adds future-token
-auxiliary losses and whole-gene truncation audits so we can test whether the
-current `d384` model is objective-limited before scaling to `d512`.
+Teach CodonLM longer-range coding constraints without replacing the standard causal next-token objective. The first implementation adds future-token auxiliary losses and whole-gene truncation audits so we can test whether the current `d384` model is objective-limited before scaling to `d512`.
 
 ## Scope
 
@@ -19,5 +16,8 @@ current `d384` model is objective-limited before scaling to `d512`.
 
 - Do not replace causal LM training.
 - Do not start preference/RL training in the first pass.
-- Do not approve `d512` scaling until objective/data ablations improve generated
-  protein metrics without damaging termination or next-token perplexity.
+- Do not approve `d512` scaling until objective/data ablations improve generated protein metrics without damaging termination or next-token perplexity.
+
+## Success Criteria
+1. **Stop Boundary Safety:** Masking logic ensures 100% of future offset calculations ignore codons crossing `<EOS_CDS>` or `<SEP>` boundaries.
+2. **Generation Metric Preservation:** Auxiliary training improves long-range structure prediction scores (e.g., secondary structure regression $R^2$ scores increase by $\ge 10\%$) without increasing primary next-codon validation perplexity.

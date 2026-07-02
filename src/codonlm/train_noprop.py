@@ -16,7 +16,9 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 
 from .model_tiny_gpt import NoPropTinyGPT
-from .train_codon_lm import PackedDataset, _ensure_path_list, _normalize_run_id, _auto_run_id, _prepare_output_dirs
+from .data_loading import PackedDataset, dynamic_lm_collate_fn
+from .train_codon_lm import _ensure_path_list, _normalize_run_id, _auto_run_id, _prepare_output_dirs
+from src.training.runtime import save_checkpoint_atomic
 
 def main():
     ap = argparse.ArgumentParser()
@@ -47,23 +49,7 @@ def main():
     train_ds = PackedDataset(train_paths)
     val_ds = PackedDataset(val_paths)
 
-    collate_fn = None
-    if getattr(train_ds, "is_dynamic", False):
-        def dynamic_collate_fn(batch):
-            lengths = [len(seq) for seq in batch]
-            max_len = max(lengths)
-            xs, ys = [], []
-            for seq in batch:
-                x_seq = seq[:-1]
-                y_seq = seq[1:]
-                pad_len = (max_len - 1) - len(x_seq)
-                if pad_len > 0:
-                    x_seq = torch.cat([x_seq, torch.zeros(pad_len, dtype=torch.long)])
-                    y_seq = torch.cat([y_seq, torch.zeros(pad_len, dtype=torch.long)])
-                xs.append(x_seq)
-                ys.append(y_seq)
-            return torch.stack(xs), torch.stack(ys)
-        collate_fn = dynamic_collate_fn
+    collate_fn = dynamic_lm_collate_fn if getattr(train_ds, "is_dynamic", False) else None
 
     train_loader = DataLoader(train_ds, batch_size=cfg["batch_size"], shuffle=True, collate_fn=collate_fn)
     val_loader = DataLoader(val_ds, batch_size=cfg["batch_size"], collate_fn=collate_fn)
@@ -211,7 +197,7 @@ def main():
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             ckpt_path = ckpt_root / "best.pt"
-            torch.save({
+            save_checkpoint_atomic({
                 "model": model.state_dict(),
                 "epoch": epoch,
                 "val_loss": avg_val_loss

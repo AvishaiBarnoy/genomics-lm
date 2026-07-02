@@ -85,15 +85,40 @@ class Block(nn.Module):
         return x
 
 class TinyGPT(nn.Module):
-    def __init__(self, vocab_size, block_size, n_layer=3, n_head=4, n_embd=256, dropout=0.1, use_checkpoint=False, label_smoothing: float = 0.0, sep_id: int | None = 3, tie_embeddings: bool = True, n_kv_head: int | None = None, use_sdpa: bool = False, loss_weights: list[float] | None = None):
+    def __init__(
+        self,
+        vocab_size,
+        block_size,
+        n_layer=3,
+        n_head=4,
+        n_embd=256,
+        dropout=0.1,
+        use_checkpoint=False,
+        label_smoothing: float = 0.0,
+        sep_id: int | None = 3,
+        tie_embeddings: bool = True,
+        n_kv_head: int | None = None,
+        use_sdpa: bool = False,
+        loss_weights: list[float] | None = None,
+        termination_aux: bool = False,
+        termination_n_classes: int = 5,
+        multi_offset_targets: list[int] | None = None,
+    ):
         super().__init__()
         self.block_size = block_size
+        self.vocab_size = vocab_size
+        self.n_layer = n_layer
+        self.n_head = n_head
+        self.n_embd = n_embd
+        self.dropout_p = float(dropout)
         self.use_checkpoint = use_checkpoint
         self.label_smoothing = float(label_smoothing)
         self.sep_id = sep_id
         self.tie_embeddings = bool(tie_embeddings)
         self.n_kv_head = n_kv_head if (n_kv_head is not None and n_kv_head > 0) else None
         self.use_sdpa = bool(use_sdpa)
+        self.termination_aux = bool(termination_aux)
+        self.termination_n_classes = int(termination_n_classes)
         self.tok_emb = nn.Embedding(vocab_size, n_embd)
         self.pos_emb = nn.Embedding(block_size, n_embd)
         self.drop = nn.Dropout(dropout)
@@ -102,13 +127,54 @@ class TinyGPT(nn.Module):
         self.head = nn.Linear(n_embd, vocab_size, bias=False)
         if self.tie_embeddings:
             self.head.weight = self.tok_emb.weight
+        self.termination_head = (
+            nn.Linear(n_embd, self.termination_n_classes)
+            if self.termination_aux
+            else None
+        )
+
+        self.multi_offset_targets = sorted(list(set([int(t) for t in multi_offset_targets]))) if multi_offset_targets else []
+        self.offset_projs = nn.ModuleDict()
+        if self.multi_offset_targets:
+            for offset in self.multi_offset_targets:
+                # 2-layer MLP with non-linear activation
+                mlp = nn.Sequential(
+                    nn.Linear(n_embd, n_embd),
+                    nn.GELU(),
+                    nn.Linear(n_embd, n_embd)
+                )
+                # Initialize both Linear layers to identity to preserve pretrained representations
+                nn.init.eye_(mlp[0].weight)
+                if mlp[0].bias is not None:
+                    nn.init.zeros_(mlp[0].bias)
+                nn.init.eye_(mlp[2].weight)
+                if mlp[2].bias is not None:
+                    nn.init.zeros_(mlp[2].bias)
+                self.offset_projs[str(offset)] = mlp
 
         if loss_weights is not None:
             self.register_buffer("loss_weights", torch.tensor(loss_weights, dtype=torch.float32))
         else:
             self.register_buffer("loss_weights", torch.ones(vocab_size, dtype=torch.float32))
 
-    def forward(self, idx, targets=None):
+    def to_dict(self) -> dict:
+        return {
+            "vocab_size": int(self.vocab_size),
+            "block_size": int(self.block_size),
+            "n_layer": int(self.n_layer),
+            "n_head": int(self.n_head),
+            "n_embd": int(self.n_embd),
+            "dropout": float(self.dropout_p),
+            "sep_mask_enabled": self.sep_id is not None,
+            "tie_embeddings": bool(self.tie_embeddings),
+            "n_kv_head": self.n_kv_head,
+            "use_sdpa": bool(self.use_sdpa),
+            "termination_aux": bool(self.termination_aux),
+            "termination_n_classes": int(self.termination_n_classes),
+            "multi_offset_targets": self.multi_offset_targets,
+        }
+
+    def forward(self, idx, targets=None, return_aux: bool = False):
         B, T = idx.shape
         pos = torch.arange(0, T, device=idx.device).unsqueeze(0)
         x = self.tok_emb(idx) + self.pos_emb(pos)
@@ -139,6 +205,17 @@ class TinyGPT(nn.Module):
 
         x = self.ln_f(x)
         logits = self.head(x)
+        aux = {}
+        if self.termination_head is not None:
+            aux["termination_logits"] = self.termination_head(x)
+
+        if self.offset_projs:
+            offset_logits = {}
+            for offset in self.multi_offset_targets:
+                proj_x = self.offset_projs[str(offset)](x)
+                offset_logits[offset] = self.head(proj_x)
+            aux["offset_logits"] = offset_logits
+
         loss = None
         if targets is not None:
             # Check if all weights are 1.0 to avoid cross-entropy weight overhead / behavior divergence
@@ -151,6 +228,8 @@ class TinyGPT(nn.Module):
                 label_smoothing=self.label_smoothing,
                 weight=weight_to_use,
             )
+        if return_aux:
+            return logits, loss, aux
         return logits, loss
 
 class NoPropBlock(nn.Module):

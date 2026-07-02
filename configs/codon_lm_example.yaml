@@ -68,6 +68,8 @@ grad_accum_steps: 16        # Gradient accumulation steps (Simulates Batch Size 
 epochs: 10                  # Total training epochs
 early_stop_patience: 3      # Stop training if validation loss does not improve for this many epochs
 max_time_minutes: 360       # Bounded wall-time limit. Saves checkpoint and exits gracefully if limit is reached mid-epoch
+checkpoint_every_steps: 25  # Save last.pt every N optimizer steps for crash/sleep resilience (0 disables)
+checkpoint_every_minutes: 0 # Optional time-based periodic checkpoint interval (0 disables)
 
 # ---------------------------------------------------------------------
 # Output Directory Layout
