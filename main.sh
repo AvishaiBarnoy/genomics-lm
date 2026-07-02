@@ -26,6 +26,10 @@ DEFAULT_CONF="configs/tiny_mps.yaml"
 CONF="$DEFAULT_CONF"
 RESUME=""
 FORCE=0
+RUN_ID_WAS_SET=0
+if [[ -n "${RUN_ID:-}" ]]; then
+  RUN_ID_WAS_SET=1
+fi
 EXTRA_DATASETS=()
 WITH_ARTIFACTS=0
 WITH_MOTIFS=0
@@ -64,8 +68,12 @@ if [[ -n "$RESUME" && ! -f "$RESUME" ]]; then
 fi
 
 if [[ -z "${RUN_ID:-}" && -n "$RESUME" ]]; then
-  if [[ "$RESUME" == */outputs/checkpoints/*/* ]]; then
+  if [[ "$RESUME" == runs/*/checkpoints/* || "$RESUME" == */runs/*/checkpoints/* ]]; then
+    RUN_ID=$(basename "$(dirname "$(dirname "$RESUME")")")
+    RUN_ID_WAS_SET=1
+  elif [[ "$RESUME" == */outputs/checkpoints/*/* ]]; then
     RUN_ID=$(basename "$(dirname "$RESUME")")
+    RUN_ID_WAS_SET=1
   fi
 fi
 
@@ -74,10 +82,12 @@ RUN_ID=${RUN_ID:-$(python -m scripts.make_run_id "$CONF")}
 # Disambiguate RUN_ID if it already exists to avoid overwriting prior runs
 BASE_RUN_ID="$RUN_ID"
 DISAMBIG=0
-while [[ -d "runs/${RUN_ID}" || -d "outputs/checkpoints/${RUN_ID}" || -d "outputs/scores/${RUN_ID}" ]]; do
-  DISAMBIG=$((DISAMBIG+1))
-  RUN_ID="${BASE_RUN_ID}-${DISAMBIG}"
-done
+if [[ $RUN_ID_WAS_SET -eq 0 && -z "$RESUME" ]]; then
+  while [[ -d "runs/${RUN_ID}" || -d "outputs/checkpoints/${RUN_ID}" || -d "outputs/scores/${RUN_ID}" ]]; do
+    DISAMBIG=$((DISAMBIG+1))
+    RUN_ID="${BASE_RUN_ID}-${DISAMBIG}"
+  done
+fi
 RUN_DIR="runs/${RUN_ID}"
 mkdir -p "$RUN_DIR"
 LOG="$RUN_DIR/log.txt"
@@ -212,9 +222,25 @@ PY
 CKPT_ROOT="runs/${RUN_ID}/checkpoints"
 SCORES_ROOT="runs/${RUN_ID}/scores"
 Ttrain0=$(date +%s)
+HAS_BATCH_OPTIMIZER=$(python -c "
+import yaml
+cfg = yaml.safe_load(open('$CONF')) or {}
+section = cfg.get('batch_optimizer') or {}
+print(1 if section and section.get('enabled', True) else 0)
+")
+
 TRAIN_ARGS=(--config "$CONF" --run_id "${RUN_ID}" --train_npz "$TRAIN_NPZ" --val_npz "$VAL_NPZ" --test_npz "$TEST_NPZ")
 if [[ -n "$RESUME" ]]; then TRAIN_ARGS+=(--resume "$RESUME"); fi
-python -m src.codonlm.train_codon_lm "${TRAIN_ARGS[@]}" 2>&1 | tee -a "$LOG"
+
+if [[ $HAS_BATCH_OPTIMIZER -eq 1 ]]; then
+  echo "[train] batch_optimizer enabled; dispatching through scripts.optimize_train_batching" | tee -a "$LOG"
+  OPT_ARGS=("${TRAIN_ARGS[@]}" --optimize)
+  if [[ $FORCE -eq 1 ]]; then OPT_ARGS+=(--force); fi
+  python -m scripts.optimize_train_batching "${OPT_ARGS[@]}" 2>&1 | tee -a "$LOG"
+else
+  echo "[train] batch_optimizer disabled; dispatching directly to src.codonlm.train_codon_lm" | tee -a "$LOG"
+  python -m src.codonlm.train_codon_lm "${TRAIN_ARGS[@]}" 2>&1 | tee -a "$LOG"
+fi
 Ttrain1=$(date +%s)
 
 # Evaluate on val and test sets

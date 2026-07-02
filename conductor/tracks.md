@@ -37,9 +37,11 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [ ] **Track: Multi-Scale Biophysical Architecture (Stage 2.6)**
 *Link: [./tracks/multiscale_biophysics_20260609/](./tracks/multiscale_biophysics_20260609/)*
+*Summary: Physical-termination transfer pilot completed 3 epochs on a 24-GBFF hybrid CDS+UTR dataset. Validation improved (`val_loss` 5.496 → 4.882), but matched prefix generation still had 0% natural stops and 100% hard caps; median GQS degraded while local AA-prefix identity improved. Next signal should be generated-prefix replay/hard negatives, not more of the same teacher-forced objective.*
 
 - [ ] **Track: Protein Latent Energy-Based Model (Stage 2.6)**
 *Link: [./tracks/protein_ebm_20260610/](./tracks/protein_ebm_20260610/)*
+*Summary: Implement a latent-space EBM for protein stability guided Langevin sampling, alongside token sliding-window Shannon entropy loop detection and EBM-guided early abort in ReD to optimize token yields.*
 
 - [ ] **Track: Hybrid DNA-Protein Critic Benchmark (Stage 2.6)**
 *Link: [./tracks/hybrid_critic_20260610/](./tracks/hybrid_critic_20260610/)*
@@ -70,6 +72,14 @@ This file tracks all major tracks for the project. Each track has its own detail
 *Link: [./tracks/training_speed_optimization_20260615/](./tracks/training_speed_optimization_20260615/)*
 *Summary: All 5 phases implemented (GQA, mmap, BucketBatchSampler, CUDA device priority, SDPA path). Benchmark shows MPS batch=4 is dispatch-bound — optimizations benefit RAM/params, not throughput at this scale. CUDA batch≥32 expected to show ≥1.5× speedup.*
 
+- [ ] **Track: CodonLM Trainer Refactor**
+*Link: [./tracks/codonlm_trainer_refactor_20260622/](./tracks/codonlm_trainer_refactor_20260622/)*
+*Summary: Opened to split `src/codonlm/train_codon_lm.py` into testable checkpoint/resume, data setup, objective computation, runtime loop, and CLI layers while preserving current commands, configs, checkpoint compatibility, and mid-epoch resume behavior.*
+
+- [ ] **Track: Suite Runner Main.sh Evolution**
+*Link: [./tracks/suite_runner_main_20260623/](./tracks/suite_runner_main_20260623/)*
+*Summary: Opened to evolve `main.sh` from a CodonLM-specific wrapper into an explicit suite runner for CodonLM and ProteinLM workflows, with trainer-type dispatch, CodonLM backward compatibility, and no accidental ProteinLM use of CodonLM data prep/evaluation.*
+
 - [x] **Track: AMR Classification Probe (Conference)**
 *Link: [./tracks/amr_classification_20260615/](./tracks/amr_classification_20260615/)*
 
@@ -94,4 +104,21 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [ ] **Track: Long-Range CodonLM Objectives**
 *Link: [./tracks/long_range_codon_objectives_20260616/](./tracks/long_range_codon_objectives_20260616/)*
-*Summary: Next active implementation target. Add config-gated multi-offset future-token losses (`+4/+8/+16/+32`), whole-gene truncation audits, generated-library rescoring with calibrated critics, hard-negative preparation, and a final d384/d512 capacity ablation only after objective/data changes are evaluated.*
+*Summary: Designed and ablated Separate-Heads Multi-Offset architectures. Discovered that 2-layer MLP projection heads combined with backbone freezing completely resolves next-token prior conflicts, improving thermodynamic stability (+1.2% absolute stability probability at $k=3$ and +2.1% generation ppl_stability) and increasing Pfam/EC classification confidence over linear counterparts. Matched ESMFold folding reached a local peak pLDDT of 0.57. Detailed report: [docs/separate_heads_multi_offset_report.md](../docs/separate_heads_multi_offset_report.md).*
+
+- [ ] **Track: Bidirectional Backbone & Attention-Pooling for MultiTask ProteinCritic**
+*Link: [./tracks/critic_bidirectional_attention_pooling_20260622/](./tracks/critic_bidirectional_attention_pooling_20260622/)*
+*Summary: Integrate bidirectional attention into the ProteinCritic backbone, and replace average pooling with learnable attention-based pooling for active-site focus and saliency visualization.*
+
+- [ ] **Track: Architectural Upgrades (RoPE & SwiGLU) for CodonLM**
+*Link: [./tracks/codonlm_architectural_upgrades_20260622/](./tracks/codonlm_architectural_upgrades_20260622/)*
+*Summary: Upgrade the CodonLM backbone with Rotary Position Embeddings (RoPE) and SwiGLU Feed-Forward Networks. Benchmark perplexity and structural regression probe scores against absolute positioning and standard FFNs.*
+
+- [ ] **Track: Biophysical Regression & MLP Probes**
+*Link: [./tracks/biophysical_mlp_regression_probes_20260622/](./tracks/biophysical_mlp_regression_probes_20260622/)*
+*Summary: Implement non-linear MLP probes for categorical amino acid properties, and develop linear regression probes targeting continuous biophysical scales (hydropathy, isoelectric point, volume) to evaluate static codon embeddings.*
+
+- [x] **Track: Non-Linear Offset Priors & Backbone Freezing (Stage 2.6)**
+*Link: [./tracks/non_linear_offset_priors_20260702/](./tracks/non_linear_offset_priors_20260702/)*
+*Summary: Integrate 2-layer MLP projection heads with GeLU for multi-offset targets, implement backbone/next-token head freezing during training to preserve baseline perplexity, and train for 5-10 epochs.*
+>>>>>>> c812517 (feat(codonlm): implement non-linear MLP projection priors with parameter-efficient backbone)

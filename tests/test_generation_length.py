@@ -28,6 +28,45 @@ class DummyModel(torch.nn.Module):
         return logits, None
 
 
+class DummyTerminationModel(torch.nn.Module):
+    def __init__(self, vocab_size: int, stop_id: int, prefer_id: int, block_size: int = 512):
+        super().__init__()
+        self.vocab_size = vocab_size
+        self.stop_id = stop_id
+        self.prefer_id = prefer_id
+        self.block_size = block_size
+
+    def forward(self, x, y=None, return_aux: bool = False):
+        T = x.shape[1]
+        logits = torch.zeros((1, T, self.vocab_size), dtype=torch.float32, device=x.device)
+        logits[0, -1, self.prefer_id] = 2.0
+        logits[0, -1, self.stop_id] = 1.0
+        if return_aux:
+            term_logits = torch.zeros((1, T, 5), dtype=torch.float32, device=x.device)
+            term_logits[0, -1, 0] = 10.0
+            return logits, None, {"termination_logits": term_logits}
+        return logits, None
+
+
+class DummyHybridTokenModel(torch.nn.Module):
+    def __init__(self, vocab_size: int, nucleotide_id: int, codon_id: int, block_size: int = 512):
+        super().__init__()
+        self.vocab_size = vocab_size
+        self.nucleotide_id = nucleotide_id
+        self.codon_id = codon_id
+        self.block_size = block_size
+
+    def forward(self, x, y=None, return_aux: bool = False):
+        T = x.shape[1]
+        logits = torch.zeros((1, T, self.vocab_size), dtype=torch.float32, device=x.device)
+        logits[0, -1, self.nucleotide_id] = 20.0
+        logits[0, -1, self.codon_id] = 1.0
+        if return_aux:
+            aux = {"termination_logits": torch.zeros((1, T, 5), dtype=torch.float32, device=x.device)}
+            return logits, None, aux
+        return logits, None
+
+
 def test_constrained_generation_long_protein():
     """Tests the constrained CDS generation function to ensure sequence length constraints work."""
     # Build tiny vocab: 0:<PAD>,1:<BOS_CDS>,2:<EOS_CDS>,3:<SEP>,4:"AAA",5:"TAA"
@@ -63,3 +102,92 @@ def test_constrained_generation_long_protein():
     assert (last_codon in STOP_CODONS) or bool(info.get("hit_hard_cap"))
 
 
+def test_termination_bias_can_force_stop_choice():
+    itos = ["<PAD>", "<BOS_CDS>", "<EOS_CDS>", "<SEP>", "AAA", "TAA"]
+    stoi = {t: i for i, t in enumerate(itos)}
+    model = DummyTerminationModel(
+        vocab_size=len(itos),
+        stop_id=stoi["TAA"],
+        prefer_id=stoi["AAA"],
+    )
+
+    ids, info = generate_cds_constrained(
+        model=model,
+        device=torch.device("cpu"),
+        ctx_ids=[stoi["<BOS_CDS>"], stoi["AAA"]],
+        stoi=stoi,
+        itos=itos,
+        target_codons=1,
+        hard_cap=5,
+        require_terminal_stop=False,
+        temperature=1.0,
+        topk=1,
+        termination_bias_enabled=True,
+        termination_stop_bias=5.0,
+        termination_trigger_class_max=0,
+        termination_bias_window=5,
+    )
+
+    assert itos[ids[-1]] == "TAA"
+    assert info["had_terminal_stop"] is True
+    assert info["termination_bias_steps"] == 1
+
+
+def test_termination_bias_respects_length_window():
+    itos = ["<PAD>", "<BOS_CDS>", "<EOS_CDS>", "<SEP>", "AAA", "TAA"]
+    stoi = {t: i for i, t in enumerate(itos)}
+    model = DummyTerminationModel(
+        vocab_size=len(itos),
+        stop_id=stoi["TAA"],
+        prefer_id=stoi["AAA"],
+    )
+
+    ids, info = generate_cds_constrained(
+        model=model,
+        device=torch.device("cpu"),
+        ctx_ids=[stoi["<BOS_CDS>"], stoi["AAA"]],
+        stoi=stoi,
+        itos=itos,
+        target_codons=4,
+        hard_cap=8,
+        require_terminal_stop=False,
+        temperature=1.0,
+        topk=1,
+        termination_bias_enabled=True,
+        termination_stop_bias=5.0,
+        termination_trigger_class_max=0,
+        termination_bias_window=1,
+    )
+
+    codons = [itos[i] for i in ids if len(itos[i]) == 3 and set(itos[i]) <= set("ACGT")]
+    assert codons[-1] == "TAA"
+    assert len(codons) >= 4
+    assert info["termination_bias_steps"] == 1
+
+
+def test_cds_generation_masks_hybrid_nucleotide_tokens_by_default():
+    itos = ["<PAD>", "<BOS_CDS>", "<EOS_CDS>", "<SEP>", "AAA", "TAA", "A"]
+    stoi = {t: i for i, t in enumerate(itos)}
+    model = DummyHybridTokenModel(
+        vocab_size=len(itos),
+        nucleotide_id=stoi["A"],
+        codon_id=stoi["AAA"],
+    )
+
+    ids, info = generate_cds_constrained(
+        model=model,
+        device=torch.device("cpu"),
+        ctx_ids=[stoi["<BOS_CDS>"]],
+        stoi=stoi,
+        itos=itos,
+        target_codons=3,
+        hard_cap=3,
+        require_terminal_stop=False,
+        temperature=1.0,
+        topk=1,
+    )
+
+    assert all(itos[idx] != "A" for idx in ids)
+    assert [itos[idx] for idx in ids[1:]] == ["AAA", "AAA", "AAA"]
+    assert info["generated_codons"] == 3
+    assert info["cds_only"] is True

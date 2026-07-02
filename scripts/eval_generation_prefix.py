@@ -19,9 +19,15 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
+import random
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
+
+os.environ.setdefault("MPLBACKEND", "Agg")
+os.environ.setdefault("MPLCONFIGDIR", str(Path(os.environ.get("TMPDIR", "/tmp")) / "genomics-lm-mplconfig"))
 
 import numpy as np
 import torch
@@ -29,6 +35,179 @@ import matplotlib.pyplot as plt
 
 from . import query_model as Q
 from src.codonlm.generate import generate_cds_constrained
+from .generative_design_loop import load_critic, score_with_critic
+
+PRESETS = {
+    "quick": {"max_genes": 10, "samples": 2, "max_new": 100},
+    "standard": {"max_genes": 20, "samples": 3, "max_new": 300},
+    "full": {"max_genes": 50, "samples": 5, "max_new": 300},
+}
+
+
+def _select_device(requested: str) -> torch.device:
+    if requested == "auto":
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        if torch.backends.mps.is_available():
+            return torch.device("mps")
+        return torch.device("cpu")
+    if requested == "cuda":
+        if not torch.cuda.is_available():
+            raise SystemExit("[gen-prefix] requested --device cuda but CUDA is not available")
+        return torch.device("cuda")
+    if requested == "mps":
+        if not torch.backends.mps.is_available():
+            raise SystemExit("[gen-prefix] requested --device mps but MPS is not available")
+        return torch.device("mps")
+    if requested == "cpu":
+        return torch.device("cpu")
+    raise SystemExit(f"[gen-prefix] unknown device: {requested}")
+
+
+def _set_seed(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+def _load_run_meta(run_dir: Path) -> dict:
+    for path in (run_dir / "meta.json", run_dir / "checkpoints" / "meta.json"):
+        if path.exists():
+            return json.loads(path.read_text())
+    raise FileNotFoundError(f"meta.json missing under {run_dir}")
+
+
+def _resolve_repo_path(repo: Path, raw_path: str | Path | None) -> Path | None:
+    if not raw_path:
+        return None
+    path = Path(raw_path)
+    return path if path.is_absolute() else repo / path
+
+
+def _extract_hybrid_cds_file(repo: Path, run_dir: Path, manifest_path: Path, max_genes: int) -> Path | None:
+    data = json.loads(manifest_path.read_text())
+    datasets = data.get("datasets") or []
+    if not datasets:
+        return None
+
+    out_path = run_dir / "scores" / "_eval_hybrid_cds_dna.txt"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    written = 0
+    with out_path.open("w") as out_fh:
+        for item in datasets:
+            tsv_path = _resolve_repo_path(repo, item.get("tsv") or item.get("hybrid_data"))
+            if tsv_path is None or not tsv_path.exists():
+                continue
+            with tsv_path.open(newline="") as fh:
+                reader = csv.DictReader(fh, delimiter="\t")
+                required = {"sequence", "cds_start", "cds_end"}
+                if not required.issubset(set(reader.fieldnames or [])):
+                    continue
+                for row in reader:
+                    seq = str(row["sequence"]).strip().upper().replace("U", "T")
+                    try:
+                        start = int(row["cds_start"])
+                        end = int(row["cds_end"])
+                    except (TypeError, ValueError):
+                        continue
+                    cds = seq[start:end]
+                    if len(cds) >= 9:
+                        out_fh.write(cds + "\n")
+                        written += 1
+                    if written >= max_genes:
+                        break
+            if written >= max_genes:
+                break
+    return out_path if written else None
+
+
+def _resolve_cds_dna_path(repo: Path, run_dir: Path, cfg: dict, max_genes: int) -> Path | None:
+    # Legacy/main.sh manifest layout.
+    manifest = run_dir / "combined_manifest.json"
+    if manifest.exists():
+        data = json.loads(manifest.read_text())
+        if data.get("datasets"):
+            dna_path = _resolve_repo_path(repo, data["datasets"][0].get("dna"))
+            if dna_path is not None and dna_path.exists():
+                return dna_path
+
+    # Direct config override for future runs.
+    for key in ("dna_path", "cds_dna", "primary_dna"):
+        dna_path = _resolve_repo_path(repo, cfg.get(key))
+        if dna_path is not None and dna_path.exists():
+            return dna_path
+
+    manifest_candidates = [cfg.get("hybrid_manifest"), cfg.get("combined_manifest")]
+    train_npz = cfg.get("train_npz")
+    train_npz_values = train_npz if isinstance(train_npz, list) else [train_npz]
+    for item in train_npz_values:
+        train_path = _resolve_repo_path(repo, item)
+        if train_path is not None:
+            manifest_candidates.append(train_path.parent / "manifest.json")
+
+    # Hybrid CDS+UTR manifest layout from pipeline_prepare_hybrid.
+    for raw_manifest in manifest_candidates:
+        manifest_path = _resolve_repo_path(repo, raw_manifest)
+        if manifest_path is not None and manifest_path.exists():
+            dna_path = _extract_hybrid_cds_file(repo, run_dir, manifest_path, max_genes=max(10000, max_genes))
+            if dna_path is not None and dna_path.exists():
+                return dna_path
+    return None
+
+
+def _model_spec_from(meta: dict, ckpt: object) -> dict:
+    spec = meta.get("model_spec") or {}
+    cfg = {}
+    if isinstance(ckpt, dict):
+        cfg = ckpt.get("cfg", {}) or {}
+    cfg = meta.get("cfg", cfg) or cfg
+
+    # Ensure all architecture keys from checkpoint/meta configuration are present
+    keys = [
+        "vocab_size", "block_size", "n_layer", "n_head", "n_embd",
+        "multi_offset_targets", "termination_aux", "termination_n_classes", "termination_loss_enabled"
+    ]
+    for k in keys:
+        if k in cfg and k not in spec:
+            spec[k] = cfg[k]
+
+    # Validate required keys
+    required = ["vocab_size", "block_size", "n_layer", "n_head", "n_embd"]
+    missing = [k for k in required if k not in spec]
+    if missing:
+        raise KeyError(f"model_spec missing and checkpoint cfg lacks: {missing}")
+    return spec
+
+
+def _cfg_from(meta: dict, ckpt: object) -> dict:
+    ckpt_cfg = ckpt.get("cfg", {}) if isinstance(ckpt, dict) else {}
+    return meta.get("cfg", ckpt_cfg) or ckpt_cfg or {}
+
+
+def _load_vocab_for_run(run_dir: Path, repo: Path, cfg: dict) -> Tuple[List[str], Dict[str, int]]:
+    try:
+        return Q._load_vocab(run_dir)
+    except FileNotFoundError:
+        pass
+
+    itos_path = cfg.get("itos_path")
+    if not itos_path:
+        raise FileNotFoundError(
+            f"Missing itos.txt at {run_dir / 'itos.txt'} and checkpoint cfg has no itos_path"
+        )
+    path = Path(str(itos_path))
+    if not path.is_absolute():
+        path = repo / path
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Missing itos.txt at {run_dir / 'itos.txt'} and configured itos_path does not exist: {path}"
+        )
+    tokens = [line.strip() for line in path.read_text().splitlines() if line.strip()]
+    if not tokens:
+        raise ValueError(f"Configured itos_path is empty: {path}")
+    return tokens, {tok: i for i, tok in enumerate(tokens)}
 
 
 # --- Biology helpers ---
@@ -171,23 +350,79 @@ class SampleResult:
     had_terminal_stop: bool
     hit_hard_cap: bool
     target_codons: int
+    termination_bias_steps: int
+    last_termination_class: object
+    critic_stability: float = 0.0
+    critic_family_prob: float = 0.0
+    critic_function_prob: float | None = None
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run_id", required=True)
+    ap.add_argument(
+        "--preset",
+        choices=sorted(PRESETS),
+        default=None,
+        help="Evaluation size preset. Explicit --max_genes/--samples/--max_new override it.",
+    )
     ap.add_argument("--k_list", default="1,3,5,10")
-    ap.add_argument("--samples", type=int, default=5)
-    ap.add_argument("--max_genes", type=int, default=50)
-    ap.add_argument("--max_new", type=int, default=300)
+    ap.add_argument("--samples", type=int, default=None)
+    ap.add_argument("--max_genes", type=int, default=None)
+    ap.add_argument("--max_new", type=int, default=None)
     ap.add_argument("--temperature", type=float, default=0.8)
     ap.add_argument("--topk", type=int, default=5)
+    ap.add_argument(
+        "--device",
+        choices=["auto", "cpu", "mps", "cuda"],
+        default="auto",
+        help="Device for generation/evaluation. Explicit unavailable devices fail fast.",
+    )
+    ap.add_argument("--seed", type=int, default=1337)
+    ap.add_argument(
+        "--out_label",
+        default="gen_prefix",
+        help="Subdirectory under runs/<RUN_ID>/scores for outputs.",
+    )
+    ap.add_argument(
+        "--progress_every",
+        type=int,
+        default=20,
+        help="Print progress every N generated samples; 0 disables progress logs.",
+    )
     # Long-protein controls
     ap.add_argument("--min_aa_len", type=int, default=100)
     ap.add_argument("--target_aa_len", type=int, default=256)
     ap.add_argument("--max_aa_len", type=int, default=400)
     ap.add_argument("--require_terminal_stop", action="store_true", default=False)
     ap.add_argument("--special_margin", type=int, default=6)
+    ap.add_argument("--termination_bias", action="store_true", default=False)
+    ap.add_argument("--termination_stop_bias", type=float, default=0.0)
+    ap.add_argument("--termination_trigger_class_max", type=int, default=0)
+    ap.add_argument(
+        "--termination_bias_window",
+        type=int,
+        default=0,
+        help="Only apply termination stop bias within this many codons of target length.",
+    )
+    ap.add_argument(
+        "--allow_non_cds_tokens",
+        action="store_true",
+        default=False,
+        help="Permit non-codon tokens during CDS continuation generation for diagnostics.",
+    )
+    ap.add_argument(
+        "--multi_offset_prior",
+        action="store_true",
+        default=False,
+        help="Enable multi-offset prior-guided decoding.",
+    )
+    ap.add_argument(
+        "--multi_offset_prior_weights",
+        type=str,
+        default=None,
+        help="JSON dict mapping offsets to prior weights (e.g. '{\"4\":0.1,\"8\":0.05}').",
+    )
     # Normalization option for GQS
     ap.add_argument(
         "--gqs_normalize",
@@ -200,19 +435,36 @@ def main() -> None:
         default="best.pt",
         help="Which checkpoint to use (e.g., best.pt or last.pt)",
     )
+    ap.add_argument(
+        "--critic_stability",
+        action="store_true",
+        default=False,
+        help="Enable MultiTask ProteinCritic stability and family classification evaluation.",
+    )
+    ap.add_argument(
+        "--critic_ckpt",
+        default="runs/protein_critic/checkpoints/best_critic.pt",
+        help="Path to MultiTask ProteinCritic checkpoint.",
+    )
+    ap.add_argument(
+        "--critic_cfg",
+        default="configs/protein_critic.yaml",
+        help="Path to ProteinCritic YAML config.",
+    )
     args = ap.parse_args()
+    preset = PRESETS.get(args.preset or "full", {})
+    args.max_genes = int(args.max_genes if args.max_genes is not None else preset.get("max_genes", 50))
+    args.samples = int(args.samples if args.samples is not None else preset.get("samples", 5))
+    args.max_new = int(args.max_new if args.max_new is not None else preset.get("max_new", 300))
+    _set_seed(int(args.seed))
 
     repo = Path(__file__).resolve().parents[1]
     run_dir = repo / "runs" / args.run_id
-    out_dir = repo / "runs" / args.run_id / "scores" / "gen_prefix"
+    out_dir = repo / "runs" / args.run_id / "scores" / args.out_label
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load tokens + checkpoint
-    itos, stoi = Q._load_vocab(run_dir)
-
     # Custom loading for specific checkpoint
-    meta = json.loads((run_dir / "meta.json").read_text())
-    spec = meta["model_spec"]
+    meta = _load_run_meta(run_dir)
 
     # Try looking in consolidated layout first, then runs/ base, then legacy fallback
     weights_path = run_dir / "checkpoints" / args.ckpt
@@ -223,32 +475,58 @@ def main() -> None:
         if not weights_path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {args.ckpt}")
 
-    ckpt = torch.load(weights_path, map_location=Q.dev())
-    state_dict = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
-    model = Q.build_model_from_state(state_dict, spec)
-    cfg = (
-        meta.get("cfg", ckpt.get("cfg", {}))
-        if isinstance(ckpt, dict)
-        else meta.get("cfg", {})
+    device = _select_device(args.device)
+    print(
+        f"[gen-prefix] run_id={args.run_id} ckpt={args.ckpt} device={device} "
+        f"preset={args.preset or 'full'} max_genes={args.max_genes} samples={args.samples} "
+        f"max_new={args.max_new} seed={args.seed}",
+        flush=True,
     )
-    device = Q.dev()
+    ckpt = torch.load(weights_path, map_location=device)
+    state_dict = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
+    spec = _model_spec_from(meta, ckpt)
+    model = Q.build_model_from_state(state_dict, spec)
+    cfg = _cfg_from(meta, ckpt)
+    itos, stoi = _load_vocab_for_run(run_dir, repo, cfg)
+
+    multi_offset_prior_weights = None
+    if args.multi_offset_prior:
+        if args.multi_offset_prior_weights:
+            import json
+            try:
+                parsed = json.loads(args.multi_offset_prior_weights)
+                multi_offset_prior_weights = {int(k): float(v) for k, v in parsed.items()}
+            except Exception as exc:
+                raise ValueError(f"Failed to parse --multi_offset_prior_weights: {exc}")
+        else:
+            # Load from model config
+            raw_weights = cfg.get("multi_offset_weights", {})
+            if isinstance(raw_weights, dict):
+                multi_offset_prior_weights = {int(k): float(v) for k, v in raw_weights.items()}
+            elif isinstance(raw_weights, (list, tuple)):
+                targets = cfg.get("multi_offset_targets", [])
+                multi_offset_prior_weights = {int(t): float(w) for t, w in zip(targets, raw_weights)}
+            else:
+                multi_offset_prior_weights = {}
+
+    critic_model = None
+    critic_tokenizer = None
+    critic_task_dims = {}
+    if args.critic_stability:
+        critic_model, critic_tokenizer, critic_task_dims = load_critic(
+            args.critic_ckpt, args.critic_cfg, device
+        )
+
     model.to(device).eval()
     # Validate AA length constraints
     if not (0 < args.min_aa_len <= args.target_aa_len <= args.max_aa_len):
         raise SystemExit("require 0 < min_aa_len ≤ target_aa_len ≤ max_aa_len")
 
-    # Choose CDS corpus: from first dataset dna path in combined manifest
-    dna_path = None
-    manifest = run_dir / "combined_manifest.json"
-    if manifest.exists():
-        data = json.loads(manifest.read_text())
-        if data.get("datasets"):
-            dna_path = Path(data["datasets"][0]["dna"])
-            if not dna_path.is_absolute():
-                dna_path = repo / dna_path
+    # Choose CDS corpus from legacy combined manifest, config, or hybrid manifest.
+    dna_path = _resolve_cds_dna_path(repo, run_dir, cfg, max_genes=args.max_genes)
     if dna_path is None or not dna_path.exists():
         raise SystemExit(
-            "[gen-prefix] could not locate a CDS dna file via combined_manifest.json"
+            "[gen-prefix] could not locate a CDS dna file via combined or hybrid manifest"
         )
 
     # Build reference corpus codon unigram from test manifest if present (fallback: from dna file)
@@ -356,6 +634,9 @@ def main() -> None:
 
     rows: List[SampleResult] = []
     k_list = [int(x) for x in args.k_list.split(",") if x]
+    total_expected = len(cds) * len(k_list) * int(args.samples)
+    done = 0
+    wall0 = time.perf_counter()
 
     block_size = int(cfg.get("block_size", getattr(model, "block_size", 512)))
     for gene_idx, dna in enumerate(cds):
@@ -364,7 +645,7 @@ def main() -> None:
         for k in k_list:
             prefix = dna[: 3 * min(k, len(truth_codons))]
             # tokenize prefix
-            ctx_ids = Q.dna_to_ids(prefix, stoi)
+            ctx_ids = Q.dna_prefix_to_ids(prefix, stoi)
             for sidx in range(args.samples):
                 # Compute safe generation lengths (AA == codons)
                 max_window_codons = block_size - int(k) - int(args.special_margin)
@@ -385,6 +666,13 @@ def main() -> None:
                     require_terminal_stop=bool(args.require_terminal_stop),
                     temperature=float(args.temperature),
                     topk=int(args.topk) if args.topk > 0 else 0,
+                    termination_bias_enabled=bool(args.termination_bias),
+                    termination_stop_bias=float(args.termination_stop_bias),
+                    termination_trigger_class_max=int(args.termination_trigger_class_max),
+                    termination_bias_window=int(args.termination_bias_window),
+                    cds_only=not bool(args.allow_non_cds_tokens),
+                    multi_offset_prior_enabled=bool(args.multi_offset_prior),
+                    multi_offset_prior_weights=multi_offset_prior_weights,
                 )
                 gen_toks = Q.ids_to_codons(gen_ids, itos)
                 # strip BOS and anything before first codon
@@ -404,6 +692,26 @@ def main() -> None:
                 usage = usage_agree(gen_cont_ids)
                 frame = frame_integrity_ok(codons)
                 score = gqs(stop_score, aaid, syn, stab, norep, usage, frame)
+
+                critic_stability = 0.0
+                critic_family_prob = 0.0
+                critic_function_prob = 0.0
+                if critic_model is not None:
+                    aa_list = []
+                    for c in codons:
+                        aa = CODON_TO_AA.get(c, "X")
+                        if aa == "Stop":
+                            break
+                        aa_list.append(aa)
+                    aa_seq = "".join(aa_list)
+                    crit_scores = score_with_critic(critic_model, critic_tokenizer, critic_task_dims, aa_seq, device)
+                    if "stability" in critic_task_dims:
+                        critic_stability = crit_scores.get("stability_prob", 0.0)
+                    if "family" in critic_task_dims:
+                        critic_family_prob = crit_scores.get("family_top1_conf", 0.0)
+                    if "function" in critic_task_dims:
+                        critic_function_prob = crit_scores.get("function_top1_conf", 0.0)
+
                 rows.append(
                     SampleResult(
                         args.run_id,
@@ -425,8 +733,24 @@ def main() -> None:
                         had_terminal_stop=bool(info.get("had_terminal_stop", False)),
                         hit_hard_cap=bool(info.get("hit_hard_cap", False)),
                         target_codons=int(target_codons),
+                        termination_bias_steps=int(info.get("termination_bias_steps", 0)),
+                        last_termination_class=info.get("last_termination_class"),
+                        critic_stability=critic_stability,
+                        critic_family_prob=critic_family_prob,
+                        critic_function_prob=critic_function_prob,
                     )
                 )
+                done += 1
+                if args.progress_every and done % int(args.progress_every) == 0:
+                    elapsed = time.perf_counter() - wall0
+                    rate = done / max(elapsed, 1e-9)
+                    remaining = max(0, total_expected - done)
+                    eta = remaining / max(rate, 1e-9)
+                    print(
+                        f"[gen-prefix] progress {done}/{total_expected} "
+                        f"rate={rate:.2f} samples/sec eta_sec={eta:.1f}",
+                        flush=True,
+                    )
 
     # write samples.csv
     samples_csv = out_dir / "samples.csv"
@@ -468,6 +792,16 @@ def main() -> None:
             if norms:
                 mean_gqs_norm = float(sum(norms) / len(norms))
                 median_gqs_norm = float(stats.median(norms))
+
+        # Optional critic summary
+        mean_crit_stab = None
+        mean_crit_fam = None
+        mean_crit_func = None
+        if any(getattr(r, "critic_stability", 0.0) > 0.0 for r in rks):
+            mean_crit_stab = float(sum(r.critic_stability for r in rks) / len(rks))
+            mean_crit_fam = float(sum(r.critic_family_prob for r in rks) / len(rks))
+            mean_crit_func = float(sum(r.critic_function_prob for r in rks) / len(rks))
+
         summary.append(
             {
                 "k": k,
@@ -483,6 +817,15 @@ def main() -> None:
                 **(
                     {"mean_gqs_norm": mean_gqs_norm, "median_gqs_norm": median_gqs_norm}
                     if args.gqs_normalize == "len"
+                    else {}
+                ),
+                **(
+                    {
+                        "mean_critic_stability": mean_crit_stab,
+                        "mean_critic_family_prob": mean_crit_fam,
+                        "mean_critic_function_prob": mean_crit_func,
+                    }
+                    if mean_crit_stab is not None
                     else {}
                 ),
                 "n": len(rks),
@@ -503,11 +846,12 @@ def main() -> None:
             "hard_cap_rate",
             "n",
         ]
-        extra = (
-            ["mean_gqs_norm", "median_gqs_norm"]
-            if any("mean_gqs_norm" in s for s in summary)
-            else []
-        )
+        extra = []
+        if any("mean_gqs_norm" in s for s in summary):
+            extra += ["mean_gqs_norm", "median_gqs_norm"]
+        if any("mean_critic_stability" in s for s in summary):
+            extra += ["mean_critic_stability", "mean_critic_family_prob", "mean_critic_function_prob"]
+
         writer = csv.DictWriter(f, fieldnames=base_cols + extra)
         writer.writeheader()
         writer.writerows(summary)

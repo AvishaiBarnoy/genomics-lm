@@ -1,0 +1,153 @@
+# Physical termination transfer-learning pilot.
+#
+# This uses the hybrid CDS+UTR tokenizer so CDS remains codon-compressed while
+# downstream regulatory sequence is represented at single-nucleotide resolution.
+# It intentionally starts from the latest termination-aux CodonLM checkpoint to
+# cut training time and preserve the learned coding-sequence distribution.
+
+vocab_size: 74
+block_size: 512
+n_layer: 10
+n_head: 8
+n_embd: 384
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+use_sdpa: true
+sep_mask_enabled: false
+amp: false
+
+transfer_from: "runs/2026-06-18_termination_aux_mps_b4_v1/checkpoints/best.pt"
+
+# Created by:
+# python -m src.codonlm.pipeline_prepare_hybrid \
+#   --config configs/physical_termination_transfer.yaml \
+#   --run-id 2026-06-19_physical_termination_transfer_mps_b4 \
+#   --run-dir runs/2026-06-19_physical_termination_transfer_mps_b4 \
+#   --upstream 30 --downstream 120
+itos_path: "data/processed/ecoli_k12_hybrid/itos_hybrid.txt"
+train_npz: "data/processed/combined_hybrid/2026-06-19_physical_termination_transfer_mps_b4/train_bs512.npz"
+val_npz: "data/processed/combined_hybrid/2026-06-19_physical_termination_transfer_mps_b4/val_bs512.npz"
+test_npz: "data/processed/combined_hybrid/2026-06-19_physical_termination_transfer_mps_b4/test_bs512.npz"
+
+windows_per_seq: 2
+val_frac: 0.1
+test_frac: 0.1
+datasets:
+  - name: ecoli_k12
+    gbff: data/raw/Enterobacteriaceae/GCF_000005845.gbff
+    min_len: 90
+  - name: enterobacteriaceae_gcf_000009765
+    gbff: data/raw/Enterobacteriaceae/GCF_000009765.gbff
+    min_len: 90
+  - name: klebsiella
+    gbff: data/raw/Enterobacteriaceae/GCF_000240185.gbff
+    min_len: 90
+  - name: enterobacteriaceae_gcf_000698785
+    gbff: data/raw/Enterobacteriaceae/GCF_000698785.gbff
+    min_len: 90
+  - name: salmonella
+    gbff: data/raw/Enterobacteriaceae/GCF_000006945.gbff
+    min_len: 90
+  - name: gram_pos_gcf_000009045
+    gbff: data/raw/gram_pos/GCF_000009045.gbff
+    min_len: 90
+  - name: gram_pos_gcf_000013425
+    gbff: data/raw/gram_pos/GCF_000013425.gbff
+    min_len: 90
+  - name: high_gc_gcf_000006765
+    gbff: data/raw/high-gc/GCF_000006765.gbff
+    min_len: 90
+  - name: high_gc_gcf_000203835
+    gbff: data/raw/high-gc/GCF_000203835.gbff
+    min_len: 90
+  - name: expanded_gcf_000006745_1
+    gbff: data/raw/expanded/GCF_000006745.1.gbff
+    min_len: 90
+  - name: expanded_gcf_000006905_1
+    gbff: data/raw/expanded/GCF_000006905.1.gbff
+    min_len: 90
+  - name: expanded_gcf_000006925_2
+    gbff: data/raw/expanded/GCF_000006925.2.gbff
+    min_len: 90
+  - name: expanded_gcf_000007045_1
+    gbff: data/raw/expanded/GCF_000007045.1.gbff
+    min_len: 90
+  - name: expanded_gcf_000007985_2
+    gbff: data/raw/expanded/GCF_000007985.2.gbff
+    min_len: 90
+  - name: expanded_gcf_000008525_1
+    gbff: data/raw/expanded/GCF_000008525.1.gbff
+    min_len: 90
+  - name: expanded_gcf_000008685_2
+    gbff: data/raw/expanded/GCF_000008685.2.gbff
+    min_len: 90
+  - name: expanded_gcf_000008725_1
+    gbff: data/raw/expanded/GCF_000008725.1.gbff
+    min_len: 90
+  - name: expanded_gcf_000008805_1
+    gbff: data/raw/expanded/GCF_000008805.1.gbff
+    min_len: 90
+  - name: expanded_gcf_000009125_1
+    gbff: data/raw/expanded/GCF_000009125.1.gbff
+    min_len: 90
+  - name: expanded_gcf_000009725_1
+    gbff: data/raw/expanded/GCF_000009725.1.gbff
+    min_len: 90
+  - name: expanded_gcf_000011065_1
+    gbff: data/raw/expanded/GCF_000011065.1.gbff
+    min_len: 90
+  - name: expanded_gcf_000011965_2
+    gbff: data/raw/expanded/GCF_000011965.2.gbff
+    min_len: 90
+  - name: expanded_gcf_000027325_1
+    gbff: data/raw/expanded/GCF_000027325.1.gbff
+    min_len: 90
+  - name: expanded_gcf_000203855_3
+    gbff: data/raw/expanded/GCF_000203855.3.gbff
+    min_len: 90
+
+termination_loss_enabled: true
+termination_loss_weight: 0.1
+termination_stop_ids: [2]
+termination_bucket_edges: [0, 3, 10, 30]
+termination_n_classes: 5
+
+batch_size: 8
+grad_accum_steps: 32 
+epochs: 1
+lr: 0.000005
+min_lr: 0.0000005
+weight_decay: 0.05
+warmup_steps: 50
+early_stop_patience: 10
+force_gpu: true
+checkpoint_every_steps: 25
+checkpoint_every_minutes: 15
+# max_time_minutes: 400
+
+use_mmap: true
+bucket_batching: true
+n_buckets: 8
+num_workers: 0
+pin_memory: false
+
+out_dir: "runs/physical_termination_transfer/checkpoints"
+scores_dir: "runs/physical_termination_transfer/scores"
+
+batch_optimizer:
+  enabled: true
+  mode: optimize 
+  force: false
+  include_current: true
+  include_in_wall_time: true
+  min_training_minutes_after_opt: 30
+  candidates:
+    - [2, 16]
+    - [4, 16]
+    - [4, 32]
+    - [8, 16]
+    - [8, 32]
+  warmup_steps: 20
+  measure_steps: 100
+  force_gpu: true

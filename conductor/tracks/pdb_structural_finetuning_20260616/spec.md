@@ -31,3 +31,8 @@ The structured generation track showed that sampling-time filters can improve Pr
 ## Current Constraint
 
 The existing Stage 2.6 metadata contains only `line_idx` and `genome`. It cannot be automatically joined to UniProt/PDB because protein-level identifiers were not preserved during CDS extraction. The first implementation therefore supports curated source line indices and records the missing metadata requirement explicitly.
+
+## Success Criteria
+1. **Dataset Integrity:** The filter extracts $\ge 1,000$ high-confidence structure-linked CDS records.
+2. **Structural Yield (ESMFold pLDDT):** De novo generated sequences from the fine-tuned model achieve a mean ESMFold pLDDT of $\ge 0.70$ (on a matched budget), demonstrating a structural improvement over the baseline (0.4–0.6).
+3. **Linguistic Quality Retention:** Fine-tuning does not degrade base perplexity on standard coding grammar.

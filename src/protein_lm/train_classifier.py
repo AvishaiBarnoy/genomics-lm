@@ -10,6 +10,7 @@ from src.protein_lm.config import ProteinClassifierConfig, load_config
 from src.protein_lm.tokenizer import ProteinTokenizer
 from src.protein_lm.models import ProteinClassifier
 from src.protein_lm.data import create_dataloader, ProteinClassificationDataset
+from src.training.runtime import RunLogger, WallTimer, save_checkpoint_atomic
 
 def train_classifier(config_path: str):
     """
@@ -27,6 +28,8 @@ def train_classifier(config_path: str):
     run_id = Path(config_path).stem
     output_dir = Path("outputs") / "protein_classifier" / run_id
     output_dir.mkdir(exist_ok=True, parents=True)
+    run_logger = RunLogger(output_dir / "logs" / "train.log")
+    run_logger.__enter__()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -72,6 +75,19 @@ def train_classifier(config_path: str):
     )
     criterion = nn.CrossEntropyLoss()
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=training_config['epochs'])
+    wall_timer = WallTimer(training_config.get("max_time_minutes"))
+    optimizer_step = 0
+
+    def save_checkpoint(path: Path, epoch: int, loss: float, reason: str) -> None:
+        save_checkpoint_atomic({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': loss,
+            'optimizer_step': optimizer_step,
+            'checkpoint_reason': reason,
+            'cfg': config_data,
+        }, path)
 
     # --- 5. Training Loop ---
     for epoch in range(training_config['epochs']):
@@ -88,9 +104,17 @@ def train_classifier(config_path: str):
             if (i + 1) % training_config.get('grad_accum_steps', 1) == 0:
                 optimizer.step()
                 optimizer.zero_grad()
+                optimizer_step += 1
+                every_steps = int(training_config.get("checkpoint_every_steps", 0) or 0)
+                if every_steps > 0 and optimizer_step % every_steps == 0:
+                    save_checkpoint(output_dir / "last.pt", epoch, float("inf"), "periodic")
 
             if i % 100 == 0:
                 print(f"Epoch {epoch+1}/{training_config['epochs']}, Step {i}, Loss: {loss.item():.4f}")
+            if wall_timer.expired():
+                save_checkpoint(output_dir / "last.pt", epoch, float("inf"), "wall_time")
+                print(f"[success] Wall-time reached; saved {output_dir / 'last.pt'}.")
+                return
         
         scheduler.step()
 
@@ -117,12 +141,8 @@ def train_classifier(config_path: str):
         print(f"Epoch {epoch+1}, Val Loss: {val_loss:.4f}, Accuracy: {accuracy:.4f}, F1: {f1:.4f}")
 
         # --- 7. Checkpointing ---
-        torch.save({
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'loss': val_loss,
-        }, output_dir / f"checkpoint_epoch_{epoch+1}.pt")
+        save_checkpoint(output_dir / f"checkpoint_epoch_{epoch+1}.pt", epoch, val_loss, "epoch")
+        save_checkpoint(output_dir / "last.pt", epoch, val_loss, "epoch")
 
 
 if __name__ == "__main__":

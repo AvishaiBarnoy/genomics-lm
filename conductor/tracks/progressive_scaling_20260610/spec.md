@@ -39,3 +39,10 @@ graph TD
 When scaling from $h_1$ heads to $h_2$ heads (e.g., 2 $\rightarrow$ 4):
 $$\mathbf{W}_q^{(new)} = \left[ \mathbf{W}_q^{(old)}, \mathbf{W}_q^{(old)} \right]$$
 This duplicates the query, key, and value projection matrices along the head dimension, ensuring the model starts with the exact same attention outputs, which then specialize during fine-tuning.
+
+---
+
+## 3. Success Criteria
+1. **Weight Duplication Loss Parity:** The duplicated-head model ($h=8$) immediately after weight transfer yields the exact same validation loss as the parent model ($h=4$) on target datasets (loss difference $<1e-5$).
+2. **Hierarchical Training Stability:** Deeper layers train without vanishing or exploding gradients (monitored via stable gradient norm statistics).
+3. **Scaling Gain:** The 10L8H model achieves lower final validation perplexity on taxonomic datasets than the 6L4H parent model.

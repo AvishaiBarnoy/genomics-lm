@@ -14,11 +14,10 @@ import argparse
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader
 from torch.profiler import profile, ProfilerActivity, schedule
 import yaml
 
-from src.codonlm.train_codon_lm import PackedDataset
+from src.codonlm.data_loading import build_codon_lm_dataloaders, build_codon_lm_datasets
 from src.codonlm.model_tiny_gpt import TinyGPT
 
 
@@ -60,12 +59,8 @@ def main():
     train_paths = _ensure_list(cfg.get("train_npz", default_train))
     val_paths = _ensure_list(cfg.get("val_npz", default_val))
 
-    train_ds = PackedDataset(train_paths)
-    val_ds = PackedDataset(val_paths)
-    train_loader = DataLoader(
-        train_ds, batch_size=cfg.get("batch_size", 2), shuffle=True, num_workers=0
-    )
-    DataLoader(val_ds, batch_size=cfg.get("batch_size", 2))
+    train_ds, val_ds = build_codon_lm_datasets(train_paths, val_paths, use_mmap=bool(cfg.get("use_mmap", False)))
+    train_loader, _, _, _ = build_codon_lm_dataloaders(train_ds, val_ds, cfg)
 
     # Build model (no compile to keep trace simple)
     model = TinyGPT(

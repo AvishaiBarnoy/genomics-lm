@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+from src.codonlm.data_loading import BucketBatchSampler
 from src.codonlm.train_codon_lm import PackedDataset
 
 
@@ -54,3 +55,12 @@ def test_dynamic_dataset_loading_and_collate(tmp_path):
         assert torch.equal(yb[0], torch.tensor([10, 20, 2, 0, 0], dtype=torch.long))
         assert torch.equal(xb[1], torch.tensor([1, 15, 25, 35, 45], dtype=torch.long))
         assert torch.equal(yb[1], torch.tensor([15, 25, 35, 45, 2], dtype=torch.long))
+
+
+def test_bucket_batch_sampler_seed_replays_order():
+    lengths = np.array([5, 8, 13, 21, 34, 55, 89, 144], dtype=np.int32)
+
+    first = list(BucketBatchSampler(lengths, batch_size=2, n_buckets=3, seed=1337))
+    second = list(BucketBatchSampler(lengths, batch_size=2, n_buckets=3, seed=1337))
+
+    assert first == second

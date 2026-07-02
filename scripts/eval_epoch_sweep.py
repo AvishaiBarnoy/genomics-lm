@@ -15,7 +15,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from src.codonlm.model_tiny_gpt import TinyGPT
-from src.codonlm.eval_perplexity import PackedDataset
+from src.codonlm.data_loading import PackedDataset, dynamic_lm_collate_fn
 from scripts.sanity_kpis import compute_kpis, load_vocab, dev
 from scripts._shared import resolve_run
 
@@ -23,23 +23,7 @@ from scripts._shared import resolve_run
 def compute_perplexity(model, device, val_npz, batch_size=32):
     dataset = PackedDataset(val_npz)
 
-    collate_fn = None
-    if getattr(dataset, "is_dynamic", False):
-        def dynamic_collate_fn(batch):
-            lengths = [len(seq) for seq in batch]
-            max_len = max(lengths)
-            xs, ys = [], []
-            for seq in batch:
-                x_seq = seq[:-1]
-                y_seq = seq[1:]
-                pad_len = (max_len - 1) - len(x_seq)
-                if pad_len > 0:
-                    x_seq = torch.cat([x_seq, torch.zeros(pad_len, dtype=torch.long)])
-                    y_seq = torch.cat([y_seq, torch.zeros(pad_len, dtype=torch.long)])
-                xs.append(x_seq)
-                ys.append(y_seq)
-            return torch.stack(xs), torch.stack(ys)
-        collate_fn = dynamic_collate_fn
+    collate_fn = dynamic_lm_collate_fn if getattr(dataset, "is_dynamic", False) else None
 
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
     model.eval()

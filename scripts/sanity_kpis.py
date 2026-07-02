@@ -21,8 +21,9 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
-from torch.utils.data import Dataset
 
+from src.codonlm.checkpoints import build_codon_model_from_cfg, load_codon_checkpoint
+from src.codonlm.data_loading import PackedDataset, dynamic_lm_collate_fn
 from src.codonlm.model_tiny_gpt import TinyGPT
 from src.codonlm.metrics_io import write_merge_metrics
 from scripts._shared import resolve_run
@@ -110,55 +111,12 @@ CODON_TO_AA: Dict[str, str] = {
 
 
 def _load_checkpoint(run_dir: Path) -> tuple[dict, dict]:
-    best = run_dir / "best.pt"
-    if not best.exists():
-        best = run_dir / "checkpoints" / "best.pt"
-    if not best.exists():
-        raise FileNotFoundError(f"best.pt not found in {run_dir}")
-    state = torch.load(best, map_location="cpu")
-    if isinstance(state, dict) and "model" in state:
-        return state["model"], state.get("cfg", {})
-    return state, {}
+    state_dict, cfg, _ = load_codon_checkpoint(run_dir)
+    return state_dict, cfg
 
 
 def _build_model_from_cfg(cfg: dict) -> TinyGPT:
-    return TinyGPT(
-        vocab_size=int(cfg["vocab_size"]),
-        block_size=int(cfg["block_size"]),
-        n_layer=int(cfg["n_layer"]),
-        n_head=int(cfg["n_head"]),
-        n_embd=int(cfg["n_embd"]),
-        dropout=float(cfg.get("dropout", 0.0)),
-        use_checkpoint=False,
-        label_smoothing=float(cfg.get("label_smoothing", 0.0)),
-    )
-
-
-class NPZ(Dataset):
-    def __init__(self, path: Path):
-        blob = np.load(path)
-        self.is_dynamic = "lengths" in blob
-        if self.is_dynamic:
-            flat_X = blob["X"]
-            lengths = blob["lengths"]
-            offsets = np.insert(np.cumsum(lengths), 0, 0)
-            self.seqs = []
-            for i in range(len(lengths)):
-                seq = flat_X[offsets[i] : offsets[i+1]]
-                self.seqs.append(torch.from_numpy(seq.astype(np.int64)))
-        else:
-            self.X = torch.from_numpy(np.asarray(blob["X"]).astype(np.int64))
-            self.Y = torch.from_numpy(np.asarray(blob["Y"]).astype(np.int64))
-
-    def __len__(self):
-        if getattr(self, "is_dynamic", False):
-            return len(self.seqs)
-        return self.X.shape[0]
-
-    def __getitem__(self, i):
-        if getattr(self, "is_dynamic", False):
-            return self.seqs[i]
-        return self.X[i], self.Y[i]
+    return build_codon_model_from_cfg(cfg)
 
 
 def load_vocab(run_id: str, repo_root: Path) -> Tuple[List[str], Dict[str, int]]:
@@ -197,25 +155,11 @@ def compute_kpis(
     itos: List[str],
     sample_windows: int = 200,
 ) -> Dict[str, float]:
-    ds = NPZ(test_npz)
+    ds = PackedDataset(test_npz)
     n = min(sample_windows, len(ds))
     idxs = np.linspace(0, len(ds) - 1, num=n, dtype=int)
     if getattr(ds, "is_dynamic", False):
-        batch = [ds.seqs[i] for i in idxs]
-        lengths = [len(seq) for seq in batch]
-        max_len = max(lengths)
-        xs, ys = [], []
-        for seq in batch:
-            x_seq = seq[:-1]
-            y_seq = seq[1:]
-            pad_len = (max_len - 1) - len(x_seq)
-            if pad_len > 0:
-                x_seq = torch.cat([x_seq, torch.zeros(pad_len, dtype=torch.long)])
-                y_seq = torch.cat([y_seq, torch.zeros(pad_len, dtype=torch.long)])
-            xs.append(x_seq)
-            ys.append(y_seq)
-        x = torch.stack(xs)
-        y = torch.stack(ys)
+        x, y = dynamic_lm_collate_fn([ds[i] for i in idxs])
     else:
         x = ds.X[idxs]
         y = ds.Y[idxs]

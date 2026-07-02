@@ -27,6 +27,12 @@ This plan outlines the steps required to implement, benchmark, and verify the pe
 - [x] **Task 5.1:** Updated `dev()` in `train_codon_lm.py` to check `cuda → mps → cpu`.
 - [x] **Task 5.2:** Verified locally (MPS selected on M2). CUDA path verified by code inspection. No remote NVIDIA environment available for live test.
 
+## Phase 6: Training Runtime Consolidation
+- [x] **Task 6.1:** Consolidated CodonLM packed/mmap datasets, dynamic collation, bucket batching, and length audits into `src/codonlm/data_loading.py`.
+- [x] **Task 6.2:** Added shared runtime utilities for device selection, wall-time guards, atomic checkpoint saves, periodic checkpoint policy, and per-run log teeing.
+- [x] **Task 6.3:** Wired CodonLM, ProteinCritic, ProteinLM, NoProp, evaluation, benchmark, and profiling entrypoints onto shared runtime/data paths where applicable.
+- [x] **Task 6.4:** Added periodic checkpoint knobs (`checkpoint_every_steps`, `checkpoint_every_minutes`) and durable run logs (`logs/train.log`) so long local MPS runs are diagnosable after failure.
+
 ---
 
 ## Benchmark Results Summary (MPS Apple M2, 30 steps)

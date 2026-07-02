@@ -339,5 +339,67 @@ Our local models deliver orders of magnitude higher performance density per para
     *   The failure mode is now framed as an objective/data mismatch, not just a capacity problem. CodonLM learns gene-like DNA and local codon grammar, but next-codon loss alone does not explicitly reward a translated protein that is folded, family-like, or biologically functional.
     *   The next implementation track is the open **Long-Range CodonLM Objectives** track: add multi-offset future-token losses (`+4/+8/+16/+32`), audit whole-gene coverage and truncation, rescore generated libraries with calibrated critics, prepare hard negatives, and only then run a controlled `d384` vs. `d512` capacity ablation.
 
+*   **Stage 12 Addendum — Long-Range Functional Objective Track (2026-06-17):**
+    *   Opened the **Long-Range CodonLM Objectives** track to test whether functional protein generation is limited by the causal next-token objective before scaling model width.
+    *   Implemented config-gated multi-offset auxiliary losses (`+4/+8/+16/+32`) while preserving next-token cross entropy as the primary perplexity metric.
+    *   Added whole-gene pack audits so runs explicitly report the fraction of examples clipped at `block_size`, clarifying when training is whole-gene versus whole-or-truncated.
+    *   The working hypothesis is objective/data mismatch first, capacity second: `d512` should be tested only after the `d384` objective ablation shows useful protein-generation movement without damaging termination or next-token perplexity.
+
+*   **Stage 12 Addendum — Training Runtime Consolidation (2026-06-18):**
+    *   Audited CodonLM, NoProp, ProteinCritic, ProteinLM, evaluation, benchmark, and profiler entrypoints after the long-range MPS continuation exited without a saved checkpoint.
+    *   Finding: the failed run directory contained only `checkpoints/config.yaml` and an empty `scores/curves.csv`; no durable run log existed, so the exact cause was not recoverable.
+    *   Consolidated shared runtime functions for wall-time checks, periodic checkpoint policy, atomic checkpoint writes, device selection, and per-run stdout/stderr tee logging.
+    *   Hardened run logging with lifecycle records, uncaught exception traces, thread/unraisable exception hooks, `faulthandler` native fault dumps, and SIGTERM/SIGINT/SIGHUP records. Hard kills such as SIGKILL or power loss remain uncatchable by design.
+    *   Consolidated CodonLM packed/mmap datasets, dynamic collation, length bucketing, and dataset audits into a shared data-loading module used by training, NoProp, evaluation, benchmarking, and profiling.
+    *   Added `runs/<RUN_ID>/logs/train.log` for CodonLM and ProteinCritic runs, plus `checkpoint_every_steps` / `checkpoint_every_minutes` controls so long MPS runs save progress before epoch end or wall-time exit.
+
+*   **Stage 12 Addendum — Termination Auxiliary Decoder (2026-06-19):**
+    *   Trained `2026-06-18_termination_aux_mps_b4_v1` with a supervised distance-to-stop auxiliary head. The run completed 2 epochs on MPS with `val_next_loss=4.0868` (`ppl=59.55`) and learned the auxiliary task (`val_term_loss=0.7934`), but plain sampling still produced `terminal_stop_rate=0.0` and `hard_cap_rate=1.0`.
+    *   Added optional decoder-side consumption of the auxiliary head in `src.codonlm.generate`: when generation reaches a configurable target-length window, stop-codon logits can receive a bias based on the predicted termination class.
+    *   Matched quick prefix evaluation with `--termination_bias --termination_stop_bias 5.0 --termination_trigger_class_max 4 --termination_bias_window 5` converted the failure mode to `terminal_stop_rate=1.0`, `hard_cap_rate=0.0`, and `early_stop_rate=0.0`, with mean length `100.86` codons around the 100-codon target.
+    *   Biological semantics did not improve: mean AA identity stayed near `0.0756`. The decoder fix therefore solves valid ORF ending, not functional protein generation. The next signal must come from ProteinCritic-calibrated replay/hard negatives or structural fine-tuning, not more epochs of the same objective alone.
+
+*   **Stage 12 Addendum — Physical Termination Transfer Pilot (2026-06-19):**
+    *   Reopened the multi-scale biophysical track for a hybrid CDS+UTR transfer-learning run. The goal is to move beyond average-length stop bias by exposing nucleotide-level downstream sequence around gene boundaries.
+    *   Built `configs/physical_termination_transfer.yaml` and prepared a broad local hybrid dataset from 24 non-duplicate GBFF files spanning Enterobacteriaceae, Gram-positive, high-GC, and `data/raw/expanded`.
+    *   Dataset size: 91,131 hybrid CDS+UTR examples, packed into 70,650 train windows, 8,433 validation windows, and 8,491 test windows, with 0 empty target windows.
+    *   Added token-aware transfer loading so the 69-token codon-only checkpoint can initialize the 74-token hybrid model: shared transformer tensors load exactly, shared token rows copy by token name, and new UTR/nucleotide rows remain newly initialized.
+    *   Started `2026-06-19_physical_termination_transfer_mps_b4_e1` from `runs/2026-06-18_termination_aux_mps_b4_v1/checkpoints/best.pt`. The run was paused by user request, not failed. It saved `checkpoints/last.pt` at optimizer step 18 after roughly 600/17,663 micro-batches.
+    *   Current bottleneck: wall-clock time. A full 1-epoch pass on the 24-GBFF hybrid dataset is estimated at roughly 8 hours on the M2 (`~2.45-2.49` sequences/sec). Next decision: resume overnight from `last.pt` or make a smaller stratified pilot subset for faster validation signal.
+
+*   **Stage 12 Addendum — Physical Termination Transfer Evaluation (2026-06-23):**
+    *   Completed `2026-06-19_physical_termination_transfer_mps_b4_e1` for 3 epochs using the batch optimizer's selected MPS setting (`batch_size=4`, `grad_accum_steps=16`).
+    *   Training improved steadily: validation loss went `5.496 -> 5.072 -> 4.882`, with epoch 3 saved as both `best.pt` and `last.pt`. Final `val_next_loss=4.851`, `ppl=127.91`, and `val_term_loss=0.309`.
+    *   Patched `scripts/eval_generation_prefix.py` to support hybrid CDS+UTR manifests by extracting CDS-only prefixes from `hybrid_data.tsv` using `cds_start` / `cds_end`.
+    *   Matched quick prefix evaluation (`--preset quick --seed 1337`) showed a mixed result:
+        *   Stage 2.6 baseline: terminal stop 0%, hard-cap 100%, median GQS 26.62, mean AA identity 0.0769.
+        *   Termination-aux checkpoint: terminal stop 0%, hard-cap 100%, median GQS 26.44, mean AA identity 0.0756.
+        *   Physical transfer: terminal stop 0%, hard-cap 100%, median GQS 21.40, mean AA identity 0.0947.
+    *   Interpretation: hybrid CDS+UTR transfer improved local AA-prefix similarity, but degraded GQS and did not teach natural gene termination. All generated samples still hit the hard cap.
+    *   Nonzero stop-bias decoding (`--termination_stop_bias 8`) did not help because the auxiliary head predicted class 4 ("far/no stop") for all generated samples, so strict stop bias never activated.
+    *   Conclusion: more epochs on the same teacher-forced objective are unlikely to solve this. The next target is generated-prefix replay / hard-negative training on off-distribution hard-cap failures.
+    *   Detailed report: `runs/2026-06-19_physical_termination_transfer_mps_b4_e1/scores/physical_termination_eval_report.md`.
+
+*   **Stage 12 Addendum — Generated-Prefix Replay Implementation (2026-06-24):**
+    *   Implemented `scripts/build_generated_prefix_replay.py` to sample from an existing CodonLM checkpoint, keep hard-cap generations without terminal stops, and write sparse termination-class labels around the target boundary.
+    *   Fixed two generation-context bugs exposed by the replay smoke:
+        *   Hybrid CDS continuation now masks generation to codon tokens by default; without this, the physical-transfer model could emit single-nucleotide UTR tokens and make a nominal 100-codon continuation expand to hundreds of tokens.
+        *   Prefix generation now uses `dna_prefix_to_ids`, which omits `<EOS_CDS>` from prompts. Full-CDS scoring still keeps `dna_to_ids` with EOS.
+    *   Added `src.codonlm.replay.GeneratedTerminationReplayDataset`, which loads generated replay JSONL, left-clips contexts to `block_size`, and preserves sparse auxiliary-head labels.
+    *   Extended `src.codonlm.train_codon_lm` with config-gated replay loss (`replay_loss_enabled`, `replay_data`, `replay_loss_weight`, `replay_batch_size`) while preserving the normal next-token objective and existing termination-distance auxiliary loss.
+    *   Added `configs/physical_termination_replay.yaml` to transfer from `2026-06-19_physical_termination_transfer_mps_b4_e1/checkpoints/best.pt` and apply replay correction conservatively.
+    *   Built the corrected quick replay dataset: 80/80 generated prefix samples were hard-cap failures and became replay records; corrected record lengths are 102-111 tokens with no EOS in the prefix.
+    *   Smoke-tested replay fine-tuning on MPS for 3 minutes. The run loaded the 80 replay records, transferred from the physical checkpoint, completed 2 optimizer steps, and saved `last.pt` through the wall-time checkpoint handler.
+    *   Interpretation: this targets the exact observed failure state — generated contexts where the auxiliary head says "far/no stop" near the hard cap. It is a smaller, more diagnostic step than scaling to d512 because it tests whether off-distribution generated states, rather than model capacity, are blocking natural termination.
+
+*   **Stage 12 Addendum — Separate-Heads Multi-Offset Priors & Backbone Freezing (2026-07-02):**
+    *   Designed and implemented the **Separate-Heads Multi-Offset** architecture to resolve next-token prior conflicts. Added isolated projection heads (`offset_projs`) for each target $x \in \{2, 4, 8, 16, 32\}$ in `TinyGPT`.
+    *   Ablated helical targets ($x=4$) and strand targets ($x=2$), and upgraded projections from single linear layers to **2-layer non-linear MLPs with GeLU activation**.
+    *   Implemented configuration-gated backbone freezing (`freeze_backbone: true` in `train_codon_lm.py`) to freeze the core transformer weights and causal next-token head during auxiliary training, protecting baseline next-token perplexity from prior-induced context corruption.
+    *   Evaluations on CPU showed that the Strand Prior ($x=2$) drove thermodynamic stability highest for short context ($k=1$), yielding the highest average stability of `0.5751`.
+    *   Merging the helical and strand projection weights into a single checkpoint (`runs/separate_heads_merged/checkpoints/best.pt`) provided mutual structural regularization, resolving context regressions.
+    *   Upgrading to 2-layer MLPs with backbone freezing completely solved prior logit corruption, achieving **unprecedented Pfam/EC classification confidence** (+25.7% relative improvement in Pfam confidence over the linear merged counterpart, and beating baseline confidence).
+    *   ESMFold structure folding reached a local peak pLDDT of **`0.5700`** on the top merged prior candidate (PDB files saved). Detailed report: `docs/separate_heads_multi_offset_report.md`.
+
 ---
 *End of Log*
