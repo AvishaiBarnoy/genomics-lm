@@ -48,3 +48,38 @@ def test_causal_mask():
     logits_2 = model(input_ids)         # Input of length 5
 
     assert torch.allclose(logits_1, logits_2[:, :-1, :], atol=1e-6)
+
+
+def test_multitask_classifier_forward_pass():
+    from src.protein_lm.models_multi import MultiTaskProteinClassifier
+    config = ProteinClassifierConfig(
+        vocab_size=30,
+        n_layer=2,
+        n_head=2,
+        n_embd=128,
+        block_size=256,
+        dropout=0.1,
+        num_classes=0,
+        pooling="attention",
+        bidirectional=True
+    )
+    task_dims = {"family": 1000, "stability": 2, "function": 500}
+    model = MultiTaskProteinClassifier(config, task_dims)
+    model.eval()
+
+    input_ids = torch.randint(0, config.vocab_size, (4, 100))
+    attention_mask = torch.ones((4, 100), dtype=torch.long)
+    attention_mask[:, 80:] = 0  # mock padding
+
+    with torch.no_grad():
+        out = model(input_ids, attention_mask=attention_mask)
+
+    assert isinstance(out, dict)
+    assert "family" in out
+    assert "stability" in out
+    assert "function" in out
+    assert "attention_weights" in out
+    assert out["family"].shape == (4, 1000)
+    assert out["stability"].shape == (4, 2)
+    assert out["function"].shape == (4, 500)
+    assert out["attention_weights"].shape == (4, 100)

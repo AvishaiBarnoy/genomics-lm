@@ -22,6 +22,8 @@ class ProteinClassifierConfig:
     dropout: float
     num_classes: int
     use_checkpoint: bool = False
+    pooling: str = "mean"
+    bidirectional: bool = True
 
 def load_config(path: str, config_class):
     """

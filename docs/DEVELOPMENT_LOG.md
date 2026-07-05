@@ -451,7 +451,21 @@ Our local models deliver orders of magnitude higher performance density per para
 *   **Prefix Generation & Stop Verification:**
     *   Evaluated on `scripts/eval_generation_prefix.py`: **100% natural stop rate (0% stalls)** and pristine GQS alignment similarity (GQS = `56.47` at $k=10$). The replay rules successfully constrained the boundaries.
 
+## 16. Stage 16: Bidirectional Backbone & Attention-Pooling for MultiTask ProteinCritic
+**Goal:** Transition the ProteinCritic classifier from a causal, average-pooled backbone to a bidirectional attention encoder with learnable attention pooling and a shared latent bottleneck layer to enable active-site explainability.
+
+*   **Attention-Pooling Integration (`models_multi.py`):**
+    *   Implemented the `AttentionPooling` layer, projecting hidden representations `x` to keys and values, and dot-product matching with a learnable query vector $q \in \mathbb{R}^{d_{\text{embd}}}$ scaled by $1/\sqrt{d_{\text{embd}}}$.
+    *   Saves and returns both the pooled embedding and the raw attention weights (saliency maps) for downstream motif auditing.
+*   **Shared Latent Bottleneck Projection (`models_multi.py`):**
+    *   Implemented `self.shared_latent` as a projection layer (`nn.Linear` -> `nn.LayerNorm` -> `GELU` -> `nn.Dropout`) between pooling and classifier heads to force joint feature regularization.
+*   **Configurable Causal Masking:**
+    *   Updated `ProteinClassifierConfig` and `train_multi_task.py` to support `pooling: "attention"` and `bidirectional: true` options, dynamically disabling causal masks when running classification.
+*   **Verification:**
+    *   Added `test_multitask_classifier_forward_pass` to `tests/test_protein_models.py` verifying forward outputs and attention weight matrix shapes. All 147 test cases passed successfully.
+
 ---
 *End of Log*
+
 
 

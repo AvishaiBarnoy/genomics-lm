@@ -28,20 +28,20 @@ This track captures the design and implementation of structural upgrades to the 
 ## Plan
 
 ### Phase 1: Bidirectional Attention Configuration
-- [ ] Add a config flag (e.g., `bidirectional: true` or `causal: false`) to `ProteinClassifierConfig`.
-- [ ] Modify the self-attention blocks in `ProteinConditionalTransformer` to optionally disable causal masking when running under the classification backbone.
-- [ ] Run a sanity check or unit test to verify that hidden states depend on both future and past tokens.
+- [x] Add a config flag (e.g., `bidirectional: true` or `causal: false`) to `ProteinClassifierConfig`.
+- [x] Modify the self-attention blocks in `ProteinConditionalTransformer` to optionally disable causal masking when running under the classification backbone.
+- [x] Run a sanity check or unit test to verify that hidden states depend on both future and past tokens.
 
 ### Phase 2: Attention-Pooling Module
-- [ ] Implement an `AttentionPooling` module in `models_multi.py`.
-- [ ] Add a learnable Query parameter $q \in \mathbb{R}^{d_{\text{embd}}}$ and projection layers for Keys and Values.
-- [ ] Compute softmax weights over sequence lengths to yield pooled representations.
-- [ ] Integrate this into `MultiTaskProteinClassifier` to replace standard mean pooling.
+- [x] Implement an `AttentionPooling` module in `models_multi.py`.
+- [x] Add a learnable Query parameter $q \in \mathbb{R}^{d_{\text{embd}}}$ and projection layers for Keys and Values.
+- [x] Compute softmax weights over sequence lengths to yield pooled representations.
+- [x] Integrate this into `MultiTaskProteinClassifier` to replace standard mean pooling.
 
 ### Phase 2.5: Shared Latent Bottleneck Layer
-- [ ] Implement a shared projection layer (e.g. `nn.Sequential` with `nn.Linear`, `nn.LayerNorm`, and `GELU`) in `MultiTaskProteinClassifier`.
-- [ ] Connect the output of the `AttentionPooling` module to this shared latent layer.
-- [ ] Branch the Pfam, EC, and stability classifier heads off the output of this shared bottleneck layer.
+- [x] Implement a shared projection layer (e.g. `nn.Sequential` with `nn.Linear`, `nn.LayerNorm`, and `GELU`) in `MultiTaskProteinClassifier`.
+- [x] Connect the output of the `AttentionPooling` module to this shared latent layer.
+- [x] Branch the Pfam, EC, and stability classifier heads off the output of this shared bottleneck layer.
 
 ### Phase 3: Training & Multi-Task Convergence
 - [ ] Train a smoke model using bidirectional attention, attention pooling, and shared latent layers on the multitask val dataset.

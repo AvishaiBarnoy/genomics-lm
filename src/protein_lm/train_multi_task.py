@@ -212,7 +212,9 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
         n_embd=cfg.get("n_embd", 128),
         dropout=cfg.get("dropout", 0.1),
         num_classes=0, # Dummy value for multi-task backbone
-        use_checkpoint=cfg.get("use_checkpoint", False)
+        use_checkpoint=cfg.get("use_checkpoint", False),
+        pooling=cfg.get("pooling", "mean"),
+        bidirectional=cfg.get("bidirectional", True)
     )
 
     print("[*] Building model...", flush=True)

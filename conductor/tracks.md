@@ -108,7 +108,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [ ] **Track: Bidirectional Backbone & Attention-Pooling for MultiTask ProteinCritic**
 *Link: [./tracks/critic_bidirectional_attention_pooling_20260622/](./tracks/critic_bidirectional_attention_pooling_20260622/)*
-*Summary: Integrate bidirectional attention into the ProteinCritic backbone, and replace average pooling with learnable attention-based pooling for active-site focus and saliency visualization.*
+*Summary: Phase 1 (Bidirectional config), Phase 2 (Attention-Pooling), and Phase 2.5 (Shared Latent Bottleneck) completed. Implemented learnable query-key attention pooling returning extractable saliency weights, integrated a shared non-linear projection latent layer to branch classifiers off, and enabled causal/non-causal toggles. Unit tests verified forward mapping shapes (all 147 tests passing). Next step is Phase 3: training the multi-task model to evaluate convergence and stability validation accuracy.*
 
 - [x] **Track: Architectural Upgrades (RoPE & SwiGLU) for CodonLM**
 *Link: [./tracks/codonlm_architectural_upgrades_20260622/](./tracks/codonlm_architectural_upgrades_20260622/)*
