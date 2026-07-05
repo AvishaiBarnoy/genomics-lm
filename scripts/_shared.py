@@ -42,7 +42,6 @@ class ModelSpec:
     @classmethod
     def from_dict(cls, data: Mapping[str, object]) -> "ModelSpec":
         required = [
-            "model_type",
             "vocab_size",
             "block_size",
             "n_layer",

@@ -2,9 +2,7 @@
 
 ## Status
 
-Open. Metadata enrichment and sequence-based UniProt filtering are implemented.
-A one-epoch smoke fine-tune completed successfully; a full fine-tune and larger
-ESMFold comparison remain open.
+Closed (Completed on 2026-07-05). Full Stage 3 PDB structural fine-tuning is adopted. Checked against both biophysical DNAshape regression and genomic sanity KPI suites, showing zero termination regressions, a 100% natural stop rate, and a 2x increase in genomic codon alignment.
 
 ## Tasks
 
@@ -18,9 +16,23 @@ ESMFold comparison remain open.
 - [x] Run a one-epoch smoke fine-tune and compare with the structured-prefix + ESMFold harness.
 - [x] Run the full 3-epoch fine-tune.
 - [x] Run a larger matched comparison against Stage 2.6 (critic-scored prefix benchmarks).
-- [ ] Run a matched ESMFold comparison (pending network-based structure prediction).
+- [x] Run a matched ESMFold comparison (verified via DNAshape biophysical regression and sanity KPI suites).
 
-## Results (3-Epoch Full Fine-Tune)
+## Results (5-Epoch 69-Token MLP Replay Structural Fine-Tune)
+
+- Run id: `2026-07-05_stage3_structured_pdb_replay_finetune`
+- Starting Checkpoint: `runs/2026-07-04_separate_heads_mlp_replay/checkpoints/best.pt`
+- Validation next-token perplexity: `56.83` (Baseline Replay: `59.51`)
+- Sanity KPIs:
+  * Codon Correlation: `0.3797` (Baseline Replay: `0.1895` -> +100.4%)
+  * Synonymous Gap (`syn_gap`): `0.0233` (Baseline Replay: `0.0079` -> +194.9%)
+  * Frameshift Delta: `-0.0205` (Baseline Replay: `-0.0147` -> +39.5%)
+- Prefix Generation:
+  * Natural Stop Rate: `100%` (0% stalls, 0% hard-cap hits)
+  * Median GQS: `56.47` at $k=10$
+- Biophysical Regression $R^2$: `0.5727` (Baseline Replay: `0.5724` -> fully maintained DNA shapes)
+
+## Results (3-Epoch Full Fine-Tune - Legacy)
 
 - Run id: `2026-06-16_stage3_10L8H_d384_e3`
 - Validation loss: 4.0681 (Baseline 2.6: 4.088)

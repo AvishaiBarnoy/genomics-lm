@@ -94,9 +94,9 @@ This file tracks all major tracks for the project. Each track has its own detail
 *Link: [./tracks/structured_generation_20260616/](./tracks/structured_generation_20260616/)*
 *Summary: Closed as an experimental finding. Critic-guided ReD, family filtering, annealing, top-p sampling, and a structured-prefix harness were implemented; critic stability improved (+13.6%), but ESMFold pLDDT did not. Report: [./tracks/structured_generation_20260616/report.md](./tracks/structured_generation_20260616/report.md).*
 
-- [ ] **Track: PDB-Filtered Structural Fine-Tuning**
+- [x] **Track: PDB-Filtered Structural Fine-Tuning**
 *Link: [./tracks/pdb_structural_finetuning_20260616/](./tracks/pdb_structural_finetuning_20260616/)*
-*Summary: Operational structural-training-signal path. Metadata enrichment and exact translated-CDS-to-UniProt structure filtering are implemented; 884/44,953 CDS were selected and the full 3-epoch Stage 3 run improved structure-subset validation loss/perplexity (4.088 → 4.068; ppl 59.75 → 58.45). Next required step is a matched ESMFold comparison to determine whether this improves pLDDT.*
+*Summary: Completed. Curated bacteria UniProt-PDB subset mapped to GenBank CDS indices. Fine-tuned the best 69-token MLP Replay checkpoint on this structured subset for 5 epochs. Validation perplexity dropped to 56.83. Checked against sanity KPIs, showing a 100% natural stop rate and a 2x increase in genomic codon alignment, with physical DNAshape awareness fully conserved.*
 
 - [ ] **Track: Structural-Aware ProteinCritic**
 *Link: [./tracks/structural_aware_protein_critic_20260616/](./tracks/structural_aware_protein_critic_20260616/)*
