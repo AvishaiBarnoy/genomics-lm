@@ -50,6 +50,7 @@ class MultiTaskProteinDataset(Dataset):
         item = {
             "input_ids": torch.tensor(input_ids, dtype=torch.long),
             "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
+            "sequence": s["sequence"],
             "family": torch.tensor(s.get("pfam_id", -1), dtype=torch.long),
             "function": torch.tensor(s.get("ec_id", -1), dtype=torch.long),
             "stability": torch.tensor(s.get("stability_id", -1), dtype=torch.long)
@@ -103,6 +104,8 @@ def collate_protein_batch(batch, pad_token_id=0):
             for i, value in enumerate(values):
                 out[i, : value.numel()] = value
             result[key] = out
+        elif key == "sequence":
+            result[key] = values
         else:
             result[key] = torch.stack(values)
     return result
@@ -261,8 +264,17 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
             collate_fn=lambda batch: collate_protein_batch(batch, tokenizer.pad_token_id),
         )
     else:
-        train_loader = DataLoader(train_ds, batch_size=cfg.get("batch_size", 8), shuffle=True)
-        val_loader = DataLoader(val_ds, batch_size=cfg.get("batch_size", 8))
+        train_loader = DataLoader(
+            train_ds,
+            batch_size=cfg.get("batch_size", 8),
+            shuffle=True,
+            collate_fn=lambda batch: collate_protein_batch(batch, tokenizer.pad_token_id),
+        )
+        val_loader = DataLoader(
+            val_ds,
+            batch_size=cfg.get("batch_size", 8),
+            collate_fn=lambda batch: collate_protein_batch(batch, tokenizer.pad_token_id),
+        )
     print(
         f"[*] Dataset sizes: train={len(train_ds)} val={len(val_ds)} "
         f"train_batches={len(train_loader)} val_batches={len(val_loader)}",
@@ -391,6 +403,28 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
             
             loss = 0
             tasks_added = 0
+
+            # Saliency contrast regularizer (Phase 4 active-site focus)
+            if "attention_weights" in logits_dict:
+                attn_weights = logits_dict["attention_weights"]  # (B, T)
+                saliency_loss = 0.0
+                saliency_count = 0
+                MOTIFS = ["GDSGG", "HIGH", "KMSKS", "DXD"]
+                for i, seq in enumerate(batch["sequence"]):
+                    active_indices = []
+                    for motif in MOTIFS:
+                        start_idx = seq.find(motif)
+                        if start_idx != -1:
+                            for offset in range(len(motif)):
+                                idx = start_idx + 1 + offset
+                                if idx < attn_weights.shape[1]:
+                                    active_indices.append(idx)
+                    if active_indices:
+                        active_mass = attn_weights[i, active_indices].sum()
+                        saliency_loss += -torch.log(active_mass + 1e-8)
+                        saliency_count += 1
+                if saliency_count > 0:
+                    loss += 5.0 * (saliency_loss / saliency_count)
             for task in ["family", "function", "stability"]:
                 targets = batch[task].to(device)
                 # Check if there's at least one valid label in the batch for this task
