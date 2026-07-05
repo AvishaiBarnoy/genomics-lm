@@ -349,6 +349,7 @@ def train_multi_task(config_path, resume_path=None, run_id=None, transfer_from=N
             csv.writer(f).writerow(["epoch", "train_loss", "val_loss"])
     
     time_limit_reached = False
+    start_time = time.perf_counter()
     wall_timer = WallTimer(max_time_minutes)
     checkpoint_policy = PeriodicCheckpointPolicy(
         every_steps=int(cfg.get("checkpoint_every_steps", 0) or 0),
