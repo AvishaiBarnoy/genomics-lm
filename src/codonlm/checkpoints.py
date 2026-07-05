@@ -49,6 +49,8 @@ def build_codon_model_from_cfg(cfg: dict) -> TinyGPT:
         termination_aux=bool(cfg.get("termination_loss_enabled", cfg.get("termination_aux", False))),
         termination_n_classes=int(cfg.get("termination_n_classes", 5)),
         multi_offset_targets=cfg.get("multi_offset_targets", None),
+        use_swiglu=bool(cfg.get("use_swiglu", False)),
+        use_rope=bool(cfg.get("use_rope", False)),
     )
 
 

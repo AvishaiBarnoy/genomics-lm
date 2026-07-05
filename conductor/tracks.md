@@ -102,17 +102,17 @@ This file tracks all major tracks for the project. Each track has its own detail
 *Link: [./tracks/structural_aware_protein_critic_20260616/](./tracks/structural_aware_protein_critic_20260616/)*
 *Summary: Protein-type labels, dynamic protein batching, masked pooling, safe transfer training, imbalance-aware `pos_weight`, and calibrated threshold/top-fraction evaluation are implemented. The weighted critic improves rare-label ranking but hurts raw probability calibration; keep open for generated-library rescoring and integration into selection loops.*
 
-- [ ] **Track: Long-Range CodonLM Objectives**
+- [x] **Track: Long-Range CodonLM Objectives**
 *Link: [./tracks/long_range_codon_objectives_20260616/](./tracks/long_range_codon_objectives_20260616/)*
-*Summary: Designed and ablated Separate-Heads Multi-Offset architectures. Discovered that 2-layer MLP projection heads combined with backbone freezing completely resolves next-token prior conflicts, improving thermodynamic stability (+1.2% absolute stability probability at $k=3$ and +2.1% generation ppl_stability) and increasing Pfam/EC classification confidence over linear counterparts. Matched ESMFold folding reached a local peak pLDDT of 0.57. Detailed report: [docs/separate_heads_multi_offset_report.md](../docs/separate_heads_multi_offset_report.md).*
+*Summary: Designed and ablated Separate-Heads Multi-Offset MLP prior architectures and Generated-Prefix Replay training. Multi-offset 2-layer MLP heads combined with backbone freezing resolved next-token prior conflicts (ppl 59.51). Prefix replay training corrected generated-context drift, yielding a 100% natural stop rate (0% stalls) and a +115% alignment similarity (GQS) increase to 56.4. Detailed report: [docs/separate_heads_multi_offset_report.md](../docs/separate_heads_multi_offset_report.md) and [docs/replay_training_theory_and_results.md](../docs/replay_training_theory_and_results.md).*
 
 - [ ] **Track: Bidirectional Backbone & Attention-Pooling for MultiTask ProteinCritic**
 *Link: [./tracks/critic_bidirectional_attention_pooling_20260622/](./tracks/critic_bidirectional_attention_pooling_20260622/)*
 *Summary: Integrate bidirectional attention into the ProteinCritic backbone, and replace average pooling with learnable attention-based pooling for active-site focus and saliency visualization.*
 
-- [ ] **Track: Architectural Upgrades (RoPE & SwiGLU) for CodonLM**
+- [x] **Track: Architectural Upgrades (RoPE & SwiGLU) for CodonLM**
 *Link: [./tracks/codonlm_architectural_upgrades_20260622/](./tracks/codonlm_architectural_upgrades_20260622/)*
-*Summary: Upgrade the CodonLM backbone with Rotary Position Embeddings (RoPE) and SwiGLU Feed-Forward Networks. Benchmark perplexity and structural regression probe scores against absolute positioning and standard FFNs.*
+*Summary: Completed. Implemented Rotary Position Embeddings (RoPE) and SwiGLU Gated Feed-Forward blocks inside the TinyGPT backbone. Verified shape/loss compatibility and legacy fallback mechanisms with unit tests. Evaluated performance via a 2x2 ablation study on MPS GPU, isolating a relative validation perplexity reduction of 2.5% for RoPE-only configurations.*
 
 - [ ] **Track: Biophysical Regression & MLP Probes**
 *Link: [./tracks/biophysical_mlp_regression_probes_20260622/](./tracks/biophysical_mlp_regression_probes_20260622/)*

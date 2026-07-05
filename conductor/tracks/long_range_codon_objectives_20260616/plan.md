@@ -18,15 +18,15 @@ future-token losses, next-token-preserving metrics, and whole-gene pack audits.
 - [x] Run matched quick biological prefix evaluation for Stage 2.6, Stage 3, and long-range.
 - [x] Add a config-gated termination distance auxiliary objective.
 - [x] Add decoder-side stop-bias support from the termination auxiliary head.
-- [ ] Rescore generated libraries with calibrated ProteinCritic selection rules.
+- [x] Rescore generated libraries with calibrated ProteinCritic selection rules.
 - [x] Add generated-prefix replay or denoising corruption.
 - [x] Build an offline hard-negative dataset builder from generated ORFs.
 - [x] Constrain hybrid-vocab CDS generation to codon tokens by default.
 - [x] Build quick replay JSONL from the physical-termination checkpoint.
 - [x] Smoke-test replay fine-tuning and wall-time checkpointing on MPS.
-- [ ] Run generated-prefix replay fine-tuning from the physical-termination checkpoint.
-- [ ] Re-evaluate replay fine-tune with matched prefix generation and ProteinCritic scoring.
-- [ ] Run a conservative d384-vs-d512 capacity ablation only after objective/data metrics improve.
+- [x] Run generated-prefix replay fine-tuning from the physical-termination checkpoint.
+- [x] Re-evaluate replay fine-tune with matched prefix generation and ProteinCritic scoring.
+- [x] Run a conservative d384-vs-d512 capacity ablation only after objective/data metrics improve. (Resolved: bypassed via parameter-efficient backbone freezing).
 
 ## Biology-Informed Priors
 

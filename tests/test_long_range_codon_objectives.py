@@ -189,7 +189,8 @@ def test_backbone_freezing():
         n_layer=2,
         n_head=2,
         n_embd=64,
-        multi_offset_targets=[4, 8]
+        multi_offset_targets=[4, 8],
+        termination_aux=True
     )
 
     # Simulate backbone freezing
@@ -197,7 +198,7 @@ def test_backbone_freezing():
     freeze_backbone = bool(cfg.get("freeze_backbone", False))
     if freeze_backbone:
         for name, param in model.named_parameters():
-            if "offset_projs" in name:
+            if "offset_projs" in name or "termination_head" in name:
                 param.requires_grad = True
             else:
                 param.requires_grad = False
@@ -207,7 +208,8 @@ def test_backbone_freezing():
     assert model.blocks[0].attn.proj.weight.requires_grad is False
     assert model.head.weight.requires_grad is False
 
-    # Check that offset projections are trainable
+    # Check that offset projections and termination head are trainable
+    assert model.termination_head.weight.requires_grad is True
     assert model.offset_projs["4"][0].weight.requires_grad is True
     assert model.offset_projs["4"][2].weight.requires_grad is True
     assert model.offset_projs["8"][0].weight.requires_grad is True

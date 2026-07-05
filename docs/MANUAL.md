@@ -185,6 +185,28 @@ python -m scripts.infer_score_mutations --run_dir runs/<RUN_ID>/checkpoints --se
     --termination_trigger_class_max 4 --termination_bias_window 5
   The bias window gates stop pressure to the last N codons before the target
   length so stop guidance does not collapse into short peptides.
+
+- **Generated-Prefix Replay Training**:
+  To resolve the non-termination/hard-cap stalling failure mode:
+  1.  **Generate Replay Data**: Sample prefix continuations from your pre-trained termination-aux checkpoint to capture hard-cap failure states and generate sparse distance-to-stop labels:
+      ```bash
+      python -m scripts.build_generated_prefix_replay \
+        --run_id <RUN_ID> \
+        --ckpt best.pt \
+        --device cpu \
+        --preset quick \
+        --out runs/<RUN_ID>/scores/generated_prefix_replay.jsonl
+      ```
+  2.  **Fine-tune with Replay**: Configure your config YAML to enable joint replay training (mixing native dataset and prefix corrections):
+      ```yaml
+      replay_loss_enabled: true
+      replay_loss_weight: 0.2
+      replay_data: "runs/<RUN_ID>/scores/generated_prefix_replay.jsonl"
+      ```
+      Launch training:
+      ```bash
+      python -m src.codonlm.train_codon_lm --config configs/<REPLAY_CONFIG>.yaml --run_id <REPLAY_RUN_ID>
+      ```
 - Runs trained with multi-offset prior projection heads can evaluate look-ahead prior-guided decoding:
   - python -m scripts.eval_generation_prefix --run_id <RUN_ID> --ckpt best.pt \
     --device cpu --preset quick --multi_offset_prior \

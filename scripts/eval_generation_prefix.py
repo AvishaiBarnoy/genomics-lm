@@ -164,10 +164,10 @@ def _model_spec_from(meta: dict, ckpt: object) -> dict:
         cfg = ckpt.get("cfg", {}) or {}
     cfg = meta.get("cfg", cfg) or cfg
 
-    # Ensure all architecture keys from checkpoint/meta configuration are present
     keys = [
         "vocab_size", "block_size", "n_layer", "n_head", "n_embd",
-        "multi_offset_targets", "termination_aux", "termination_n_classes", "termination_loss_enabled"
+        "multi_offset_targets", "termination_aux", "termination_n_classes", "termination_loss_enabled",
+        "use_swiglu", "use_rope"
     ]
     for k in keys:
         if k in cfg and k not in spec:

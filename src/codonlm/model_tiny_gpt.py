@@ -6,8 +6,58 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
+class RotaryEmbedding(nn.Module):
+    def __init__(self, dim, max_position_embeddings=512, base=10000, device=None):
+        super().__init__()
+        self.dim = dim
+        self.max_position_embeddings = max_position_embeddings
+        self.base = base
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float32) / self.dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self._set_cos_sin_cache(seq_len=max_position_embeddings, device=device, dtype=torch.get_default_dtype())
+
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
+        self.max_seq_len_cached = seq_len
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(t, self.inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
+        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
+
+    def forward(self, x, seq_len=None):
+        if seq_len > self.max_seq_len_cached:
+            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
+        return (
+            self.cos_cached[:seq_len].to(x.device),
+            self.sin_cached[:seq_len].to(x.device),
+        )
+
+def rotate_half(x):
+    x1 = x[..., :x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2:]
+    return torch.cat((-x2, x1), dim=-1)
+
+def apply_rotary_pos_emb(q, k, cos, sin):
+    cos = cos.unsqueeze(0).unsqueeze(1) # (1, 1, T, head_dim)
+    sin = sin.unsqueeze(0).unsqueeze(1) # (1, 1, T, head_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+class SwiGLU(nn.Module):
+    def __init__(self, n_embd, dropout):
+        super().__init__()
+        hidden_dim = int(8 * n_embd // 3)
+        self.w_gate = nn.Linear(n_embd, hidden_dim, bias=False)
+        self.w_up = nn.Linear(n_embd, hidden_dim, bias=False)
+        self.w_down = nn.Linear(hidden_dim, n_embd, bias=False)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        return self.dropout(self.w_down(F.silu(self.w_gate(x)) * self.w_up(x)))
+
 class CausalSelfAttention(nn.Module):
-    def __init__(self, n_embd, n_head, dropout, block_size, n_kv_head: int | None = None, use_sdpa: bool = False):
+    def __init__(self, n_embd, n_head, dropout, block_size, n_kv_head: int | None = None, use_sdpa: bool = False, use_rope: bool = False):
         super().__init__()
         assert n_embd % n_head == 0
         self.n_head = n_head
@@ -23,6 +73,11 @@ class CausalSelfAttention(nn.Module):
         self.proj = nn.Linear(n_embd, n_embd)
         self.dropout = nn.Dropout(dropout)
         self.register_buffer("mask", torch.tril(torch.ones(block_size, block_size)).unsqueeze(0).unsqueeze(0))
+        
+        if use_rope:
+            self.rotary_emb = RotaryEmbedding(dim=head_dim, max_position_embeddings=block_size)
+        else:
+            self.rotary_emb = None
 
     def forward(self, x, attn_mask=None):
         B, T, C = x.size()
@@ -32,25 +87,25 @@ class CausalSelfAttention(nn.Module):
             k = self.key(x).view(B, T, self.n_head, head_dim).transpose(1,2)
             v = self.value(x).view(B, T, self.n_head, head_dim).transpose(1,2)
         else:
-            # Grouped-query attention: fewer KV heads broadcast to query heads
             if self.n_head % self.n_kv_head != 0:
                 raise ValueError("n_head must be divisible by n_kv_head for GQA")
             k = self.key(x).view(B, T, self.n_kv_head, head_dim).transpose(1,2)
             v = self.value(x).view(B, T, self.n_kv_head, head_dim).transpose(1,2)
-            # Repeat along heads to match n_head
             rep = self.n_head // self.n_kv_head
             k = k.repeat_interleave(rep, dim=1)
             v = v.repeat_interleave(rep, dim=1)
 
+        if self.rotary_emb is not None:
+            cos, sin = self.rotary_emb(q, seq_len=T)
+            q, k = apply_rotary_pos_emb(q, k, cos, sin)
+
         base = self.mask[:,:,:T,:T]
         if self.use_sdpa and hasattr(torch.nn.functional, "scaled_dot_product_attention"):
             if attn_mask is not None:
-                # Ensure boolean mask for inversion/expansion
                 attn_mask_bool = (attn_mask > 0)
                 mask = attn_mask_bool.expand(B, self.n_head, T, T)
                 y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=False)
             else:
-                # Trigger the highly optimized fused causal kernel
                 y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=True)
             y = y.transpose(1,2).contiguous().view(B, T, C)
         else:
@@ -67,17 +122,20 @@ class CausalSelfAttention(nn.Module):
         return self.proj(y)
 
 class Block(nn.Module):
-    def __init__(self, n_embd, n_head, dropout, block_size, n_kv_head: int | None = None, use_sdpa: bool = False):
+    def __init__(self, n_embd, n_head, dropout, block_size, n_kv_head: int | None = None, use_sdpa: bool = False, use_swiglu: bool = False, use_rope: bool = False):
         super().__init__()
         self.ln1 = nn.LayerNorm(n_embd)
-        self.attn = CausalSelfAttention(n_embd, n_head, dropout, block_size, n_kv_head=n_kv_head, use_sdpa=use_sdpa)
+        self.attn = CausalSelfAttention(n_embd, n_head, dropout, block_size, n_kv_head=n_kv_head, use_sdpa=use_sdpa, use_rope=use_rope)
         self.ln2 = nn.LayerNorm(n_embd)
-        self.mlp = nn.Sequential(
-            nn.Linear(n_embd, 4*n_embd),
-            nn.GELU(),
-            nn.Linear(4*n_embd, n_embd),
-            nn.Dropout(dropout),
-        )
+        if use_swiglu:
+            self.mlp = SwiGLU(n_embd, dropout)
+        else:
+            self.mlp = nn.Sequential(
+                nn.Linear(n_embd, 4*n_embd),
+                nn.GELU(),
+                nn.Linear(4*n_embd, n_embd),
+                nn.Dropout(dropout),
+            )
 
     def forward(self, x, attn_mask=None):
         x = x + self.attn(self.ln1(x), attn_mask=attn_mask)
@@ -103,6 +161,8 @@ class TinyGPT(nn.Module):
         termination_aux: bool = False,
         termination_n_classes: int = 5,
         multi_offset_targets: list[int] | None = None,
+        use_swiglu: bool = False,
+        use_rope: bool = False,
     ):
         super().__init__()
         self.block_size = block_size
@@ -119,10 +179,28 @@ class TinyGPT(nn.Module):
         self.use_sdpa = bool(use_sdpa)
         self.termination_aux = bool(termination_aux)
         self.termination_n_classes = int(termination_n_classes)
+        self.use_swiglu = bool(use_swiglu)
+        self.use_rope = bool(use_rope)
+        
         self.tok_emb = nn.Embedding(vocab_size, n_embd)
-        self.pos_emb = nn.Embedding(block_size, n_embd)
+        if not self.use_rope:
+            self.pos_emb = nn.Embedding(block_size, n_embd)
+        else:
+            self.pos_emb = None
         self.drop = nn.Dropout(dropout)
-        self.blocks = nn.ModuleList([Block(n_embd, n_head, dropout, block_size, n_kv_head=self.n_kv_head, use_sdpa=self.use_sdpa) for _ in range(n_layer)])
+        self.blocks = nn.ModuleList([
+            Block(
+                n_embd,
+                n_head,
+                dropout,
+                block_size,
+                n_kv_head=self.n_kv_head,
+                use_sdpa=self.use_sdpa,
+                use_swiglu=self.use_swiglu,
+                use_rope=self.use_rope
+            )
+            for _ in range(n_layer)
+        ])
         self.ln_f = nn.LayerNorm(n_embd)
         self.head = nn.Linear(n_embd, vocab_size, bias=False)
         if self.tie_embeddings:
@@ -137,13 +215,11 @@ class TinyGPT(nn.Module):
         self.offset_projs = nn.ModuleDict()
         if self.multi_offset_targets:
             for offset in self.multi_offset_targets:
-                # 2-layer MLP with non-linear activation
                 mlp = nn.Sequential(
                     nn.Linear(n_embd, n_embd),
                     nn.GELU(),
                     nn.Linear(n_embd, n_embd)
                 )
-                # Initialize both Linear layers to identity to preserve pretrained representations
                 nn.init.eye_(mlp[0].weight)
                 if mlp[0].bias is not None:
                     nn.init.zeros_(mlp[0].bias)
@@ -172,29 +248,28 @@ class TinyGPT(nn.Module):
             "termination_aux": bool(self.termination_aux),
             "termination_n_classes": int(self.termination_n_classes),
             "multi_offset_targets": self.multi_offset_targets,
+            "use_swiglu": bool(self.use_swiglu),
+            "use_rope": bool(self.use_rope),
         }
 
     def forward(self, idx, targets=None, return_aux: bool = False):
         B, T = idx.shape
-        pos = torch.arange(0, T, device=idx.device).unsqueeze(0)
-        x = self.tok_emb(idx) + self.pos_emb(pos)
+        x = self.tok_emb(idx)
+        if not self.use_rope:
+            pos = torch.arange(0, T, device=idx.device).unsqueeze(0)
+            x = x + self.pos_emb(pos)
         x = self.drop(x)
 
         attn_mask = None
         if self.sep_id is not None:
-            # Build block-diagonal segment mask from <SEP> boundaries
             sep = (idx == int(self.sep_id))
-            # cumulative segment id increments after SEP; ensure SEP belongs to previous segment
             seg = torch.cumsum(sep, dim=1)
-            # allow attention only within equal seg ids
             seg_mask = (seg.unsqueeze(-1) == seg.unsqueeze(-2)).unsqueeze(1)  # (B,1,T,T)
             causal_mask = torch.tril(torch.ones(T, T, device=idx.device)).unsqueeze(0).unsqueeze(0) > 0  # (1,1,T,T)
             attn_mask = causal_mask & seg_mask  # Pre-combined mask (B,1,T,T)
 
         if self.use_checkpoint and self.training:
             for blk in self.blocks:
-                # Explicitly pass use_reentrant to silence future deprecation warnings.
-                # Fallback for older PyTorch that doesn't support the kwarg.
                 try:
                     x = checkpoint(lambda _x: blk(_x, attn_mask=attn_mask), x, use_reentrant=False)
                 except TypeError:
@@ -218,7 +293,6 @@ class TinyGPT(nn.Module):
 
         loss = None
         if targets is not None:
-            # Check if all weights are 1.0 to avoid cross-entropy weight overhead / behavior divergence
             is_uniform = torch.all(self.loss_weights == 1.0).item()
             weight_to_use = None if is_uniform else self.loss_weights
             loss = F.cross_entropy(

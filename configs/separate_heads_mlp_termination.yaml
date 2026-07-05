@@ -1,0 +1,59 @@
+# Training configuration to pre-train the termination head on the 69-token codon-only model.
+# Transfers weights from our best MLP prior checkpoint and trains the new termination auxiliary head.
+
+vocab_size: 69
+block_size: 512
+n_layer: 10
+n_head: 8
+n_embd: 384
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+use_sdpa: true
+sep_mask_enabled: true
+amp: false
+
+transfer_from: "runs/separate_heads_mlp_frozen/checkpoints/best.pt"
+freeze_backbone: true
+
+itos_path: "data/processed/itos_codon.txt"
+train_npz: "data/processed/stage2.6_large_master_pack/train_bs512.npz"
+val_npz: "data/processed/stage2.6_large_master_pack/val_bs512.npz"
+test_npz: "data/processed/stage2.6_large_master_pack/test_bs512.npz"
+dna_path: "data/processed/stage2.6_large_master_dna.txt"
+
+multi_offset_loss_enabled: true
+multi_offset_targets: [2, 4, 8, 16, 32]
+multi_offset_weights:
+  2: 0.10
+  4: 0.10
+  8: 0.05
+  16: 0.03
+  32: 0.02
+
+termination_loss_enabled: true
+termination_loss_weight: 0.1
+termination_stop_ids: [2]  # <EOS_CDS> is at index 2 in itos_codon.txt
+termination_bucket_edges: [0, 3, 10, 30]
+termination_n_classes: 5
+
+batch_size: 4
+grad_accum_steps: 32
+epochs: 2  # 2 epochs is sufficient to train the termination head on the frozen backbone
+lr: 0.0001
+min_lr: 0.000005
+weight_decay: 0.05
+warmup_steps: 50
+early_stop_patience: 10
+force_gpu: true
+checkpoint_every_steps: 10
+checkpoint_every_minutes: 0
+
+use_mmap: true
+bucket_batching: true
+n_buckets: 8
+num_workers: 0
+pin_memory: false
+
+out_dir: "runs/2026-07-03_separate_heads_mlp_termination/checkpoints"
+scores_dir: "runs/2026-07-03_separate_heads_mlp_termination/scores"

@@ -56,6 +56,11 @@ DEFAULT_BOUNDARY_IDS = (2, 3)  # <EOS_CDS>, <SEP>
 def write_meta(run_dir: Path, meta: dict) -> None:
     meta_path = run_dir / "meta.json"
     meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+    try:
+        from scripts.generate_run_summaries import generate_summary
+        generate_summary(run_dir.parent)
+    except Exception as e:
+        print(f"[warning] Failed to generate summary.md: {e}", file=sys.stderr)
 
 
 
@@ -541,6 +546,8 @@ def main():
         termination_aux=termination_head_enabled,
         termination_n_classes=termination_n_classes,
         multi_offset_targets=multi_offset_targets if multi_offset_enabled else None,
+        use_swiglu=bool(cfg.get("use_swiglu", False)),
+        use_rope=bool(cfg.get("use_rope", False)),
     ).to(device)
 
     replay_loader = None
@@ -625,13 +632,13 @@ def main():
         frozen_count = 0
         trainable_count = 0
         for name, param in model.named_parameters():
-            if "offset_projs" in name:
+            if "offset_projs" in name or "termination_head" in name:
                 param.requires_grad = True
                 trainable_count += 1
             else:
                 param.requires_grad = False
                 frozen_count += 1
-        print(f"[freeze] Backbone frozen: {frozen_count} tensors frozen, {trainable_count} tensors trainable (offset_projs only)")
+        print(f"[freeze] Backbone frozen: {frozen_count} tensors frozen, {trainable_count} tensors trainable (offset_projs and termination_head)")
 
     trainable_params = [p for p in model.parameters() if p.requires_grad]
 
