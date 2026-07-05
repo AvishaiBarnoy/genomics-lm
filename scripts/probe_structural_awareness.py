@@ -171,9 +171,10 @@ def probe_structural_awareness(run_id, ckpt="best.pt"):
 
     # 2. Get Hidden States
     with torch.no_grad():
-        x = model.tok_emb(input_ids) + model.pos_emb(
-            torch.arange(input_ids.size(1)).unsqueeze(0)
-        )
+        x = model.tok_emb(input_ids)
+        if not getattr(model, "use_rope", False):
+            x = x + model.pos_emb(torch.arange(input_ids.size(1), device=input_ids.device).unsqueeze(0))
+        x = model.drop(x)
         for block in model.blocks:
             x = block(x)
         hidden_states = x.squeeze(0).cpu().numpy()  # (T, D)

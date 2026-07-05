@@ -104,9 +104,10 @@ def main():
         # Extract model hidden states
         input_ids = torch.tensor([[stoi[c] for c in codons if c in stoi]], device=device).long()
         with torch.no_grad():
-            x = model.tok_emb(input_ids) + model.pos_emb(
-                torch.arange(input_ids.size(1), device=device).unsqueeze(0)
-            )
+            x = model.tok_emb(input_ids)
+            if not getattr(model, "use_rope", False):
+                x = x + model.pos_emb(torch.arange(input_ids.size(1), device=device).unsqueeze(0))
+            x = model.drop(x)
             for block in model.blocks:
                 x = block(x)
             hidden_states = x.squeeze(0).cpu().numpy()  # (T, D)
