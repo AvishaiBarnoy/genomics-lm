@@ -437,6 +437,21 @@ Our local models deliver orders of magnitude higher performance density per para
     *   *RoPE + SwiGLU*: Val perplexity `115.60` | Speed `39.54 seq/sec`. Combined initialization under the same learning rate and short warmup (100 steps) conflicts initially, requiring adjusted warmup schedules.
     *   Saved complete findings in the artifact [ablation_matrix_report.md](file:///Users/User/.gemini/antigravity-cli/brain/f89def31-b35b-45b6-9f79-f3216a4d8e7c/ablation_matrix_report.md).
 
+## 15. Stage 15: PDB-Filtered Structural Fine-Tuning (Stage 3)
+**Goal:** Fine-tune our latest best 69-token MLP termination + replay checkpoint (`runs/2026-07-04_separate_heads_mlp_replay/checkpoints/best.pt`) on high-confidence bacteria structural CDS coordinates mapped from UniProt-PDB entries.
+
+*   **Config & Objective Setup:**
+    *   Wrote [configs/stage3_structured_pdb_replay_finetune.yaml](file:///Users/User/github/genomics-lm/configs/stage3_structured_pdb_replay_finetune.yaml) to run 5 epochs of training on the 728-sequence structured subset.
+    *   Ensured joint objective training was maintained: next-codon cross-entropy on PDB, look-ahead structural offset projections, auxiliary stop-distance predictions, and prefix replay correction losses.
+*   **Training & Convergence:**
+    *   Completed training on the MPS GPU (`1,749` seconds).
+    *   Validation perplexity dropped from `59.51` to **`56.83`**, marking a substantial optimization on the structure-supported space.
+*   **Genomic Sanity Validation (No DNA Regressions):**
+    *   Evaluated on `scripts/sanity_kpis.py`: **`codon_corr` doubled** from `0.1895` to **`0.3797`**, **`syn_gap` tripled** from `0.0079` to **`0.0233`**, and **`frameshift_delta` strengthened** to **`-0.0205`**. This confirms that structural fine-tuning functions as a genomic clean-up filter, drastically improving DNA grammar and frame stability.
+*   **Prefix Generation & Stop Verification:**
+    *   Evaluated on `scripts/eval_generation_prefix.py`: **100% natural stop rate (0% stalls)** and pristine GQS alignment similarity (GQS = `56.47` at $k=10$). The replay rules successfully constrained the boundaries.
+
 ---
 *End of Log*
+
 

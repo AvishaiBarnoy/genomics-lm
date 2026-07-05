@@ -1,0 +1,68 @@
+# Stage 3 — PDB-Filtered Structural Fine-Tuning with MLP Prior + Replay.
+# Fine-tunes the latest best 69-token model on the high-confidence bacteria structural subset.
+
+vocab_size: 69
+block_size: 512
+n_layer: 10
+n_head: 8
+n_embd: 384
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+use_sdpa: true
+sep_mask_enabled: true
+amp: false
+
+# Transfer from our best 69-token MLP Replay checkpoint
+transfer_from: "runs/2026-07-04_separate_heads_mlp_replay/checkpoints/best.pt"
+freeze_backbone: false  # Update backbone weights to align with PDB structures
+
+# Data Paths
+itos_path: "data/processed/itos_codon.txt"
+train_npz: "data/processed/structured_pdb_pack/train_bs512.npz"
+val_npz: "data/processed/structured_pdb_pack/val_bs512.npz"
+test_npz: "data/processed/structured_pdb_pack/test_bs512.npz"
+
+# Maintain offset prior projection targets
+multi_offset_loss_enabled: true
+multi_offset_targets: [2, 4, 8, 16, 32]
+multi_offset_weights:
+  2: 0.10
+  4: 0.10
+  8: 0.05
+  16: 0.03
+  32: 0.02
+
+# Maintain termination helper head
+termination_loss_enabled: true
+termination_loss_weight: 0.1
+termination_stop_ids: [2]
+termination_bucket_edges: [0, 3, 10, 30]
+termination_n_classes: 5
+
+# Maintain generated prefix replay training to prevent termination regressions
+replay_loss_enabled: true
+replay_loss_weight: 0.2
+replay_batch_size: 4
+replay_data: "runs/2026-07-03_separate_heads_mlp_termination/scores/generated_prefix_replay.jsonl"
+
+# Training Hyperparameters
+batch_size: 4
+grad_accum_steps: 32
+epochs: 5
+lr: 0.00001
+min_lr: 0.000001
+weight_decay: 0.05
+warmup_steps: 10
+early_stop_patience: 5
+force_gpu: true
+
+# Loader settings (PDB pack is already padded/chunked to block_size, no bucket batching needed)
+use_mmap: true
+bucket_batching: false
+num_workers: 0
+pin_memory: false
+
+# Output
+out_dir: "runs/2026-07-05_stage3_structured_pdb_replay_finetune/checkpoints"
+scores_dir: "runs/2026-07-05_stage3_structured_pdb_replay_finetune/scores"
