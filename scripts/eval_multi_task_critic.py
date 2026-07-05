@@ -162,6 +162,8 @@ def main():
         n_embd=cfg.get("n_embd", 128),
         dropout=0.0,
         num_classes=0,
+        pooling=cfg.get("pooling", "mean"),
+        bidirectional=cfg.get("bidirectional", True),
     )
 
     model = MultiTaskProteinClassifier(model_cfg, task_dims)

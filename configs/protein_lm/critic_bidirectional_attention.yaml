@@ -1,0 +1,26 @@
+# Multi-Task Protein Critic training configuration with Bidirectional Backbone & Attention-Pooling
+train_data: "data/processed/protein_lm/multitask/train.jsonl"
+val_data: "data/processed/protein_lm/multitask/val.jsonl"
+task_vocabs: "data/processed/protein_lm/multitask/task_vocabs.json"
+
+# Model Architecture Parameters
+block_size: 512
+n_layer: 4
+n_head: 4
+n_embd: 128
+dropout: 0.1
+use_checkpoint: false
+
+# Structural Upgrades
+pooling: "attention"
+bidirectional: true
+
+# Optimizer & Training Settings
+batch_size: 16
+grad_accum_steps: 4
+epochs: 5
+lr: 0.0001
+max_time_minutes: 60
+
+# Output Destinations
+out_dir: "runs/2026-07-05_critic_bidirectional_attention/checkpoints"

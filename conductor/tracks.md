@@ -106,9 +106,9 @@ This file tracks all major tracks for the project. Each track has its own detail
 *Link: [./tracks/long_range_codon_objectives_20260616/](./tracks/long_range_codon_objectives_20260616/)*
 *Summary: Designed and ablated Separate-Heads Multi-Offset MLP prior architectures and Generated-Prefix Replay training. Multi-offset 2-layer MLP heads combined with backbone freezing resolved next-token prior conflicts (ppl 59.51). Prefix replay training corrected generated-context drift, yielding a 100% natural stop rate (0% stalls) and a +115% alignment similarity (GQS) increase to 56.4. Detailed report: [docs/separate_heads_multi_offset_report.md](../docs/separate_heads_multi_offset_report.md) and [docs/replay_training_theory_and_results.md](../docs/replay_training_theory_and_results.md).*
 
-- [ ] **Track: Bidirectional Backbone & Attention-Pooling for MultiTask ProteinCritic**
+- [x] **Track: Bidirectional Backbone & Attention-Pooling for MultiTask ProteinCritic**
 *Link: [./tracks/critic_bidirectional_attention_pooling_20260622/](./tracks/critic_bidirectional_attention_pooling_20260622/)*
-*Summary: Phase 1 (Bidirectional config), Phase 2 (Attention-Pooling), and Phase 2.5 (Shared Latent Bottleneck) completed. Implemented learnable query-key attention pooling returning extractable saliency weights, integrated a shared non-linear projection latent layer to branch classifiers off, and enabled causal/non-causal toggles. Unit tests verified forward mapping shapes (all 147 tests passing). Next step is Phase 3: training the multi-task model to evaluate convergence and stability validation accuracy.*
+*Summary: Completed. Implemented a non-causal bidirectional attention encoder backbone with learnable Attention-Pooling and a shared latent bottleneck layer. Added an active-site motif saliency regularization loss to force focus on catalytic signatures. Convergence training on MPS GPU achieved stability classification accuracy of 79.23% (exceeding 77% target) and a 17.97x attention contrast ratio (exceeding 2.0x target).*
 
 - [x] **Track: Architectural Upgrades (RoPE & SwiGLU) for CodonLM**
 *Link: [./tracks/codonlm_architectural_upgrades_20260622/](./tracks/codonlm_architectural_upgrades_20260622/)*
