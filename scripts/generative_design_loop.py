@@ -107,6 +107,26 @@ def load_codon_lm(run_dir: str, device: torch.device):
     return model, itos, stoi
 
 
+def verify_intermediate_sequence(codon_tokens: list[str]) -> bool:
+    """Run step-wise assertions on the growing sequence to abort early if non-viable."""
+    if len(codon_tokens) < 15:
+        return True
+    
+    # 1. Repetitive Check: if the last 15 codons have fewer than 4 unique codons, it's babbling
+    last_15 = codon_tokens[-15:]
+    if len(set(last_15)) < 4:
+        return False
+        
+    # 2. GC Content drift: check GC content of codon bases (should remain in [0.35, 0.72])
+    gc_count = sum(c.count('G') + c.count('C') for c in codon_tokens)
+    total_bases = len(codon_tokens) * 3
+    gc_ratio = gc_count / total_bases
+    if gc_ratio < 0.35 or gc_ratio > 0.72:
+        return False
+        
+    return True
+
+
 # ────────────────────────────────────────────────────────────────────────────
 # ReD Sampling (Reset-and-Discard)
 # ────────────────────────────────────────────────────────────────────────────
@@ -171,6 +191,17 @@ def red_generate(
             probs = torch.softmax(logits, dim=-1)
             next_id = torch.multinomial(probs, 1).item()
             ids.append(next_id)
+
+            # Active step-wise assertions to abort early
+            if step >= 15 and step % 5 == 0:
+                current_codons = [itos[i] for i in ids[1:] if 0 <= i < len(itos)]
+                current_codons = [
+                    c for c in current_codons
+                    if len(c) == 3 and c.isalpha()
+                    and c not in {"<BOS_CDS>", "<EOS_CDS>", "<PAD>"}
+                ]
+                if not verify_intermediate_sequence(current_codons):
+                    break  # abort this attempt early!
 
             # Stop conditions
             if eos_idx is not None and next_id == eos_idx:

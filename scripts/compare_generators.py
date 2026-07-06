@@ -20,6 +20,7 @@ def main():
     ap.add_argument("--n_sequences", type=int, default=30)
     ap.add_argument("--max_attempts", type=int, default=10)
     ap.add_argument("--max_stability_attempts", type=int, default=5)
+    ap.add_argument("--min_stability", type=float, default=0.0)
     ap.add_argument("--out_dir", default="outputs/reports/generator_comparison")
     args = ap.parse_args()
 
@@ -34,6 +35,7 @@ def main():
         n_sequences=args.n_sequences,
         max_attempts=args.max_attempts,
         max_stability_attempts=args.max_stability_attempts,
+        min_stability=args.min_stability,
         out_dir=str(out_path / "baseline")
     )
 
@@ -45,6 +47,7 @@ def main():
         n_sequences=args.n_sequences,
         max_attempts=args.max_attempts,
         max_stability_attempts=args.max_stability_attempts,
+        min_stability=args.min_stability,
         out_dir=str(out_path / "finetuned")
     )
 
@@ -74,6 +77,9 @@ def main():
     base_len = [int(r["n_aa"]) for r in base_recs if "n_aa" in r]
     fine_len = [int(r["n_aa"]) for r in fine_recs if "n_aa" in r]
 
+    base_atts = [int(r["n_attempts"]) for r in base_recs if "n_attempts" in r]
+    fine_atts = [int(r["n_attempts"]) for r in fine_recs if "n_attempts" in r]
+
     # Family & function richness
     def unique_counts(recs, key):
         vals = [r[key] for r in recs if key in r and r[key] != "" and r[key] != "-1"]
@@ -90,6 +96,7 @@ def main():
         "|---|---|---|---|",
         f"| **Mean Stability Probability** | {np.mean(base_stab):.3f} | {np.mean(fine_stab):.3f} | {np.mean(fine_stab) - np.mean(base_stab):+.3f} |",
         f"| **High-Stability Yield (P > 0.7)** | {sum(1 for p in base_stab if p > 0.7)} / {len(base_recs)} | {sum(1 for p in fine_stab if p > 0.7)} / {len(fine_recs)} | |",
+        f"| **Average Attempts per Sequence** | {np.mean(base_atts):.1f} | {np.mean(fine_atts):.1f} | {np.mean(fine_atts) - np.mean(base_atts):+.1f} |",
         f"| **Average AA Length** | {np.mean(base_len):.1f} | {np.mean(fine_len):.1f} | |",
         f"| **Pfam Family Richness** | {unique_counts(base_recs, 'family_top1')} unique | {unique_counts(fine_recs, 'family_top1')} unique | |",
         f"| **EC Function Richness** | {unique_counts(base_recs, 'function_top1')} unique | {unique_counts(fine_recs, 'function_top1')} unique | |",
