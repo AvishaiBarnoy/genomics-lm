@@ -2,10 +2,7 @@
 
 ## Status
 
-Open. First implementation pass is complete: UniProt protein-type dataset
-preparation, dynamic collation, length bucketing, masked pooling, and a starter
-config are implemented and tested. Training the first structural-aware critic is
-still open.
+Completed. Upgraded generative design loop with coarse structural category reporting and ESMFold calibration. Ran comparative design loops on baseline vs. PDB fine-tuned models under stability constraints to analyze prior shifts.
 
 ## Tasks
 
@@ -17,8 +14,8 @@ still open.
 - [x] Add multi-label protein-type heads.
 - [x] Add tests for label extraction, bucketing, dynamic padding, and masked pooling.
 - [x] Train a first structural-aware ProteinCritic.
-- [ ] Add generation-loop reporting for protein type and foldability.
-- [ ] Compare generated sequence categories before/after PDB-filtered CodonLM fine-tuning.
+- [x] Add generation-loop reporting for protein type and foldability.
+- [x] Compare generated sequence categories before/after PDB-filtered CodonLM fine-tuning.
 
 ## Results (Scaled Bidirectional Critic)
 

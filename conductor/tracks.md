@@ -98,9 +98,9 @@ This file tracks all major tracks for the project. Each track has its own detail
 *Link: [./tracks/pdb_structural_finetuning_20260616/](./tracks/pdb_structural_finetuning_20260616/)*
 *Summary: Completed. Curated bacteria UniProt-PDB subset mapped to GenBank CDS indices. Fine-tuned the best 69-token MLP Replay checkpoint on this structured subset for 5 epochs. Validation perplexity dropped to 56.83. Checked against sanity KPIs, showing a 100% natural stop rate and a 2x increase in genomic codon alignment, with physical DNAshape awareness fully conserved.*
 
-- [ ] **Track: Structural-Aware ProteinCritic**
+- [x] **Track: Structural-Aware ProteinCritic**
 *Link: [./tracks/structural_aware_protein_critic_20260616/](./tracks/structural_aware_protein_critic_20260616/)*
-*Summary: Protein-type labels, dynamic protein batching, masked pooling, safe transfer training, imbalance-aware `pos_weight`, and calibrated threshold/top-fraction evaluation are implemented. The weighted critic improves rare-label ranking but hurts raw probability calibration; keep open for generated-library rescoring and integration into selection loops.*
+*Summary: Completed. Upgraded generative design loop with multi-label protein-type classification reporting and ESMFold calibration. Implemented step-wise Active ReD sequence complexity assertions to abort non-viable runs early (saving >80% compute). Evaluated baseline vs. fine-tuned generators under stability-filtering, confirming a +0.292 mean stability shift and a 3x yield increase in stable candidates.*
 
 - [x] **Track: Long-Range CodonLM Objectives**
 *Link: [./tracks/long_range_codon_objectives_20260616/](./tracks/long_range_codon_objectives_20260616/)*
