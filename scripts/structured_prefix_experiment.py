@@ -23,12 +23,14 @@ from scripts.generative_design_loop import (
     STOP_CODONS,
     dev,
     esm_fold,
-    kmer_diversity,
     load_codon_lm,
     load_critic,
-    pairwise_identity,
     score_with_critic,
     translate_dna,
+)
+from src.eval.diversity import (
+    kmer_diversity,
+    pairwise_identity,
 )
 
 

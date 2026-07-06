@@ -17,7 +17,7 @@ from tqdm import tqdm
 from src.protein_lm.tokenizer import ProteinTokenizer
 from src.protein_lm.models_multi import MultiTaskProteinClassifier
 from src.protein_lm.config import ProteinClassifierConfig
-from src.protein_lm.train_multi_task import MultiTaskProteinDataset
+from src.protein_lm.dataset import MultiTaskProteinDataset
 
 def dev() -> torch.device:
     return torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")

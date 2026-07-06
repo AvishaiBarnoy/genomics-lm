@@ -7,10 +7,12 @@ from scripts.prepare_protein_type_dataset import PROTEIN_TYPE_LABELS, protein_ty
 from src.protein_lm.config import ProteinClassifierConfig
 from src.protein_lm.models_multi import MultiTaskProteinClassifier
 from src.protein_lm.tokenizer import ProteinTokenizer
-from src.protein_lm.train_multi_task import (
+from src.protein_lm.dataset import (
     LengthBucketBatchSampler,
     MultiTaskProteinDataset,
     collate_protein_batch,
+)
+from src.protein_lm.train_multi_task import (
     compute_multi_label_pos_weight,
     load_compatible_model_weights,
 )

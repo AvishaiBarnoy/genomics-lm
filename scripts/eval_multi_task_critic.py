@@ -7,7 +7,7 @@ import numpy as np
 from src.protein_lm.tokenizer import ProteinTokenizer
 from src.protein_lm.models_multi import MultiTaskProteinClassifier
 from src.protein_lm.config import ProteinClassifierConfig
-from src.protein_lm.train_multi_task import (
+from src.protein_lm.dataset import (
     LengthBucketBatchSampler,
     MultiTaskProteinDataset,
     collate_protein_batch,

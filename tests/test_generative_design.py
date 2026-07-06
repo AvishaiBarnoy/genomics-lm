@@ -12,11 +12,13 @@ from unittest.mock import MagicMock, patch
 import torch
 
 from scripts.generative_design_loop import (
+    red_generate,
+    translate_dna,
+)
+from src.eval.diversity import (
     gc_content,
     kmer_diversity,
     pairwise_identity,
-    red_generate,
-    translate_dna,
 )
 
 
