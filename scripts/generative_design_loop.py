@@ -227,6 +227,8 @@ def load_critic(ckpt_path: str, cfg_path: str, device: torch.device):
         n_embd=cfg.get("n_embd", 128),
         dropout=0.0,
         num_classes=0,
+        pooling=cfg.get("pooling", "mean"),
+        bidirectional=cfg.get("bidirectional", True),
     )
     model = MultiTaskProteinClassifier(model_cfg, task_dims).to(device)
     model.load_state_dict(state_dict, strict=False)
@@ -280,6 +282,9 @@ def score_with_critic(
         scores["function_top5"] = top5_idx.tolist()
         scores["function_top5_conf"] = top5_vals.tolist()
         scores["function_entropy"] = -(fn_probs * (fn_probs + 1e-10).log()).sum().item()
+
+    if "attention_weights" in logits_dict:
+        scores["attention_weights"] = logits_dict["attention_weights"][0].cpu().tolist()
 
     return scores
 
@@ -383,6 +388,10 @@ def run_design_loop(
     # T1b: family targeting
     target_family_idx: int = -1,
     min_family_conf: float = 0.3,
+    # Active-site attention saliency filter
+    use_saliency_filter: bool = False,
+    min_saliency_ratio: float = 2.0,
+    saliency_motifs: str = "GDSGG,HIGH,KMSKS,DXD",
     esm_fold_top: int = 0,
     out_dir: str = "outputs/reports/generative_design",
 ) -> dict:
@@ -410,6 +419,8 @@ def run_design_loop(
         filter_desc.append(f"min_stability={min_stability}")
     if use_family_filter:
         filter_desc.append(f"target_family={target_family_idx}(conf>{min_family_conf})")
+    if use_saliency_filter:
+        filter_desc.append(f"saliency_filter(ratio>{min_saliency_ratio})")
     if anneal_temp:
         filter_desc.append("anneal_temp")
     if top_p > 0:
@@ -431,7 +442,7 @@ def run_design_loop(
         best_rec: dict | None = None
         outer_total_att = 0
 
-        for _outer in range(max_stability_attempts if (use_stability_filter or use_family_filter) else 1):
+        for _outer in range(max_stability_attempts if (use_stability_filter or use_family_filter or use_saliency_filter) else 1):
             codons, terminated, n_att = red_generate(
                 codon_model, device, stoi, itos,
                 max_codons=max_codons, max_attempts=max_attempts,
@@ -472,6 +483,33 @@ def run_design_loop(
                 if (rec.get("family_top1", -1) != target_family_idx or
                         rec.get("family_top1_conf", 0) < min_family_conf):
                     continue  # discard, retry
+
+            # Active-site attention saliency filter (explainable function checks).
+            # NOTE ON EXPLORATION VS. EXPLOITATION:
+            # Enforcing known motifs ensures high-fidelity targeted design but introduces 
+            # a bias towards templates with prior validation. For open-ended de novo discovery,
+            # disable this filter (--use_saliency_filter False) and inspect the raw 
+            # attention maps (rec["attention_weights"]) post-generation to identify novel
+            # functional/catalytic signatures that the model has learned from first principles.
+            if use_saliency_filter and "attention_weights" in rec:
+                attn_weights = rec["attention_weights"]
+                motifs_list = [m.strip() for m in saliency_motifs.split(",") if m.strip()]
+                active_indices = []
+                for motif in motifs_list:
+                    start_idx = aa_seq.find(motif)
+                    if start_idx != -1:
+                        for offset in range(len(motif)):
+                            idx = start_idx + 1 + offset
+                            if idx < len(attn_weights):
+                                active_indices.append(idx)
+                if active_indices:
+                    non_active_indices = [i for i in range(1, len(aa_seq) + 1) if i not in active_indices]
+                    mean_active = np.mean([attn_weights[i] for i in active_indices])
+                    mean_non_active = np.mean([attn_weights[i] for i in non_active_indices]) if non_active_indices else 1.0
+                    ratio = mean_active / (mean_non_active + 1e-8)
+                    rec["saliency_ratio"] = float(ratio)
+                    if ratio < min_saliency_ratio:
+                        continue  # discard, retry
 
             # All filters passed
             best_rec = rec
@@ -792,6 +830,11 @@ def main():
                     help="T1b: only accept sequences where family_top1 == this index (-1 = disabled)")
     ap.add_argument("--min_family_conf", type=float, default=0.3,
                     help="T1b: minimum family confidence required when --target_family_idx is set")
+    # Active-site attention saliency filter
+    ap.add_argument("--use_saliency_filter", action="store_true",
+                    help="Reject sequences with active site attention ratio < min_saliency_ratio")
+    ap.add_argument("--min_saliency_ratio", type=float, default=2.0)
+    ap.add_argument("--saliency_motifs", default="GDSGG,HIGH,KMSKS,DXD")
     ap.add_argument("--esm_fold_top", type=int, default=0,
                     help="Submit top-N sequences to ESMFold API (0 = disabled, requires internet)")
     ap.add_argument("--out_dir", default="outputs/reports/generative_design")
@@ -813,6 +856,9 @@ def main():
         max_stability_attempts=args.max_stability_attempts,
         target_family_idx=args.target_family_idx,
         min_family_conf=args.min_family_conf,
+        use_saliency_filter=args.use_saliency_filter,
+        min_saliency_ratio=args.min_saliency_ratio,
+        saliency_motifs=args.saliency_motifs,
         esm_fold_top=args.esm_fold_top,
         out_dir=args.out_dir,
     )
