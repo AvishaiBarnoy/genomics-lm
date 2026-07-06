@@ -13,7 +13,7 @@ use_sdpa: true
 sep_mask_enabled: true
 amp: false
 
-transfer_from: "runs/separate_heads_merged/checkpoints/best.pt"
+transfer_from: "runs/2026-07-02_separate_heads_merged/checkpoints/best.pt"
 freeze_backbone: true
 
 itos_path: "data/processed/itos_codon.txt"

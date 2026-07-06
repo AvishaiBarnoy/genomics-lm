@@ -218,6 +218,8 @@ def load_critic(ckpt_path: str, cfg_path: str, device: torch.device):
         task_dims["function"] = state_dict["heads.function.weight"].shape[0]
     if "heads.stability.weight" in state_dict:
         task_dims["stability"] = state_dict["heads.stability.weight"].shape[0]
+    if "heads.protein_type.weight" in state_dict:
+        task_dims["protein_type"] = state_dict["heads.protein_type.weight"].shape[0]
 
     model_cfg = ProteinClassifierConfig(
         vocab_size=len(tokenizer.vocab),
@@ -282,6 +284,14 @@ def score_with_critic(
         scores["function_top5"] = top5_idx.tolist()
         scores["function_top5_conf"] = top5_vals.tolist()
         scores["function_entropy"] = -(fn_probs * (fn_probs + 1e-10).log()).sum().item()
+
+    if "protein_type" in task_dims:
+        pt_logits = logits_dict["protein_type"][0]
+        pt_probs = torch.sigmoid(pt_logits)
+        from scripts.prepare_protein_type_dataset import PROTEIN_TYPE_LABELS
+        for idx, label in enumerate(PROTEIN_TYPE_LABELS):
+            if idx < pt_probs.shape[0]:
+                scores[f"type_{label}_prob"] = pt_probs[idx].item()
 
     if "attention_weights" in logits_dict:
         scores["attention_weights"] = logits_dict["attention_weights"][0].cpu().tolist()
@@ -683,6 +693,65 @@ def _build_report(
             f"{sum(1 for c in fn_confs if c > 0.5)} / {len(fn_confs)} |",
             "",
         ]
+
+    # Protein type head (sigmoid-based multi-label probabilities)
+    from scripts.prepare_protein_type_dataset import PROTEIN_TYPE_LABELS
+    pt_scores = {label: [] for label in PROTEIN_TYPE_LABELS}
+    has_pt = False
+    for rec in records:
+        for label in PROTEIN_TYPE_LABELS:
+            key = f"type_{label}_prob"
+            if key in rec:
+                pt_scores[label].append(rec[key])
+                has_pt = True
+
+    if has_pt:
+        lines += [
+            "### Protein Structural Types",
+            "Mean predicted probabilities for coarse structural categories:",
+            "",
+            "| Protein Type Label | Mean Probability | Description / Details |",
+            "|---|---|---|",
+        ]
+        descriptions = {
+            "structured_pdb": "Contains 3D-structural residues (from PDB)",
+            "membrane": "Transmembrane or membrane-associated candidate",
+            "signal_secreted": "Contains secretion signals / extracellular transit motifs",
+            "disordered_low_complexity": "Intrinsically disordered / low-complexity region",
+            "enzyme": "Enzymatic or metabolic catalyst",
+            "short_peptide": "Short biologically active peptide candidate (< 50 AAs)",
+            "soluble_candidate": "Soluble cytoplasmic protein candidate",
+        }
+        for label in PROTEIN_TYPE_LABELS:
+            vals = pt_scores[label]
+            if vals:
+                mean_val = np.mean(vals)
+                desc = descriptions.get(label, "")
+                lines.append(f"| `{label}` | {mean_val:.4f} | {desc} |")
+        lines.append("")
+
+    if esm_results:
+        lines += [
+            "### ESMFold Calibration",
+            "Calibration of predicted thermodynamic stability probability against ESMFold structure pLDDT scores:",
+            "",
+            "| Sequence ID | Stability Prob | ESMFold mean pLDDT | Fold Quality |",
+            "|---|---|---|---|",
+        ]
+        for fold in esm_results:
+            plddt = fold.get("plddt_mean", 0.0)
+            if plddt > 90:
+                quality = "Very High (Model-like)"
+            elif plddt > 70:
+                quality = "Good (Backbone-confident)"
+            elif plddt > 50:
+                quality = "Low (Disordered/Loop-like)"
+            else:
+                quality = "Very Low (Unstructured)"
+            lines.append(
+                f"| `{fold['seq_id']}` | {fold.get('stability_prob', 0.0):.3f} | {plddt:.1f} | {quality} |"
+            )
+        lines.append("")
 
     lines += [
         "---",

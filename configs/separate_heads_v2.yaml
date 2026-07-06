@@ -13,7 +13,7 @@ use_sdpa: true
 sep_mask_enabled: true
 amp: false
 
-transfer_from: "runs/separate_heads_full_run/checkpoints/best.pt"
+transfer_from: "runs/2026-07-02_separate_heads_full_run/checkpoints/best.pt"
 
 itos_path: "data/processed/itos_codon.txt"
 train_npz: "data/processed/stage2.6_large_master_pack/train_bs512.npz"
