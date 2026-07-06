@@ -72,9 +72,9 @@ This file tracks all major tracks for the project. Each track has its own detail
 *Link: [./tracks/training_speed_optimization_20260615/](./tracks/training_speed_optimization_20260615/)*
 *Summary: All 5 phases implemented (GQA, mmap, BucketBatchSampler, CUDA device priority, SDPA path). Benchmark shows MPS batch=4 is dispatch-bound — optimizations benefit RAM/params, not throughput at this scale. CUDA batch≥32 expected to show ≥1.5× speedup.*
 
-- [ ] **Track: CodonLM Trainer Refactor**
+- [x] **Track: CodonLM Trainer Refactor**
 *Link: [./tracks/codonlm_trainer_refactor_20260622/](./tracks/codonlm_trainer_refactor_20260622/)*
-*Summary: Opened to split `src/codonlm/train_codon_lm.py` into testable checkpoint/resume, data setup, objective computation, runtime loop, and CLI layers while preserving current commands, configs, checkpoint compatibility, and mid-epoch resume behavior.*
+*Summary: Completed. Refactored the monolithic 1,200-line `train_codon_lm.py` script into a modular `src/codonlm/training/` subpackage (separating config, checkpoints, objectives, and training loop) while preserving CLI backwards compatibility and mid-epoch resume semantics. Updated all import locations across scripts and tests.*
 
 - [ ] **Track: Suite Runner Main.sh Evolution**
 *Link: [./tracks/suite_runner_main_20260623/](./tracks/suite_runner_main_20260623/)*

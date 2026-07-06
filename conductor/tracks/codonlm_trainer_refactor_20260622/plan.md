@@ -8,11 +8,9 @@ The goal is not to change training behavior. The goal is to split runtime orches
 
 ## Status
 
-- **State:** Open
-- **Opened:** 2026-06-22
-- **Owner:** conductor
+- **State:** Completed
+- **Completed:** 2026-07-06
 - **Primary file:** `src/codonlm/train_codon_lm.py`
-- **Risk level:** High, because this path controls all CodonLM training runs and checkpoint compatibility.
 
 ---
 
