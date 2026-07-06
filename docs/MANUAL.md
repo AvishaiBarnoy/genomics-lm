@@ -98,11 +98,29 @@ caffeinate -i python -m scripts.optimize_train_batching \
   --optimize
 ```
 
-For normal long runs, prefer `main.sh`. If the config contains an enabled
-`batch_optimizer` block, `main.sh` routes training through
-`scripts.optimize_train_batching`; otherwise it calls `src.codonlm.train_codon_lm`
-directly. Cached optimizer results are reused unless `--force` is passed or
-`batch_optimizer.force: true` is set:
+For normal long runs, prefer the evolved `main.sh` training suite runner.
+
+### Evolved Suite Runner (`main.sh`)
+The `main.sh` script acts as the primary orchestration entrypoint for **data preprocessing and model training** (it does **NOT** handle downstream sequence generation/inference). It reads the `trainer` type from your YAML config (defaulting to `codon_lm` if not specified):
+
+```yaml
+# configs/my_config.yaml
+trainer: codon_lm      # Options: codon_lm | protein_lm | protein_multitask | protein_classifier
+```
+
+#### Executing Runs:
+```bash
+# E.g., normal training execution
+caffeinate -i ./main.sh --config configs/physical_termination_transfer.yaml
+
+# Preprocess dataset and verify files without starting training
+./main.sh --config configs/tiny_mps.yaml --preprocess-only
+
+# Check trainer resolution and planned execution parameters without running commands
+./main.sh --config configs/protein_critic.yaml --dry-run
+```
+
+If the trainer type is `codon_lm` and the config contains an enabled `batch_optimizer` block, `main.sh` routes training through `scripts.optimize_train_batching`; otherwise it calls `src.codonlm.train_codon_lm` directly. For any `protein` trainer type, dynamic codon prep and evaluations are automatically skipped. Cached optimizer results are reused unless `--force` is passed or `batch_optimizer.force: true` is set:
 
 ```bash
 caffeinate -i ./main.sh \

@@ -76,9 +76,9 @@ This file tracks all major tracks for the project. Each track has its own detail
 *Link: [./tracks/codonlm_trainer_refactor_20260622/](./tracks/codonlm_trainer_refactor_20260622/)*
 *Summary: Completed. Refactored the monolithic 1,200-line `train_codon_lm.py` script into a modular `src/codonlm/training/` subpackage (separating config, checkpoints, objectives, and training loop) while preserving CLI backwards compatibility and mid-epoch resume semantics. Updated all import locations across scripts and tests.*
 
-- [ ] **Track: Suite Runner Main.sh Evolution**
+- [x] **Track: Suite Runner Main.sh Evolution**
 *Link: [./tracks/suite_runner_main_20260623/](./tracks/suite_runner_main_20260623/)*
-*Summary: Opened to evolve `main.sh` from a CodonLM-specific wrapper into an explicit suite runner for CodonLM and ProteinLM workflows, with trainer-type dispatch, CodonLM backward compatibility, and no accidental ProteinLM use of CodonLM data prep/evaluation.*
+*Summary: Completed. Evolved `main.sh` into a multi-trainer suite runner supporting `codon_lm`, `protein_lm`, `protein_multitask`, and `protein_classifier` dispatches. Implemented config-based trainer resolution, fail-fast dataset existence checks, a `--preprocess-only` flag, and a `--dry-run` parameter.*
 
 - [x] **Track: AMR Classification Probe (Conference)**
 *Link: [./tracks/amr_classification_20260615/](./tracks/amr_classification_20260615/)*

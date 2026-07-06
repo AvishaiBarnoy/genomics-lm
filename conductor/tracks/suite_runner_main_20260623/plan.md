@@ -8,9 +8,8 @@ The current `main.sh` is now suitable as the preferred CodonLM entrypoint, inclu
 
 ## Status
 
-- **State:** Open
-- **Opened:** 2026-06-23
-- **Owner:** conductor
+- **State:** Completed
+- **Completed:** 2026-07-06
 - **Primary file:** `main.sh`
 - **Related tracks:**
   - `codonlm_trainer_refactor_20260622`
