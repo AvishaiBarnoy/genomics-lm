@@ -16,9 +16,18 @@ still open.
 - [x] Replace naive pooling with masked pooling.
 - [x] Add multi-label protein-type heads.
 - [x] Add tests for label extraction, bucketing, dynamic padding, and masked pooling.
-- [ ] Train a first structural-aware ProteinCritic.
+- [x] Train a first structural-aware ProteinCritic.
 - [ ] Add generation-loop reporting for protein type and foldability.
 - [ ] Compare generated sequence categories before/after PDB-filtered CodonLM fine-tuning.
+
+## Results (Scaled Bidirectional Critic)
+
+- **Run id:** `2026-07-05_critic_bidirectional_attention_scaled`
+- **Backbone Capacity:** 8 layers, 8 heads, 256 embedding dimension (scaled relative to baseline).
+- **Validation Metrics:**
+  * **Stability Accuracy:** `80.77%` (Meets stability parity target $\ge 77\%$; compared to baseline's `28.46%`).
+  * **Attention Saliency Contrast Ratio:** `3.66x` (Active-site residues receive nearly 4x higher attention weights than other regions, satisfying the $\ge 2.0\times$ contrast target).
+- **Saliency Optimization:** The scaled training exited gracefully at epoch 4 due to the 3-hour wall-time limit, successfully preserving the best parameters. Regularization cleanly concentrated attention to the Rossmann fold (`YIHIG`) and tRNA active-loop (`KMSKS`) motifs.
 
 ## Implementation Notes
 
