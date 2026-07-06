@@ -7,8 +7,14 @@ from src.protein_lm.models_multi import MultiTaskProteinClassifier
 from src.protein_lm.config import ProteinClassifierConfig
 
 def main():
-    config_path = "configs/protein_lm/critic_bidirectional_attention.yaml"
-    ckpt_path = "runs/2026-07-05_critic_bidirectional_attention/checkpoints/best_critic.pt"
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--config", default="configs/protein_lm/critic_bidirectional_attention.yaml")
+    ap.add_argument("--ckpt", default="runs/2026-07-05_critic_bidirectional_attention/checkpoints/best_critic.pt")
+    args = ap.parse_args()
+    
+    config_path = args.config
+    ckpt_path = args.ckpt
     
     with open(config_path, "r") as f:
         cfg = yaml.safe_load(f)
