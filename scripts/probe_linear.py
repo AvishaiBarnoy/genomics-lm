@@ -1,4 +1,4 @@
-"""Linear probes on token embeddings.
+"""Linear and MLP probes on token embeddings.
 
 If probe_labels.csv is missing, attempt to generate it from the run's
 `itos.txt` using the standard genetic code mapping.
@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import argparse
 import csv
+import warnings
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
-from sklearn.linear_model import LogisticRegression
-import warnings
-from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.linear_model import LogisticRegression, Ridge
+from sklearn.neural_network import MLPClassifier
+from sklearn.model_selection import StratifiedKFold, KFold, train_test_split
+from scipy.stats import pearsonr
 
 from ._shared import (
     ensure_run_layout,
@@ -25,67 +27,59 @@ from ._shared import (
 )
 
 try:
-    # Reuse mappings from the label generator when available
     from .generate_probe_labels import (
         STANDARD_GENETIC_CODE,
         POLARITY_CLASS,
         HYDROPATHY_CLASS,
         START_CODONS,
+        classify_codon,
     )
 except Exception:
     STANDARD_GENETIC_CODE = {}
     POLARITY_CLASS = {}
     HYDROPATHY_CLASS = {}
     START_CODONS = set()
+    classify_codon = None
 
 
 def _write_probe_labels_if_missing(run_dir: Path, tokens: list[str]) -> None:
     path = run_dir / "probe_labels.csv"
     if path.exists():
         return
-    if not STANDARD_GENETIC_CODE:
-        # generator not available; do nothing
+    if classify_codon is None:
         return
     rows = []
-    stop_codons = {c for c, aa in STANDARD_GENETIC_CODE.items() if aa == "Stop"}
     for tok in tokens:
         codon = tok.upper()
-        aa = polarity = hyd = ""
-        is_stop = is_start = "0"
         if len(codon) == 3 and codon.isalpha():
-            aa_or_stop = STANDARD_GENETIC_CODE.get(codon)
-            if aa_or_stop == "Stop":
-                aa = "Stop"
-                is_stop = "1"
-            elif aa_or_stop is not None:
-                aa = aa_or_stop
-                polarity = POLARITY_CLASS.get(aa, "")
-                hyd = HYDROPATHY_CLASS.get(aa, "")
-                if codon in stop_codons:
-                    is_stop = "1"
-                if codon in START_CODONS:
-                    is_start = "1"
-        rows.append((tok, aa, polarity, hyd, is_stop, is_start))
+            aa, polarity, hyd, is_stop, is_start, kd, mw, pi = classify_codon(codon)
+        else:
+            aa = polarity = hyd = is_stop = is_start = kd = mw = pi = ""
+        rows.append((tok, aa, polarity, hyd, is_stop, is_start, kd, mw, pi))
     with path.open("w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(
-            ["token", "aa", "polarity", "hydropathy", "is_stop", "is_start"]
+            ["token", "aa", "polarity", "hydropathy", "is_stop", "is_start", "kd_hydropathy", "mw_volume", "pi"]
         )
         for r in rows:
             writer.writerow(list(r))
 
 
-TASKS = {
+CLASSIFICATION_TASKS = {
     "AA identity": "aa",
     "polarity class": "polarity",
     "hydropathy class": "hydropathy",
     "is_stop": "is_stop",
     "is_start": "is_start",
 }
+
+REGRESSION_TASKS = {
+    "Hydropathy Index (KD)": "kd_hydropathy",
+    "Molecular Weight (MW)": "mw_volume",
+    "Isoelectric Point (pI)": "pi",
+}
+
 K_FOLDS = 5
-EPOCHS = 300
-LR = 0.1
-WEIGHT_DECAY = 1e-4
 RNG_SEED = 1337
 
 
@@ -148,39 +142,61 @@ def _encode_binary(
     return np.array(labels, dtype=np.int64), np.array(mask, dtype=bool)
 
 
-def _kfold_indices(n: int, k: int, seed: int = RNG_SEED):
-    rng = np.random.default_rng(seed)
-    indices = np.arange(n)
-    rng.shuffle(indices)
-    fold_sizes = [n // k + (1 if i < n % k else 0) for i in range(k)]
-    start = 0
-    for size in fold_sizes:
-        end = start + size
-        val_idx = indices[start:end]
-        train_idx = np.concatenate([indices[:start], indices[end:]])
-        yield train_idx, val_idx
-        start = end
+def _encode_continuous(
+    rows: List[Dict[str, str]], field: str
+) -> Tuple[np.ndarray, np.ndarray]:
+    labels = []
+    mask = []
+    for r in rows:
+        val = r.get(field)
+        if val in (None, ""):
+            mask.append(False)
+            labels.append(0.0)
+        else:
+            try:
+                labels.append(float(val))
+                mask.append(True)
+            except ValueError:
+                mask.append(False)
+                labels.append(0.0)
+    return np.array(labels, dtype=np.float32), np.array(mask, dtype=bool)
 
 
-def _train_eval_probe_sklearn(
+def _train_eval_linear_sklearn(
     train_x: np.ndarray, train_y: np.ndarray, val_x: np.ndarray, val_y: np.ndarray
 ) -> float:
-    # Keep defaults; sklearn>=1.5 deprecates multi_class="auto", so omit it
     clf = LogisticRegression(max_iter=200)
     with warnings.catch_warnings():
-        # Suppress sklearn warnings when classes ~ samples (still a valid classification setup for us)
-        warnings.filterwarnings(
-            "ignore",
-            message="The number of unique classes is greater than 50% of the number of samples",
-            category=UserWarning,
-        )
-        warnings.filterwarnings(
-            "ignore",
-            message=".*could represent a regression problem.*",
-            category=UserWarning,
-        )
+        warnings.filterwarnings("ignore", category=UserWarning)
         clf.fit(train_x, train_y)
         return float(clf.score(val_x, val_y))
+
+
+def _train_eval_mlp_sklearn(
+    train_x: np.ndarray, train_y: np.ndarray, val_x: np.ndarray, val_y: np.ndarray
+) -> float:
+    clf = MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=500, random_state=RNG_SEED)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning)
+        clf.fit(train_x, train_y)
+        return float(clf.score(val_x, val_y))
+
+
+def _train_eval_regression(
+    train_x: np.ndarray, train_y: np.ndarray, val_x: np.ndarray, val_y: np.ndarray
+) -> Tuple[float, float]:
+    reg = Ridge(alpha=1.0)
+    reg.fit(train_x, train_y)
+    preds = reg.predict(val_x)
+    
+    r2 = float(reg.score(val_x, val_y))
+    
+    if len(preds) >= 2 and np.std(preds) > 1e-9 and np.std(val_y) > 1e-9:
+        corr, _ = pearsonr(preds, val_y)
+        pearson = float(corr)
+    else:
+        pearson = 0.0
+    return r2, pearson
 
 
 def main(argv: Optional[Iterable[str]] = None) -> None:
@@ -213,21 +229,22 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
     X = embeddings[indices].astype(np.float32, copy=False)
 
     results = []
-    for task, field in TASKS.items():
+
+    # 1. Classification Tasks (Linear & MLP)
+    for task, field in CLASSIFICATION_TASKS.items():
         if field in {"is_stop", "is_start"}:
             y, mask = _encode_binary(rows, field)
         else:
             y, mask, _ = _encode_labels(rows, field)
         if mask.sum() < K_FOLDS:
-            print(f"[probe-linear] skipping {task}; insufficient labels")
+            print(f"[probe-linear] skipping classification task {task}; insufficient labels")
             continue
         valid_idx = np.where(mask)[0]
         X_task = X[valid_idx]
         y_task = y[valid_idx].astype(np.int64, copy=False)
 
-        # Require at least 2 classes overall
+        # Drop singleton classes for AA identity
         classes, counts = np.unique(y_task, return_counts=True)
-        # Special handling for AA identity: drop singleton classes (e.g., Met/ATG, Trp/TGG)
         if field == "aa":
             keep_classes = set(int(c) for c, cnt in zip(classes, counts) if cnt >= 2)
             if keep_classes and len(keep_classes) < classes.size:
@@ -237,60 +254,72 @@ def main(argv: Optional[Iterable[str]] = None) -> None:
                 X_task = X_task[keep_mask]
                 y_task = y_task[keep_mask]
                 classes, counts = np.unique(y_task, return_counts=True)
-                print(
-                    f"[probe-linear] AA identity: dropped singleton classes; kept {classes.size} classes"
-                )
+                print(f"[probe-linear] AA identity: dropped singleton classes; kept {classes.size} classes")
+
         if classes.size < 2:
-            print(f"[probe-linear] skipping {task}; only one class present")
+            print(f"[probe-linear] skipping classification task {task}; only one class present")
             continue
+
         min_per_class = int(counts.min())
-        # If extremely sparse, fall back to holdout split (stratified)
+        
+        # 1a. Linear & MLP Probes
         if min_per_class < 2 or len(y_task) < K_FOLDS:
             test_size = 0.5 if min_per_class == 1 else 0.2
             try:
                 train_x, val_x, train_y, val_y = train_test_split(
-                    X_task,
-                    y_task,
-                    test_size=test_size,
-                    stratify=y_task,
-                    random_state=RNG_SEED,
+                    X_task, y_task, test_size=test_size, stratify=y_task, random_state=RNG_SEED
                 )
-            except ValueError as exc:
-                print(f"[probe-linear] skipping {task}; holdout split failed ({exc})")
+                linear_accs = [_train_eval_linear_sklearn(train_x, train_y, val_x, val_y)]
+                mlp_accs = [_train_eval_mlp_sklearn(train_x, train_y, val_x, val_y)]
+            except ValueError:
                 continue
-            if np.unique(train_y).size < 2 or np.unique(val_y).size < 2:
-                print(f"[probe-linear] skipping {task}; holdout had <2 classes")
-                continue
-            acc = _train_eval_probe_sklearn(train_x, train_y, val_x, val_y)
-            fold_acc = [acc]
         else:
             n_splits = max(2, min(K_FOLDS, min_per_class))
-            fold_acc = []
-            skf = StratifiedKFold(
-                n_splits=n_splits, shuffle=True, random_state=RNG_SEED
-            )
+            linear_accs = []
+            mlp_accs = []
+            skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=RNG_SEED)
             for train_idx, val_idx in skf.split(X_task, y_task):
-                train_x = X_task[train_idx]
-                val_x = X_task[val_idx]
-                train_y = y_task[train_idx]
-                val_y = y_task[val_idx]
-                # Ensure both splits have at least 2 classes
-                if train_x.shape[0] == 0 or val_x.shape[0] == 0:
-                    continue
-                if np.unique(train_y).size < 2 or np.unique(val_y).size < 2:
-                    continue
-                acc = _train_eval_probe_sklearn(train_x, train_y, val_x, val_y)
-                fold_acc.append(acc)
-        if not fold_acc:
+                train_x, val_x = X_task[train_idx], X_task[val_idx]
+                train_y, val_y = y_task[train_idx], y_task[val_idx]
+                if np.unique(train_y).size >= 2 and np.unique(val_y).size >= 2:
+                    linear_accs.append(_train_eval_linear_sklearn(train_x, train_y, val_x, val_y))
+                    mlp_accs.append(_train_eval_mlp_sklearn(train_x, train_y, val_x, val_y))
+
+        if linear_accs:
+            results.append((task, "linear_class", "accuracy", float(np.mean(linear_accs)), float(np.std(linear_accs))))
+        if mlp_accs:
+            results.append((task, "mlp_class", "accuracy", float(np.mean(mlp_accs)), float(np.std(mlp_accs))))
+
+    # 2. Continuous Regression Tasks (Ridge)
+    for task, field in REGRESSION_TASKS.items():
+        y, mask = _encode_continuous(rows, field)
+        if mask.sum() < K_FOLDS:
+            print(f"[probe-linear] skipping regression task {task}; insufficient labels")
             continue
-        results.append((task, float(np.mean(fold_acc)), float(np.std(fold_acc))))
+        valid_idx = np.where(mask)[0]
+        X_task = X[valid_idx]
+        y_task = y[valid_idx]
+
+        r2_scores = []
+        pearson_scores = []
+        kf = KFold(n_splits=K_FOLDS, shuffle=True, random_state=RNG_SEED)
+        for train_idx, val_idx in kf.split(X_task, y_task):
+            train_x, val_x = X_task[train_idx], X_task[val_idx]
+            train_y, val_y = y_task[train_idx], y_task[val_idx]
+            r2, p_corr = _train_eval_regression(train_x, train_y, val_x, val_y)
+            r2_scores.append(r2)
+            pearson_scores.append(p_corr)
+
+        if r2_scores:
+            results.append((task, "ridge_reg", "r2", float(np.mean(r2_scores)), float(np.std(r2_scores))))
+            results.append((task, "ridge_reg", "pearson", float(np.mean(pearson_scores)), float(np.std(pearson_scores))))
 
     out_path = tables_dir / "probe_results.csv"
     with out_path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["task", "mean_accuracy", "std_accuracy"])
-        for task, mean, std in results:
-            writer.writerow([task, f"{mean:.4f}", f"{std:.4f}"])
+        writer.writerow(["task", "probe_type", "metric_name", "mean_score", "std_score"])
+        for task, p_type, metric, mean, std in results:
+            writer.writerow([task, p_type, metric, f"{mean:.4f}", f"{std:.4f}"])
 
     print(f"[probe-linear] wrote results to {out_path}")
 

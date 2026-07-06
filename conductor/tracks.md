@@ -114,11 +114,11 @@ This file tracks all major tracks for the project. Each track has its own detail
 *Link: [./tracks/codonlm_architectural_upgrades_20260622/](./tracks/codonlm_architectural_upgrades_20260622/)*
 *Summary: Completed. Implemented Rotary Position Embeddings (RoPE) and SwiGLU Gated Feed-Forward blocks inside the TinyGPT backbone. Verified shape/loss compatibility and legacy fallback mechanisms with unit tests. Evaluated performance via a 2x2 ablation study on MPS GPU, isolating a relative validation perplexity reduction of 2.5% for RoPE-only configurations.*
 
-- [ ] **Track: Biophysical Regression & MLP Probes**
+- [x] **Track: Biophysical Regression & MLP Probes**
 *Link: [./tracks/biophysical_mlp_regression_probes_20260622/](./tracks/biophysical_mlp_regression_probes_20260622/)*
-*Summary: Implement non-linear MLP probes for categorical amino acid properties, and develop linear regression probes targeting continuous biophysical scales (hydropathy, isoelectric point, volume) to evaluate static codon embeddings.*
+*Summary: Completed. Implemented continuous Ridge regression probes (targeting Kyte-Doolittle hydropathy, molecular weight, isoelectric point) and MLP classification probes on static embeddings. Comparative evaluation on baseline vs. advanced separate-heads prior models demonstrated a +0.085 increase in non-linear hydropathy accuracy and a 3x absolute Pearson correlation increase on residue charges (pI).*
 
 - [x] **Track: Non-Linear Offset Priors & Backbone Freezing (Stage 2.6)**
 *Link: [./tracks/non_linear_offset_priors_20260702/](./tracks/non_linear_offset_priors_20260702/)*
 *Summary: Integrate 2-layer MLP projection heads with GeLU for multi-offset targets, implement backbone/next-token head freezing during training to preserve baseline perplexity, and train for 5-10 epochs.*
->>>>>>> c812517 (feat(codonlm): implement non-linear MLP projection priors with parameter-efficient backbone)
+

@@ -6,8 +6,8 @@ This track captures the design and implementation of advanced probing techniques
 
 ## Status
 
-- **State:** Open
-- **Opened:** 2026-06-22
+- **State:** Completed
+- **Completed:** 2026-07-06
 - **Owner:** conductor
 - **Primary files:**
   - [probe_linear.py](file:///Users/User/github/genomics-lm/scripts/probe_linear.py)
@@ -26,28 +26,28 @@ This track captures the design and implementation of advanced probing techniques
 ## Plan
 
 ### Phase 1: Biophysical Properties Mapping
-- [ ] Map all 20 amino acids to continuous biophysical scales inside `generate_probe_labels.py`:
+- [x] Map all 20 amino acids to continuous biophysical scales inside `generate_probe_labels.py`:
   - Kyte-Doolittle Hydropathy Index
   - Residue Volume / Molecular Weight
   - Isoelectric Point (pI)
-- [ ] Extend `generate_probe_labels.py` to write these continuous targets to `probe_labels.csv`.
+- [x] Extend `generate_probe_labels.py` to write these continuous targets to `probe_labels.csv`.
 
 ### Phase 2: Continuous Regression Probes
-- [ ] Implement a regression evaluation path in `probe_linear.py` (e.g. using Ridge Regression with cross-validation).
-- [ ] Train regression probes on the static codon embeddings to predict hydropathy, volume, and pI.
-- [ ] Report validation scores ($R^2$ and Pearson correlation).
+- [x] Implement a regression evaluation path in `probe_linear.py` (e.g. using Ridge Regression with cross-validation).
+- [x] Train regression probes on the static codon embeddings to predict hydropathy, volume, and pI.
+- [x] Report validation scores ($R^2$ and Pearson correlation).
 
 ### Phase 3: MLP Classifier Probes
-- [ ] Implement an MLP Classifier probe path in `probe_linear.py` using PyTorch or scikit-learn's `MLPClassifier`.
-- [ ] Evaluate MLP accuracy for 20-class AA identity and 4-class polarity.
-- [ ] Benchmark MLP probe performance against the baseline Logistic Regression probes.
+- [x] Implement an MLP Classifier probe path in `probe_linear.py` using PyTorch or scikit-learn's `MLPClassifier`.
+- [x] Evaluate MLP accuracy for 20-class AA identity and 4-class polarity.
+- [x] Benchmark MLP probe performance against the baseline Logistic Regression probes.
 
 ### Phase 4: Comparative Reporting
-- [ ] Consolidate results into a report comparing:
+- [x] Consolidate results into a report comparing:
   - Linear categorical accuracy (baseline)
   - MLP categorical accuracy (non-linear probe)
   - Regression $R^2$ scores on physical scales (continuous probe)
-- [ ] Document findings about what structural properties CodonLM learns implicitly.
+- [x] Document findings about what structural properties CodonLM learns implicitly.
 
 ---
 
