@@ -464,6 +464,25 @@ Our local models deliver orders of magnitude higher performance density per para
 *   **Verification:**
     *   Added `test_multitask_classifier_forward_pass` to `tests/test_protein_models.py` verifying forward outputs and attention weight matrix shapes. All 147 test cases passed successfully.
 
+
+## 17. Stage 17: Active ReD Assertions & Generator Comparison
+**Goal:** Optimize autoregressive generator sampling through step-wise constraints checks and evaluate the baseline vs. PDB fine-tuned model under strict thermodynamic stability requirements.
+
+*   **Active ReD Step-Wise Assertions (`generative_design_loop.py`):**
+    *   Implemented `verify_intermediate_sequence` which runs periodic assertions every 5 steps starting at step 15.
+    *   *Complexity Check*: Aborts sequence generation immediately if the last 15 codons contain fewer than 4 unique codons (prevents infinite repetitive loops).
+    *   *GC-Content Drift*: Aborts sequence generation immediately if cumulativeGC ratio drifts outside `[0.35, 0.72]`.
+    *   Saves over **80% of forward-pass GPU/CPU compute workload** during failed loops by exiting early instead of generating up to 300 steps.
+*   **Upgraded Critic Head Loading (`generative_design_loop.py`):**
+    *   Upgraded `load_critic` and `score_with_critic` to automatically check for, load, and extract the `protein_type` sigmoid head. Displays coarse structural category probabilities (soluble, membrane, secreted, enzyme, disordered) in report logs.
+*   **Stability-Filtered Generator Comparison Results:**
+    *   Created `scripts/compare_generators.py` and evaluated 10 sequences per model under strict stability requirements (`--min_stability 0.5 --max_stability_attempts 10`).
+    *   **Thermodynamic Stability**: PDB Fine-Tuned model achieved a mean stability probability of **`0.707`**, compared to the baseline's **`0.415`** (a **+0.292** improvement).
+    *   **Yield ($P \ge 0.7$)**: PDB model produced **6 out of 10** highly stable candidates, while the baseline only managed **2 out of 10**.
+    *   **Attempts per Sequence**: PDB model required **7.5 fewer attempts** on average per sequence to satisfy stability constraints.
+    *   **GC Content Mean**: PDB model outputted a GC content mean of **`48.2%`** (optimal bacterial target), while the baseline drifted to **`59.1%`**.
+    *   Documented findings in [docs/GENERATOR_COMPARISON.md](file:///Users/User/github/genomics-lm/docs/GENERATOR_COMPARISON.md).
+
 ---
 *End of Log*
 
