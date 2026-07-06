@@ -1,8 +1,7 @@
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from src.codonlm.data_loading import BucketBatchSampler
-from src.codonlm.train_codon_lm import PackedDataset
+from src.codonlm.data_loading import BucketBatchSampler, PackedDataset
 
 
 def test_dynamic_dataset_loading_and_collate(tmp_path):

@@ -1,7 +1,8 @@
 import numpy as np
 import torch
 
-from src.codonlm.train_codon_lm import PackedDataset, _ensure_path_list
+from src.codonlm.data_loading import PackedDataset
+from src.codonlm.training.config import _ensure_path_list
 
 
 def test_ensure_path_list_from_string():

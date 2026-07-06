@@ -1,9 +1,8 @@
 import numpy as np
 import torch
 
-from src.codonlm.train_codon_lm import (
-    PackedDataset,
-    dataset_length_audit,
+from src.codonlm.data_loading import PackedDataset, dataset_length_audit
+from src.codonlm.training.objectives import (
     multi_offset_lm_loss,
     offset_target_mask,
     termination_aux_loss,

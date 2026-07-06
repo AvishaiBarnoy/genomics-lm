@@ -20,9 +20,8 @@ import yaml
 
 from src.codonlm.data_loading import build_codon_lm_dataloaders, build_codon_lm_datasets
 from src.codonlm.model_tiny_gpt import TinyGPT
-from src.codonlm.train_codon_lm import (
-    _load_transfer_state_dict,
-    _read_itos,
+from src.codonlm.training.checkpoint import _load_transfer_state_dict, _read_itos
+from src.codonlm.training.objectives import (
     termination_aux_loss,
     termination_distance_bucket_labels,
 )

@@ -3,7 +3,7 @@ from __future__ import annotations
 import torch
 
 from src.codonlm.model_tiny_gpt import TinyGPT
-from src.codonlm.train_codon_lm import _load_transfer_state_dict
+from src.codonlm.training.checkpoint import _load_transfer_state_dict
 
 
 def test_transfer_state_dict_expands_vocab_by_token_name():
