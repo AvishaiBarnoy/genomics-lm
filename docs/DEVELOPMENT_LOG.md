@@ -483,6 +483,24 @@ Our local models deliver orders of magnitude higher performance density per para
     *   **GC Content Mean**: PDB model outputted a GC content mean of **`48.2%`** (optimal bacterial target), while the baseline drifted to **`59.1%`**.
     *   Documented findings in [docs/GENERATOR_COMPARISON.md](file:///Users/User/github/genomics-lm/docs/GENERATOR_COMPARISON.md).
 
+
+## 18. Stage 18: Biophysical Regression & MLP Probes
+**Goal:** Implement non-linear MLP and continuous regression probes on static codon embeddings to analyze implicitly encoded biophysical scales.
+
+*   **Continuous Regression Mapping (`generate_probe_labels.py`):**
+    *   Mapped 20 amino acids to continuous physical scales: Kyte-Doolittle Hydropathy Index, Molecular Weight (molecular volume proxy), and Isoelectric Point (pI charge proxy).
+    *   Upgraded label CSV output to save these continuous columns.
+*   **Ridge and MLP Probes (`probe_linear.py`):**
+    *   Integrated continuous Ridge regression cross-validated evaluations (computing $R^2$ and Pearson correlation).
+    *   Integrated non-linear MLP classifiers (hidden size `(64, 32)`) to evaluate categorical AA/polarity classes.
+    *   Ensured complete fallback safety for small testing sets.
+*   **Probing Results Comparison (Baseline vs. Advanced Prior Model):**
+    *   *Hydropathy Class (MLP)*: Advanced prior model achieved **`47.82%`** accuracy, improving by **+8.46%** over baseline's **`39.36%`**, showing non-linear geometric clustering of hydrophobicity.
+    *   *Isoelectric Point (pI)*: Absolute Pearson correlation increased from **`0.10` to `0.35`** (3x increase), showing significant implicit structuring of residue charges in the advanced prior model.
+    *   *Molecular Weight (MW)*: Pearson correlation shifted from a near-zero **`+0.04`** to a moderate **`-0.25`**.
+    *   *Syntax Preservation*: Start/stop syntactic boundary checks remained high (`92% to 95%` accuracy).
+    *   Documented findings in [docs/biophysical_probes_report.md](file:///Users/User/.gemini/antigravity-cli/brain/f89def31-b35b-45b6-9f79-f3216a4d8e7c/biophysical_probes_report.md).
+
 ---
 *End of Log*
 
