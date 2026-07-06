@@ -49,9 +49,9 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [ ] **Track: Multi-Frame Overlapping Gene Modeling (Stage 3)**
 *Link: [./tracks/multi_frame_overlapping_20260610/](./tracks/multi_frame_overlapping_20260610/)*
 
-- [ ] **Track: Progressive High-Capacity Scaling Ladder (Stage 2.7)**
+- [x] **Track: Progressive High-Capacity Scaling Ladder (Stage 2.7)**
 *Link: [./tracks/progressive_scaling_20260610/](./tracks/progressive_scaling_20260610/)*
-*Summary: d384 ladder completed through 4L2H -> 6L4H -> 10L8H, and Stage 2.6 10L8H_d384 became the best current CodonLM. Track remains open for d384/d512 comparison closeout and the missing cross-width checkpoint expansion utility.*
+*Summary: Completed. Developed `scripts/expand_model.py` to enable cross-width dimension upscaling (e.g. mapping and padding `d384` to `d512` model shapes), and added comprehensive validation tests in `tests/test_model_expansion.py` verifying shape alignment and loss forward passes.*
 
 - [x] **Track: Remote Bioinformatics Integrations (Maintenance)**
 *Link: [./tracks/remote_bioinformatics_20260610/](./tracks/remote_bioinformatics_20260610/)*

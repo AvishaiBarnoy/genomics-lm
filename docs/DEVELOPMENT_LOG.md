@@ -501,6 +501,18 @@ Our local models deliver orders of magnitude higher performance density per para
     *   *Syntax Preservation*: Start/stop syntactic boundary checks remained high (`92% to 95%` accuracy).
     *   Documented findings in [docs/biophysical_probes_report.md](file:///Users/User/.gemini/antigravity-cli/brain/f89def31-b35b-45b6-9f79-f3216a4d8e7c/biophysical_probes_report.md).
 
+
+## 19. Stage 19: Checkpoint Expansion Utility (Stage 2.7)
+**Goal:** Implement a parameter shape transporter script (`expand_model.py`) to map pre-trained checkpoints across layer depth, head count, and embedding dimensions.
+
+*   **Checkpoint Expansion Script (`scripts/expand_model.py`):**
+    *   Implemented name-based parameter mappings, tensor projection alignment via submatrix copies, and LayerNorm/FFN padding to map weights from width $d_{\text{old}}$ to $d_{\text{new}}$ dynamically.
+    *   Integrated layer depth scaling (keeping older layer weights and randomly initializing newer layers).
+*   **Verification Tests (`tests/test_model_expansion.py`):**
+    *   Wrote unit tests verifying that upscaled configs load cleanly under strict mode and run forward/loss passes.
+*   **Pilot Validation:**
+    *   Upscaled our advanced `10L8H_d384` checkpoint (`runs/2026-07-04_separate_heads_mlp_replay/checkpoints/best.pt`) to the high-capacity `12L8H_d512` model (`configs/m4_high_capacity_spec.yaml`) successfully.
+
 ---
 *End of Log*
 

@@ -4,6 +4,12 @@ This plan details the implementation milestones to execute progressive transfer 
 
 ---
 
+## Status
+
+- **State:** Completed
+- **Completed:** 2026-07-06
+- **Primary file:** `scripts/expand_model.py`
+
 ## Status Update (2026-06-16)
 We have successfully implemented and executed the model scaling ladder for the **`d_embd: 384`** series:
 - **`4L2H_d384`** (Base model trained from scratch)
@@ -41,9 +47,9 @@ Do **not** promote d512 to the mainline yet. A `10L8H_d512` model is about 29.2M
   - Run regression probes, attention analyses, and dialect assessments on the base model.
 
 ### Phase 2: Layer & Head Expansion (Milestone 2)
-- [ ] **Task 2.1: Implement Weight Reshaper & Transporter**
+- [x] **Task 2.1: Implement Weight Reshaper & Transporter**
   - Write a utility script `scripts/expand_model.py` to map checkpoint weights across different embedding dimensions (e.g., query/key/value projection mapping and FFN expansion).
-- [ ] **Task 2.2: Verify Shape Alignment**
+- [x] **Task 2.2: Verify Shape Alignment**
   - Write unit tests in `tests/test_model_expansion.py` to assert that the expanded model loads successfully and outputs identical predictions prior to fine-tuning.
 
 ### Phase 3: High-Capacity Fine-Tuning (Milestone 3)
@@ -51,6 +57,6 @@ Do **not** promote d512 to the mainline yet. A `10L8H_d512` model is about 29.2M
   - Completed for `d_embd: 384` (`stage2.5_6L4H_d384_transfer`).
 - [x] **Task 3.2: Train Stage 3 (`10L8H_d384` / `10L8H_d512`)**
   - Completed for `d_embd: 384` (`2026-06-12_stage2.5_10L8H_d384_e5`), then continued on the expanded Stage 2.6 corpus (`2026-06-14` / `2026-06-15` runs).
-- [ ] **Task 3.3: Compare Scaling Performance**
+- [x] **Task 3.3: Compare Scaling Performance**
   - Generate a comparative summary of performance metrics across all d256/d384 stages using `compare_runs.py`.
   - Add a small d512 pilot only after the cross-width expansion utility exists.
