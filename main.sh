@@ -379,15 +379,22 @@ Ttrain1=$(date +%s)
 
 # Post-training evaluations (CodonLM only)
 if [[ "$TRAINER" == "codon_lm" && $DRY_RUN -eq 0 ]]; then
+  # Determine checkpoint to evaluate (fallback to last.pt if best.pt is missing)
+  EVAL_CKPT="${CKPT_ROOT}/best.pt"
+  if [[ ! -f "$EVAL_CKPT" && -f "${CKPT_ROOT}/last.pt" ]]; then
+    echo "[info] best.pt not found; falling back to last.pt for evaluations" | tee -a "$LOG"
+    EVAL_CKPT="${CKPT_ROOT}/last.pt"
+  fi
+
   # Evaluate on val and test sets
-  python -m src.codonlm.eval_perplexity --ckpt "${CKPT_ROOT}/best.pt" --val_npz "$VAL_NPZ" 2>&1 | tee -a "$LOG" || true
-  python -m src.codonlm.eval_perplexity --ckpt "${CKPT_ROOT}/best.pt" --val_npz "$TEST_NPZ" 2>&1 | tee -a "$LOG" || true
+  python -m src.codonlm.eval_perplexity --ckpt "$EVAL_CKPT" --val_npz "$VAL_NPZ" 2>&1 | tee -a "$LOG" || true
+  python -m src.codonlm.eval_perplexity --ckpt "$EVAL_CKPT" --val_npz "$TEST_NPZ" 2>&1 | tee -a "$LOG" || true
 
   # Score mutations for one CDS if primary DNA is available
   if [[ -n "$PRIMARY_DNA" ]]; then
     head -n1 "$PRIMARY_DNA" > data/processed/one_cds.txt
     mkdir -p "${SCORES_ROOT}"
-    conda run -n codonlm python -m src.codonlm.score_mutations --ckpt "${CKPT_ROOT}/best.pt" --dna data/processed/one_cds.txt --out "${SCORES_ROOT}/one_cds__best.tsv" 2>&1 | tee -a "$LOG" || true
+    conda run -n codonlm python -m src.codonlm.score_mutations --ckpt "$EVAL_CKPT" --dna data/processed/one_cds.txt --out "${SCORES_ROOT}/one_cds__best.tsv" 2>&1 | tee -a "$LOG" || true
   else
     echo "[info] Bypassing mutation scoring: no primary DNA sequence available in pre-packed mode." | tee -a "$LOG"
   fi
@@ -397,7 +404,7 @@ if [[ "$TRAINER" == "codon_lm" && $DRY_RUN -eq 0 ]]; then
     if [[ -f "$RUN_DIR/motif_clusters.npz" ]]; then
       echo "[motifs] skip: already exists at $RUN_DIR/motif_clusters.npz" | tee -a "$LOG"
     else
-      python -m src.codonlm.mine_motifs --ckpt "${CKPT_ROOT}/best.pt" --npz "$TRAIN_NPZ" --k 9 --clusters 100 2>&1 | tee -a "$LOG" || true
+      python -m src.codonlm.mine_motifs --ckpt "$EVAL_CKPT" --npz "$TRAIN_NPZ" --k 9 --clusters 100 2>&1 | tee -a "$LOG" || true
       if [ -f outputs/motif_clusters.npz ]; then
         cp outputs/motif_clusters.npz "$RUN_DIR/motif_clusters.npz" || true
       fi
@@ -429,6 +436,6 @@ echo "[timing] total_time=$(format_duration "$TOTAL_SEC")" | tee -a "$LOG"
 if [[ "$TRAINER" == "codon_lm" && $DRY_RUN -eq 0 ]]; then
   echo "" | tee -a "$LOG"
   echo "[success] Training complete! To generate/design new sequences using this generator model, run:" | tee -a "$LOG"
-  echo "python -m scripts.generative_design_loop --generator_ckpt runs/${RUN_ID}/checkpoints/best.pt" | tee -a "$LOG"
+  echo "python -m scripts.generative_design_loop --generator_ckpt $EVAL_CKPT" | tee -a "$LOG"
   echo "" | tee -a "$LOG"
 fi
