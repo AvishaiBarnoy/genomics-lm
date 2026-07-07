@@ -77,6 +77,44 @@ class MultiTaskProteinClassifier(nn.Module):
             for name, dim in task_dims.items()
         })
 
+    def extract_latent(
+        self,
+        input_ids: torch.LongTensor,
+        attention_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """
+        Extracts continuous bottleneck latent embeddings z.
+        """
+        seq_length = input_ids.size(1)
+        token_embeds = self.backbone.token_embedding(input_ids)
+        pos_embeds = self.backbone.position_embedding(torch.arange(seq_length, device=input_ids.device))
+        x = self.backbone.dropout(token_embeds + pos_embeds)
+
+        is_causal = not getattr(self.config, "bidirectional", True)
+        if is_causal:
+            causal_mask = nn.Transformer.generate_square_subsequent_mask(seq_length, device=input_ids.device)
+        else:
+            causal_mask = None
+
+        for block in self.backbone.transformer_blocks:
+            x = block(
+                x,
+                src_mask=causal_mask,
+                src_key_padding_mask=(attention_mask == 0) if attention_mask is not None else None,
+            )
+
+        if self.pooling_type == "attention":
+            pooled, _ = self.pooler(x, attention_mask=attention_mask)
+        else:
+            if attention_mask is None:
+                pooled = x.mean(dim=1)
+            else:
+                mask = attention_mask.to(dtype=x.dtype, device=x.device).unsqueeze(-1)
+                pooled = (x * mask).sum(dim=1) / mask.sum(dim=1).clamp_min(1.0)
+
+        latent = self.shared_latent(pooled)
+        return latent
+
     def forward(
         self,
         input_ids: torch.LongTensor,

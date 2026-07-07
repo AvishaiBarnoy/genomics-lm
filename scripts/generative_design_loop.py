@@ -127,6 +127,14 @@ def verify_intermediate_sequence(codon_tokens: list[str]) -> bool:
     return True
 
 
+def compute_shannon_entropy(codon_tokens: list[str]) -> float:
+    if not codon_tokens:
+        return 0.0
+    counts = Counter(codon_tokens)
+    probs = [count / len(codon_tokens) for count in counts.values()]
+    return -sum(p * math.log2(p) for p in probs)
+
+
 # ────────────────────────────────────────────────────────────────────────────
 # ReD Sampling (Reset-and-Discard)
 # ────────────────────────────────────────────────────────────────────────────
@@ -143,6 +151,11 @@ def red_generate(
     top_p: float = 0.0,
     min_aa_length: int = 50,
     anneal_temp: bool = False,
+    ebm_model: Optional[torch.nn.Module] = None,
+    ebm_tokenizer = None,
+    ebm_abort_threshold: float = 2.5,
+    enable_entropy_abort: bool = False,
+    critic_backbone: Optional[torch.nn.Module] = None,
 ) -> tuple[list[str], bool, int]:
     """Generate one properly-terminated sequence using Reset-and-Discard.
 
@@ -200,8 +213,29 @@ def red_generate(
                     if len(c) == 3 and c.isalpha()
                     and c not in {"<BOS_CDS>", "<EOS_CDS>", "<PAD>"}
                 ]
+                # 1. GC and repetitiveness check
                 if not verify_intermediate_sequence(current_codons):
                     break  # abort this attempt early!
+
+                # 2. Shannon Entropy check
+                if enable_entropy_abort:
+                    entropy = compute_shannon_entropy(current_codons[-15:])
+                    if entropy < 1.0:
+                        break
+
+                # 3. EBM Early-Abort check
+                if ebm_model is not None and critic_backbone is not None and ebm_tokenizer is not None:
+                    dna_str = "".join(current_codons)
+                    aa_seq, _ = translate_dna(dna_str)
+                    if len(aa_seq) >= 15:
+                        tokens_aa = [ebm_tokenizer.bos_token_id] + ebm_tokenizer.encode_sequence(aa_seq) + [ebm_tokenizer.eos_token_id]
+                        tokens_t = torch.tensor([tokens_aa], dtype=torch.long, device=device)
+                        with torch.no_grad():
+                            z = critic_backbone.extract_latent(tokens_t)
+                            energy = ebm_model(z).item()
+                        energy_per_res = energy / len(aa_seq)
+                        if energy_per_res >= ebm_abort_threshold:
+                            break
 
             # Stop conditions
             if eos_idx is not None and next_id == eos_idx:
@@ -401,6 +435,9 @@ def run_design_loop(
     saliency_motifs: str = "GDSGG,HIGH,KMSKS,DXD",
     esm_fold_top: int = 0,
     out_dir: str = "outputs/reports/generative_design",
+    ebm_ckpt: Optional[str] = None,
+    ebm_abort_threshold: float = 2.5,
+    enable_entropy_abort: bool = False,
 ) -> dict:
     device = dev()
     print(f"[design] device={device}")
@@ -414,6 +451,19 @@ def run_design_loop(
     print("[design] Loading ProteinCritic...")
     critic_model, tokenizer, task_dims = load_critic(critic_ckpt, critic_cfg, device)
     print(f"[design] Critic loaded: tasks={list(task_dims.keys())}")
+
+    # Load EBM
+    ebm_model = None
+    if ebm_ckpt is not None:
+        from src.protein_lm.ebm import ProteinLatentEBM
+        n_embd = critic_model.config.n_embd
+        ebm_model = ProteinLatentEBM(n_embd=n_embd)
+        ckpt = torch.load(ebm_ckpt, map_location="cpu")
+        if "model" in ckpt:
+            ckpt = ckpt["model"]
+        ebm_model.load_state_dict(ckpt)
+        ebm_model.to(device).eval()
+        print(f"[design] Loaded EBM checkpoint from {ebm_ckpt}")
 
     # Create output directory early so ESMFold can write PDB files during the loop
     out_path = Path(out_dir)
@@ -455,6 +505,10 @@ def run_design_loop(
                 max_codons=max_codons, max_attempts=max_attempts,
                 temperature=temperature, top_k=top_k, top_p=top_p,
                 min_aa_length=min_aa_length, anneal_temp=anneal_temp,
+                ebm_model=ebm_model, ebm_tokenizer=tokenizer,
+                ebm_abort_threshold=ebm_abort_threshold,
+                enable_entropy_abort=enable_entropy_abort,
+                critic_backbone=critic_model,
             )
             outer_total_att += n_att
 
@@ -904,6 +958,12 @@ def main():
     ap.add_argument("--esm_fold_top", type=int, default=0,
                     help="Submit top-N sequences to ESMFold API (0 = disabled, requires internet)")
     ap.add_argument("--out_dir", default="outputs/reports/generative_design")
+    
+    # EBM / Entropy guidance
+    ap.add_argument("--ebm_ckpt", default=None, help="Path to trained ProteinLatentEBM checkpoint")
+    ap.add_argument("--ebm_abort_threshold", type=float, default=2.5, help="EBM energy threshold per residue for early abort")
+    ap.add_argument("--enable_entropy_abort", action="store_true", help="Enable Shannon entropy loop early abort")
+
     args = ap.parse_args()
 
     result = run_design_loop(
@@ -927,6 +987,9 @@ def main():
         saliency_motifs=args.saliency_motifs,
         esm_fold_top=args.esm_fold_top,
         out_dir=args.out_dir,
+        ebm_ckpt=args.ebm_ckpt,
+        ebm_abort_threshold=args.ebm_abort_threshold,
+        enable_entropy_abort=args.enable_entropy_abort,
     )
 
     print("\n=== Design Loop Summary ===")
