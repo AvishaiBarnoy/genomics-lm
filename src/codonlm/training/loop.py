@@ -859,9 +859,49 @@ def run_training(cfg: dict, args) -> None:
         print(f"[timing] train_wall_sec={total_time:.2f} train_cpu_sec={train_cpu1-train_cpu0:.2f}")
         return
     except Exception as exc:
-        print(f"[error] training failed: {exc}", file=sys.stderr)
-        write_failure_meta(exc)
-        raise
+        exc_str = str(exc).lower()
+        is_oom = "out of memory" in exc_str or "oom" in exc_str or "allocate" in exc_str or "allocation" in exc_str
+        if is_oom:
+            print("\n" + "="*80)
+            print("[OOM SAFEGUARD] Out-Of-Memory error detected during training loop execution!")
+            print(f"Error detail: {exc}")
+            print("Attempting to save last.pt checkpoint and downscale batch size in the config...")
+            print("="*80 + "\n")
+            
+            try:
+                ckpt_payload = make_checkpoint_payload(current_epoch_idx or (start_epoch + 1))
+                ckpt_payload["checkpoint_reason"] = "oom"
+                save_checkpoint_atomic(ckpt_payload, ckpt_dir / "last.pt")
+                print(f"[OOM SAFEGUARD] Gracefully saved checkpoint to {ckpt_dir / 'last.pt'}.")
+            except Exception as save_exc:
+                print(f"[OOM SAFEGUARD] Failed to save checkpoint: {save_exc}")
+                
+            if hasattr(args, "config") and args.config:
+                try:
+                    import yaml
+                    config_path = Path(args.config)
+                    if config_path.exists():
+                        with open(config_path, "r") as f:
+                            yml_data = yaml.safe_load(f) or {}
+                        
+                        old_bs = yml_data.get("batch_size", 4)
+                        new_bs = max(1, old_bs // 2)
+                        yml_data["batch_size"] = new_bs
+                        
+                        old_gas = yml_data.get("grad_accum_steps", 32)
+                        new_gas = old_gas * 2
+                        yml_data["grad_accum_steps"] = new_gas
+                        
+                        with open(config_path, "w") as f:
+                            yaml.safe_dump(yml_data, f)
+                        print(f"[OOM SAFEGUARD] Config file {args.config} batch_size downscaled: {old_bs} -> {new_bs} (grad_accum_steps doubled: {old_gas} -> {new_gas})")
+                except Exception as yml_exc:
+                    print(f"[OOM SAFEGUARD] Failed to update config: {yml_exc}")
+            raise exc
+        else:
+            print(f"[error] training failed: {exc}", file=sys.stderr)
+            write_failure_meta(exc)
+            raise
 
     train_wall1 = time.perf_counter()
     train_cpu1 = time.process_time()

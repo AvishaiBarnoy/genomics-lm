@@ -322,6 +322,7 @@ def benchmark_signature(config_path: Path, cfg: dict[str, Any], settings: dict[s
         "n_embd": cfg.get("n_embd"),
         "dropout": cfg.get("dropout"),
         "use_checkpoint": cfg.get("use_checkpoint", cfg.get("grad_checkpointing", False)),
+        "freeze_backbone": cfg.get("freeze_backbone", False),
         "use_sdpa": cfg.get("use_sdpa", False),
         "sep_mask_enabled": cfg.get("sep_mask_enabled", True),
         "use_mmap": cfg.get("use_mmap", False),
