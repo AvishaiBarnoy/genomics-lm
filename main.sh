@@ -119,10 +119,18 @@ mkdir -p "$RUN_DIR"
 LOG="$RUN_DIR/log.txt"
 
 if [[ $DISAMBIG -gt 0 ]]; then
-  echo "[info] run_id_base=${BASE_RUN_ID}" | tee "$LOG"
+  if [[ -n "$RESUME" ]]; then
+    echo "[info] run_id_base=${BASE_RUN_ID}" | tee -a "$LOG"
+  else
+    echo "[info] run_id_base=${BASE_RUN_ID}" | tee "$LOG"
+  fi
   echo "[info] run_id=${RUN_ID} (disambiguated)" | tee -a "$LOG"
 else
-  echo "[info] run_id=${RUN_ID}" | tee "$LOG"
+  if [[ -n "$RESUME" ]]; then
+    echo "[info] run_id=${RUN_ID}" | tee -a "$LOG"
+  else
+    echo "[info] run_id=${RUN_ID}" | tee "$LOG"
+  fi
 fi
 echo "[info] config=${CONF}" | tee -a "$LOG"
 echo "[info] trainer=${TRAINER}" | tee -a "$LOG"

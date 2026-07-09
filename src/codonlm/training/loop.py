@@ -207,25 +207,30 @@ def run_training(cfg: dict, args) -> None:
     else:
         log_csv = scores_dir / "curves.csv"
     log_csv.parent.mkdir(parents=True, exist_ok=True)
-    with log_csv.open("w", newline="") as f:
-        writer = csv.writer(f)
-        offset_cols = []
-        for offset in sorted(multi_offset_weights):
-            offset_cols.extend([f"train_offset_{offset}", f"val_offset_{offset}"])
-        term_cols = ["train_term_loss", "val_term_loss"] if termination_loss_enabled else []
-        replay_cols = ["train_replay_term_loss"] if replay_loss_enabled else []
-        writer.writerow([
-            "step",
-            "train_loss",
-            "val_loss",
-            "train_next_loss",
-            "val_next_loss",
-            "perplexity",
-            "lr",
-            *offset_cols,
-            *term_cols,
-            *replay_cols,
-        ])
+    # Check if we should append to preserve history when resuming
+    is_resume = resume_path is not None and log_csv.exists()
+    open_mode = "a" if is_resume else "w"
+    
+    with log_csv.open(open_mode, newline="") as f:
+        if not is_resume:
+            writer = csv.writer(f)
+            offset_cols = []
+            for offset in sorted(multi_offset_weights):
+                offset_cols.extend([f"train_offset_{offset}", f"val_offset_{offset}"])
+            term_cols = ["train_term_loss", "val_term_loss"] if termination_loss_enabled else []
+            replay_cols = ["train_replay_term_loss"] if replay_loss_enabled else []
+            writer.writerow([
+                "step",
+                "train_loss",
+                "val_loss",
+                "train_next_loss",
+                "val_next_loss",
+                "perplexity",
+                "lr",
+                *offset_cols,
+                *term_cols,
+                *replay_cols,
+            ])
 
     try:
         device = dev(force_gpu=bool(cfg.get("force_gpu", False)))
