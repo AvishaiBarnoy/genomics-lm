@@ -106,11 +106,32 @@ def main():
 
     optimizer = torch.optim.AdamW(ebm.parameters(), lr=args.lr, weight_decay=0.01)
 
-    out_path = Path(args.out_dir)
-    out_path.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(args.out_dir)
+    ckpt_dir = out_dir / "checkpoints"
+    scores_dir = out_dir / "scores"
+    logs_dir = out_dir / "logs"
+
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    scores_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
+
+    # Copy config
+    import shutil
+    try:
+        shutil.copy(args.config, ckpt_dir / "config.yaml")
+    except Exception as e:
+        print(f"[ebm-train] warning: failed to copy config file: {e}")
+
+    # Initialize curves.csv
+    curves_path = scores_dir / "curves.csv"
+    with open(curves_path, "w") as f:
+        f.write("epoch,train_loss,val_loss\n")
 
     print(f"[ebm-train] starting EBM training: epochs={args.epochs}, lr={args.lr}")
     
+    best_val_loss = float("inf")
+    best_epoch = 0
+
     for epoch in range(1, args.epochs + 1):
         ebm.train()
         total_loss = 0.0
@@ -200,15 +221,53 @@ def main():
         avg_val = val_loss / val_batches
         print(f"--- Epoch {epoch} Complete | Train Loss: {avg_train:.4f} | Val Loss: {avg_val:.4f} ---")
 
+        # Append to curves.csv
+        with open(curves_path, "a") as f:
+            f.write(f"{epoch},{avg_train:.6f},{avg_val:.6f}\n")
+
         # Save checkpoint
-        ckpt_path = out_path / f"ebm_epoch_{epoch}.pt"
-        torch.save({
+        payload = {
             "model": ebm.state_dict(),
             "epoch": epoch,
             "val_loss": avg_val,
-        }, ckpt_path)
+        }
+        
+        # Save epoch checkpoint
+        ckpt_path = ckpt_dir / f"ebm_epoch_{epoch}.pt"
+        torch.save(payload, ckpt_path)
         print(f"[saved] {ckpt_path}")
 
+        # Save last checkpoint
+        last_path = ckpt_dir / "last_ebm.pt"
+        torch.save(payload, last_path)
+        
+        # Save best checkpoint
+        if avg_val < best_val_loss:
+            best_val_loss = avg_val
+            best_epoch = epoch
+            best_path = ckpt_dir / "best_ebm.pt"
+            torch.save(payload, best_path)
+            print(f"[saved] {best_path} (new best validation loss: {best_val_loss:.4f})")
+
+    # Generate summary.md
+    summary_path = out_dir / "summary.md"
+    summary_content = f"""# Run Summary: `{out_dir.name}`
+
+## 📊 Status & Key Performance Indicators (KPIs)
+- **Status:** Completed
+- **Epochs Trained:** {args.epochs}
+- **Best Epoch:** {best_epoch}
+- **Best Validation Loss:** {best_val_loss:.4f}
+
+## 🧠 Model Architecture & Settings
+- **Type:** Protein Latent Energy-Based Model (EBM)
+- **Latent Dim:** {cfg["n_embd"]}
+- **EBM Hidden Dim:** 512
+- **Pooling:** {args.pooling}
+- **Backbone Critic Checkpoint:** `{args.critic_ckpt}`
+"""
+    summary_path.write_text(summary_content)
+    print(f"[summary] Wrote run summary to {summary_path}")
     print("[ebm-train] Done training!")
 
 
