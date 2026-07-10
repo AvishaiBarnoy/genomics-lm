@@ -6,8 +6,8 @@ This plan details the implementation milestones to execute progressive transfer 
 
 ## Status
 
-- **State:** Completed
-- **Completed:** 2026-07-06
+- **State:** Closed (Halted due to hardware limitations)
+- **Completed:** 2026-07-10
 - **Primary file:** `scripts/expand_model.py`
 
 ## Status Update (2026-06-16)
@@ -59,4 +59,7 @@ Do **not** promote d512 to the mainline yet. A `10L8H_d512` model is about 29.2M
   - Completed for `d_embd: 384` (`2026-06-12_stage2.5_10L8H_d384_e5`), then continued on the expanded Stage 2.6 corpus (`2026-06-14` / `2026-06-15` runs).
 - [x] **Task 3.3: Compare Scaling Performance**
   - Generate a comparative summary of performance metrics across all d256/d384 stages using `compare_runs.py`.
-  - Add a small d512 pilot only after the cross-width expansion utility exists.
+  - Upscaled the best `10L8H_d384` checkpoint to `10L8H_d512` and ran pilot validation.
+  - **Findings**: Mapped frozen backbone `d512` model validation perplexity registered at **`72.55`** (Test: **`92.63`**), showing that width mapping acts as noise until fine-tuned.
+  - **Hardware Limit**: Attempting to fine-tune the unfrozen model (`freeze_backbone: false`) on Apple M2/MPS hardware triggered unified memory exhaustion and immediate macOS kernel SIGKILLs (`Killed: 9`), even when descaled to batch size 4.
+  - **Decision**: Halted the `d512` scaling track. Local MacBook hardware limits pre-training/fine-tuning models to `d384`. Focus returns to the `d384` mainline.

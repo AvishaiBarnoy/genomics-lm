@@ -13,7 +13,7 @@ sep_mask_enabled: true
 amp: false
 
 transfer_from: "runs/2026-07-06_separate_heads_mlp_replay_d512/checkpoints/initial.pt"
-freeze_backbone: true
+freeze_backbone: false 
 
 itos_path: "data/processed/itos_codon.txt"
 train_npz: "data/processed/stage2.6_large_master_pack/train_bs512.npz"
@@ -43,15 +43,16 @@ replay_data: "runs/2026-07-03_separate_heads_mlp_termination/scores/generated_pr
 
 batch_size: 4
 grad_accum_steps: 32
-epochs: 1
+epochs: 5
 lr: 0.000002
 min_lr: 0.0000002
 weight_decay: 0.05
 warmup_steps: 25
 early_stop_patience: 10
-force_gpu: true
+force_gpu: false 
 checkpoint_every_steps: 25
 checkpoint_every_minutes: 0
+  # max_time_minutes: 180
 
 use_mmap: true
 bucket_batching: true

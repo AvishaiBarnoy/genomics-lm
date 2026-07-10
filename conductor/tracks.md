@@ -51,7 +51,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [x] **Track: Progressive High-Capacity Scaling Ladder (Stage 2.7)**
 *Link: [./tracks/progressive_scaling_20260610/](./tracks/progressive_scaling_20260610/)*
-*Summary: Completed. Developed `scripts/expand_model.py` to enable cross-width dimension upscaling (e.g. mapping and padding `d384` to `d512` model shapes), and added comprehensive validation tests in `tests/test_model_expansion.py` verifying shape alignment and loss forward passes.*
+*Summary: Closed (Halted). Developed shape expansion tool and successfully validated shape upscaling. Pilot runs on unfrozen d512 models triggered silent macOS kernel OOM SIGKILLs, demonstrating that d512 backpropagation exceeds local M2 unified memory capacities. Established d384 as the local capacity ceiling.*
 
 - [x] **Track: Remote Bioinformatics Integrations (Maintenance)**
 *Link: [./tracks/remote_bioinformatics_20260610/](./tracks/remote_bioinformatics_20260610/)*
@@ -122,3 +122,14 @@ This file tracks all major tracks for the project. Each track has its own detail
 *Link: [./tracks/non_linear_offset_priors_20260702/](./tracks/non_linear_offset_priors_20260702/)*
 *Summary: Integrate 2-layer MLP projection heads with GeLU for multi-offset targets, implement backbone/next-token head freezing during training to preserve baseline perplexity, and train for 5-10 epochs.*
 
+- [ ] **Track: Synonymous Generation Mode (Stage 2.6)**
+*Link: [./tracks/synonymous_generation_20260707/](./tracks/synonymous_generation_20260707/)*
+*Summary: Implement constrained decoding that maps amino acid sequences to synonymous DNA candidates.*
+
+- [ ] **Track: Multi-Constraint Scoring & Optimization (Stage 2.6)**
+*Link: [./tracks/multi_constraint_optimization_20260707/](./tracks/multi_constraint_optimization_20260707/)*
+*Summary: Build scoring tracks for CAI, GC% deviation, local mRNA secondary structure, and sequence motif checks ( forbidden sites / repeats).*
+
+- [ ] **Track: Scientific Inquiry: Prefix-to-Function Experiment (Stage 2.6)**
+*Link: [./tracks/prefix_to_function_inquiry_20260707/](./tracks/prefix_to_function_inquiry_20260707/)*
+*Summary: Investigate context saturation by measuring functional classification agreement as a function of prefix length.*

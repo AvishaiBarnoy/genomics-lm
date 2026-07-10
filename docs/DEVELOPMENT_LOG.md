@@ -513,6 +513,20 @@ Our local models deliver orders of magnitude higher performance density per para
 *   **Pilot Validation:**
     *   Upscaled our advanced `10L8H_d384` checkpoint (`runs/2026-07-04_separate_heads_mlp_replay/checkpoints/best.pt`) to the high-capacity `12L8H_d512` model (`configs/m4_high_capacity_spec.yaml`) successfully.
 
+## 20. Stage 20: d512 Progressive Scaling Evaluation & Hardware Limit Assessment
+**Goal:** Resume and benchmark the upscaled `d512` model to assess performance gains, and unfreeze the backbone parameters to evaluate co-adaptation.
+
+*   **Resumed Training Run (`2026-07-06_separate_10L8H_d512_e5`):**
+    *   Resumed fine-tuning on the upscaled `d512` prior model from the mapped weights payload checkpoint.
+*   **Evaluation Comparison (Epoch 1):**
+    *   Evaluated the frozen `d512` backbone on the test set. 
+    *   Validation perplexity was **`72.55`** (Test perplexity **`92.63`**), which is higher than the baseline `d384` perplexity of **`59.51`**. 
+    *   This confirmed that padding new embedding dimensions acts as representation noise until the backbone is unfrozen to allow co-adaptation.
+*   **Hardware Limitation & Track Halting:**
+    *   Unfreezing the backbone (`freeze_backbone: false`) to begin full fine-tuning resulted in immediate system memory exhaustion on Apple M2/MPS hardware.
+    *   Even at `batch_size: 4` and `grad_accum_steps: 32`, memory allocation spikes exceeded the unified RAM threshold, prompting macOS to issue silent kernel forced kills (`Killed: 9`).
+    *   **Conclusion**: Upscaling embedding dimensions to 512 with backpropagation is beyond local development memory limits. The progressive scaling track has been officially halted, establishing `d384` as the optimal maximum capacity for local training. Focus shifts to EBM guidance and sampling loops on the stable `d384` codebase.
+
 ---
 *End of Log*
 
