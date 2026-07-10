@@ -34,14 +34,14 @@
 - [x] **Task 5.1: Write unit tests `tests/test_protein_ebm.py`**
   - Test that the energy function outputs lower energy for wild-type sequences than for randomized/corrupted sequences.
   - Verify that the Langevin optimizer converges to a lower energy state.
-- [ ] **Task 5.2: Validate Success Criteria**
+- [x] **Task 5.2: Validate Success Criteria**
   - Run benchmark comparing baseline ReD, Shannon-entropy ReD, and EBM early-abort ReD to measure token yield and savings.
   - Assert that early-abort reduces total generated tokens by $\ge 30\%$ on stuck sequences without skipping valid high-GC controls.
 
 ## Phase 6: Ablation Sweep & Key Metrics Comparison
-- [ ] **Task 6.1: Run Guidance Ablations**
+- [x] **Task 6.1: Run Guidance Ablations**
   - Evaluate 4 configurations: Baseline, Shannon Entropy Loop Detector Only, EBM Early-Abort Only, and Dual Guided (Full).
-- [ ] **Task 6.2: Compare Key Metrics**
+- [x] **Task 6.2: Compare Key Metrics**
   - Measure and report:
     1. Generation Yield (% terminated & $\ge$ 50 AA)
     2. Token Generation Savings (%)
