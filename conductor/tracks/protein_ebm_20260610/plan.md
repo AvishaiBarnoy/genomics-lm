@@ -1,29 +1,29 @@
 # Protein Latent Energy-Based Model (EBM) Implementation Plan
 
 ## Phase 1: Architecture & Dataset Extraction
-- [ ] **Task 1.1: Latent Embedding Extractor**
+- [x] **Task 1.1: Latent Embedding Extractor**
   - Create a script/utility to extract and cache continuous mean-pooled sequence embeddings from the frozen `ProteinLM` model.
-- [ ] **Task 1.2: EBM Architecture**
+- [x] **Task 1.2: EBM Architecture**
   - Implement `ProteinLatentEBM` in `src/protein_lm/ebm.py` (a small MLP/residual network that accepts embedding vectors and outputs a single scalar energy score).
-- [ ] **Task 1.3: MegaScale Stability Dataset Loader**
+- [x] **Task 1.3: MegaScale Stability Dataset Loader**
   - Prepare a loader for experimental stability datasets (assigning continuous targets based on fold change/$\Delta \Delta G$).
 
 ## Phase 2: NCE Training Loop
-- [ ] **Task 2.1: Implement training script `src/protein_lm/train_ebm.py`**
+- [/] **Task 2.1: Implement training script `src/protein_lm/train_ebm.py`**
   - Build the Noise Contrastive Estimation (NCE) training loop.
   - Implement a corruption/mutation function to generate negative contrastive samples on-the-fly (e.g., amino acid substitution, shuffling, or generation of synthetic decoys).
   - Train the energy head to assign low energy to wild-type/stable sequences and high energy to corrupted decoys.
 
 ## Phase 3: Entropy Loop Detector & EBM Early-Abort
-- [ ] **Task 3.1: Shannon Entropy Loop Detector**
+- [x] **Task 3.1: Shannon Entropy Loop Detector**
   - Implement a sliding-window Shannon entropy calculator over emitted codon tokens in `src/codonlm/generate.py`.
   - Calibrate the threshold to allow complex high-GC bacterial codon patterns while flagging repetitive single-token loops.
-- [ ] **Task 3.2: EBM-Guided ReD Early-Abort**
+- [x] **Task 3.2: EBM-Guided ReD Early-Abort**
   - Integrate step-level EBM energy scoring into `batch_red_sampler`.
   - Implement early-abort trigger when energy per residue deviates significantly from the natural sequence distribution.
 
 ## Phase 4: Latent Langevin Sampler & Generation Guide
-- [ ] **Task 4.1: Langevin Sampler**
+- [x] **Task 4.1: Langevin Sampler**
   - Implement the Langevin dynamics sampling function in `src/protein_lm/sampler.py`:
     $$z_{t+1} = z_t - \eta \nabla_z E(z_t) + \epsilon$$
   - Implement a projection step to project optimized embeddings back to discrete sequence space using the generator's un-embedding projection.
