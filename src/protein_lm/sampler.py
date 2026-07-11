@@ -12,6 +12,9 @@ def latent_langevin_sample(
     steps: int = 50,
     lr: float = 0.05,
     noise_std: float = 0.01,
+    lambda_reg: float = 0.0,
+    temperature_reg: float = 1.0,
+    normalize_grad: bool = False,
     device: torch.device = torch.device("cpu")
 ) -> tuple[str, list[float]]:
     """
@@ -28,6 +31,9 @@ def latent_langevin_sample(
         steps: Number of MCMC gradient steps.
         lr: Langevin dynamics step size (learning rate).
         noise_std: Noise multiplier coefficient.
+        lambda_reg: Weight of the soft-minimum distance manifold regularization penalty.
+        temperature_reg: Temperature parameter for the soft-minimum calculation.
+        normalize_grad: If True, normalize the energy/reg gradient at each step to have unit norm.
 
     Returns:
         (optimized_sequence_str, energy_history)
@@ -84,13 +90,38 @@ def latent_langevin_sample(
         energy_val = energy.item()
         energy_history.append(energy_val)
 
+        # Calculate loss: energy + lambda_reg * soft_min_dist
+        loss = energy.sum()
+        if lambda_reg > 0.0:
+            # Distance from continuous z valid positions (excluding BOS/EOS) to standard amino acids
+            z_valid = z[:, 1:-1] # (1, seq_len-2, n_embd)
+            aa_indices = torch.tensor([tokenizer.token_to_id[aa] for aa in tokenizer.amino_acids], dtype=torch.long, device=z.device)
+            aa_embeds = token_embeddings_matrix[aa_indices] # (V_aa, n_embd)
+
+            # Compute squared distances between all positions in z and all valid aa_embeds
+            # (1, seq_len-2, 1) + (1, 1, V_aa) - 2 * (1, seq_len-2, V_aa)
+            z_sq = torch.sum(z_valid ** 2, dim=-1, keepdim=True)
+            aa_sq = torch.sum(aa_embeds ** 2, dim=-1).view(1, 1, -1)
+            dot_prod = torch.matmul(z_valid, aa_embeds.t())
+            dists_sq = z_sq + aa_sq - 2 * dot_prod
+
+            # soft_min_dists = -temp * logsumexp(-dists_sq / temp)
+            soft_min_dists = -temperature_reg * torch.logsumexp(-dists_sq / temperature_reg, dim=-1)
+            reg_loss = soft_min_dists.mean()
+            loss = loss + lambda_reg * reg_loss
+
         # Compute gradient w.r.t z
-        grad = torch.autograd.grad(energy.sum(), z)[0]
+        grad = torch.autograd.grad(loss, z)[0]
 
         # Update z with Langevin step
         with torch.no_grad():
+            if normalize_grad:
+                grad_norm = grad.norm(dim=-1, keepdim=True) + 1e-8
+                step_direction = grad / grad_norm
+            else:
+                step_direction = grad
             noise = torch.randn_like(z) * noise_std
-            z -= lr * grad + noise
+            z -= lr * step_direction + noise
 
     # 4. Project optimized embeddings back to discrete vocabulary space
     # Find nearest token index for each residue position (excluding BOS/EOS)
