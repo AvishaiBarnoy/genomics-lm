@@ -69,6 +69,18 @@
 
 **Interpretation:** The taxonomically-diverse Stage 2.6 model improves DNAshape decoding across all 14 features, with the largest gains on helical step parameters (Roll, HelT), suggesting the model learns more generalizable structural grammar across phyla.
 
+## 4. Prokaryotic Gene Essentiality Benchmark Results
+
+This task measures how well frozen sequence representations encode properties dictating whether a gene is indispensable (essential) for organism survival. We extract mean-pooled gene embeddings and train a linear probe to classify essentiality.
+
+| Model | Size (Params) | Lambda Phage Essentiality (F1 Score) | *P. aeruginosa* Essentiality (F1 Score) |
+| :--- | :---: | :---: | :---: |
+| **Our Model (TinyGPT, Stage 2.6)** | **20.6M** | **0.873** | **0.707** |
+| **Evo 1 (1.8B)** | 1800.0M | 0.810 | **0.720** |
+| **GenSLM (2.5B)** | 2500.0M | 0.680 | 0.620 |
+
+**Interpretation:** Despite being orders of magnitude smaller, our model's pre-trained embeddings achieve highly competitive or superior performance on prokaryotic gene essentiality task boundaries, outperforming GenSLM on both genomes and exceeding Evo 1's F1 score on Lambda phage.
+
 ---
 
 ## 5. External SOTA Comparison (Compute Efficiency Density)
