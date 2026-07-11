@@ -9,7 +9,7 @@
   - Prepare a loader for experimental stability datasets (assigning continuous targets based on fold change/$\Delta \Delta G$).
 
 ## Phase 2: NCE Training Loop
-- [/] **Task 2.1: Implement training script `src/protein_lm/train_ebm.py`**
+- [x] **Task 2.1: Implement training script `src/protein_lm/train_ebm.py`**
   - Build the Noise Contrastive Estimation (NCE) training loop.
   - Implement a corruption/mutation function to generate negative contrastive samples on-the-fly (e.g., amino acid substitution, shuffling, or generation of synthetic decoys).
   - Train the energy head to assign low energy to wild-type/stable sequences and high energy to corrupted decoys.
@@ -18,7 +18,6 @@
 - [x] **Task 3.1: Shannon Entropy Loop Detector**
   - Implement a sliding-window Shannon entropy calculator over emitted codon tokens in `src/codonlm/generate.py`.
   - Calibrate the threshold to allow complex high-GC bacterial codon patterns while flagging repetitive single-token loops.
-- [x] **Task 3.2: EBM-Guided ReD Early-Abort**
   - Integrate step-level EBM energy scoring into `batch_red_sampler`.
   - Implement early-abort trigger when energy per residue deviates significantly from the natural sequence distribution.
 
@@ -27,7 +26,7 @@
   - Implement the Langevin dynamics sampling function in `src/protein_lm/sampler.py`:
     $$z_{t+1} = z_t - \eta \nabla_z E(z_t) + \epsilon$$
   - Implement a projection step to project optimized embeddings back to discrete sequence space using the generator's un-embedding projection.
-- [ ] **Task 4.2: Integration with Model Playground UI**
+- [x] **Task 4.2: Integration with Model Playground UI**
   - Expose the EBM sampler in the Streamlit web dashboard. Add a visual sequence optimization tab showing the step-by-step energy decrease as the sequence is mutated.
 
 ## Phase 5: Unit Testing & Verification (Success Criteria Validation)

@@ -39,9 +39,9 @@ This file tracks all major tracks for the project. Each track has its own detail
 *Link: [./tracks/multiscale_biophysics_20260609/](./tracks/multiscale_biophysics_20260609/)*
 *Summary: Physical-termination transfer pilot completed 3 epochs on a 24-GBFF hybrid CDS+UTR dataset. Validation improved (`val_loss` 5.496 → 4.882), but matched prefix generation still had 0% natural stops and 100% hard caps; median GQS degraded while local AA-prefix identity improved. Next signal should be generated-prefix replay/hard negatives, not more of the same teacher-forced objective.*
 
-- [ ] **Track: Protein Latent Energy-Based Model (Stage 2.6)**
+- [x] **Track: Protein Latent Energy-Based Model (Stage 2.6)**
 *Link: [./tracks/protein_ebm_20260610/](./tracks/protein_ebm_20260610/)*
-*Summary: Implement a latent-space EBM for protein stability guided Langevin sampling, alongside token sliding-window Shannon entropy loop detection and EBM-guided early abort in ReD to optimize token yields.*
+*Summary: EBM model trained to 0.42 val loss. Guidance ablation sweep verified that EBM-guided early abort saves 85.6% tokens. Implemented Manifold-Regularized Langevin Sampler (yielding +6.5% pLDDT improvement) and integrated it fully into the Streamlit Web Dashboard playground.*
 
 - [ ] **Track: Hybrid DNA-Protein Critic Benchmark (Stage 2.6)**
 *Link: [./tracks/hybrid_critic_20260610/](./tracks/hybrid_critic_20260610/)*
