@@ -334,6 +334,7 @@ def main():
                 "Attention Weight Visualizer",
                 "Synonymous Mutation Comparison",
                 "Protein Attribute Critic",
+                "Langevin Sequence Optimizer",
             ],
             key="play_task",
         )
@@ -834,6 +835,146 @@ def main():
                                 st.line_chart(df_shape_comp, x="Base Position", y=["WT MGW (Å)", "Var MGW (Å)"])
                                 st.line_chart(df_shape_comp, x="Base Position", y=["WT Roll (°)", "Var Roll (°)"])
                                 st.line_chart(df_shape_comp, x="Base Position", y=["WT EP (kT/e)", "Var EP (kT/e)"])
+
+                elif task_mode == "Langevin Sequence Optimizer":
+                    st.subheader("🧬 Langevin Sequence Optimizer (EBM)")
+                    st.info("Optimize an initial amino acid sequence to decrease its energy and increase folding stability under the guidance of the Latent Energy-Based Model (EBM).")
+
+                    critic_ckpt = "runs/2026-07-05_critic_bidirectional_attention_scaled/checkpoints/best_critic.pt"
+                    critic_cfg = "configs/protein_critic.yaml"
+                    ebm_ckpt = "runs/protein_ebm/checkpoints/best_ebm.pt"
+                    ebm_config_exists = os.path.exists(critic_cfg) and os.path.exists(critic_ckpt) and os.path.exists(ebm_ckpt)
+
+                    if not ebm_config_exists:
+                        st.error("Missing Critic or EBM checkpoints. Please make sure runs/2026-07-05_critic_bidirectional_attention_scaled/ and runs/protein_ebm/checkpoints/best_ebm.pt exist.")
+                    else:
+                        default_seq = "IGLKVRRGLLYHDPQKDDRDELILTVDSHARTQGKVIYEKEDAMELVGADGIQQVIREQSTQDFSRGVEKELSVTAYSHETGHFLNKTAHLILAHDLWKGQQEKAAQKAETTVSNKLDFVDLNEDKLFGPRTGEIPVRYQRADRRQLAEEEPRNRQAHSAEQDFPAYALYVSALVHQRDFFLETAIKRGHTILRLHFLEGQRDLLIAVFNLYIRLYVFRMFGAEAMLKKAPKIGWERKVQIIMIKDAEERGGLTGATVAGFQSKHWDEAQTWASQARNLNEGLTFVDRQTHDLVMWEKVR"
+                        seq_input = st.text_area("Initial Amino Acid Sequence", default_seq, height=150)
+                        
+                        col_l1, col_l2 = st.columns(2)
+                        with col_l1:
+                            opt_steps = st.slider("Optimization Steps", min_value=10, max_value=300, value=150, step=10)
+                            opt_lr = st.slider("Learning Rate", min_value=0.1, max_value=30.0, value=15.0, step=0.5)
+                        with col_l2:
+                            opt_noise = st.slider("Noise Std", min_value=0.0, max_value=1.0, value=0.1, step=0.05)
+                            opt_lambda = st.slider("Manifold Regularization (lambda_reg)", min_value=0.0, max_value=0.5, value=0.01, step=0.01)
+
+                        opt_normalize = st.checkbox("Normalize Gradients", value=True)
+
+                        if st.button("Optimize Sequence"):
+                            import torch
+                            from src.protein_lm.ebm import ProteinLatentEBM
+                            from src.protein_lm.sampler import latent_langevin_sample
+                            from scripts.generative_design_loop import load_critic, score_with_critic
+                            
+                            with st.spinner("Loading models..."):
+                                critic_model, c_tokenizer, task_dims = load_critic(critic_ckpt, critic_cfg, device)
+                                ebm_model = ProteinLatentEBM(n_embd=256, hidden_dim=512).to(device)
+                                ebm_state = torch.load(ebm_ckpt, map_location=device)
+                                if "model" in ebm_state:
+                                    ebm_state = ebm_state["model"]
+                                ebm_model.load_state_dict(ebm_state)
+                                ebm_model.eval()
+
+                            with st.spinner("Analyzing starting sequence stability..."):
+                                initial_score = score_with_critic(critic_model, c_tokenizer, task_dims, seq_input, device)
+                                initial_unstable_prob = initial_score.get("stability_prob", 1.0)
+
+                            with st.spinner("Running Langevin MCMC Optimization..."):
+                                opt_seq, energy_history = latent_langevin_sample(
+                                    ebm_model=ebm_model,
+                                    critic_model=critic_model,
+                                    tokenizer=c_tokenizer,
+                                    initial_seq=seq_input,
+                                    steps=opt_steps,
+                                    lr=opt_lr,
+                                    noise_std=opt_noise,
+                                    lambda_reg=opt_lambda,
+                                    temperature_reg=1.0,
+                                    normalize_grad=opt_normalize,
+                                    device=device
+                                )
+
+                            with st.spinner("Analyzing optimized sequence stability..."):
+                                opt_score = score_with_critic(critic_model, c_tokenizer, task_dims, opt_seq, device)
+                                opt_unstable_prob = opt_score.get("stability_prob", 1.0)
+
+                            st.session_state["ebm_opt_seq"] = opt_seq
+                            st.session_state["ebm_energy_hist"] = energy_history
+                            st.session_state["ebm_init_unstable"] = initial_unstable_prob
+                            st.session_state["ebm_opt_unstable"] = opt_unstable_prob
+                            st.session_state["ebm_folded"] = None
+
+                        if "ebm_opt_seq" in st.session_state:
+                            opt_seq = st.session_state["ebm_opt_seq"]
+                            energy_history = st.session_state["ebm_energy_hist"]
+                            initial_unstable_prob = st.session_state["ebm_init_unstable"]
+                            opt_unstable_prob = st.session_state["ebm_opt_unstable"]
+                            
+                            st.success("Optimization completed successfully!")
+                            
+                            # 1. Energy progression chart
+                            st.markdown("### 📉 Optimization Energy Curve")
+                            df_energy = pd.DataFrame({
+                                "Step": range(len(energy_history)),
+                                "EBM Energy Score": energy_history
+                            })
+                            st.line_chart(df_energy, x="Step", y="EBM Energy Score")
+
+                            # 2. Performance Metric Comparison
+                            st.markdown("### 📊 Metrics Comparison")
+                            col_m1, col_m2, col_m3 = st.columns(3)
+                            with col_m1:
+                                st.metric("Start Energy", f"{energy_history[0]:.4f}")
+                                st.metric("Final Energy", f"{energy_history[-1]:.4f}", f"{energy_history[-1] - energy_history[0]:.4f} delta")
+                            with col_m2:
+                                st.metric("Initial Unstable Prob", f"{initial_unstable_prob * 100:.2f}%")
+                                st.metric("Optimized Unstable Prob", f"{opt_unstable_prob * 100:.2f}%", f"{(opt_unstable_prob - initial_unstable_prob) * 100:+.2f}% delta")
+                            with col_m3:
+                                mutations = sum(1 for a, b in zip(seq_input, opt_seq) if a != b)
+                                mutation_pct = (mutations / len(seq_input)) * 100 if seq_input else 0.0
+                                st.metric("Mutations Introduced", f"{mutations} residues", f"{mutation_pct:.1f}% mutated")
+
+                            # 3. Sequence alignments
+                            st.markdown("### 🧬 Sequence Comparison")
+                            wt_html = []
+                            opt_html = []
+                            for a, b in zip(seq_input, opt_seq):
+                                if a != b:
+                                    wt_html.append(f"<span style='color: #FF9800; font-weight: bold;'>{a}</span>")
+                                    opt_html.append(f"<span style='color: #4CAF50; font-weight: bold; text-decoration: underline;'>{b}</span>")
+                                else:
+                                    wt_html.append(a)
+                                    opt_html.append(b)
+
+                            st.markdown(f"**Initial:** `{''.join(wt_html)}`", unsafe_allow_html=True)
+                            st.markdown(f"**Optimized:** `{''.join(opt_html)}`", unsafe_allow_html=True)
+
+                            # 4. ESMFold Button
+                            st.divider()
+                            st.markdown("### 🔬 ESMFold Structural Validation")
+                            
+                            if st.button("Fold Optimized Sequence via ESMFold API"):
+                                with st.spinner("Submitting sequences to ESMFold API..."):
+                                    from scripts.generative_design_loop import esm_fold
+                                    init_res = esm_fold(seq_input)
+                                    opt_res = esm_fold(opt_seq)
+                                    if init_res is not None and opt_res is not None:
+                                        st.session_state["ebm_folded"] = {
+                                            "init_plddt": init_res["plddt_mean"],
+                                            "opt_plddt": opt_res["plddt_mean"]
+                                        }
+                                    else:
+                                        st.error("ESMFold API query failed or timed out. Please try again.")
+
+                            if st.session_state.get("ebm_folded") is not None:
+                                folded_data = st.session_state["ebm_folded"]
+                                init_plddt = folded_data["init_plddt"]
+                                opt_plddt = folded_data["opt_plddt"]
+                                col_f1, col_f2 = st.columns(2)
+                                with col_f1:
+                                    st.metric("Initial Sequence pLDDT", f"{init_plddt * 100:.1f}%")
+                                col_f2.metric("Optimized Sequence pLDDT", f"{opt_plddt * 100:.1f}%", f"{(opt_plddt - init_plddt) * 100:+.1f}% delta")
 
             except Exception as e:
                 st.error(f"Error loading model or running inference: {e}")
