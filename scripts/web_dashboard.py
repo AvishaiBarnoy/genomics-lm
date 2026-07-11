@@ -525,10 +525,19 @@ def main():
                                 critic_model, c_tokenizer, task_dims = load_critic(critic_ckpt, critic_cfg, device)
                                 ebm_model = None
                                 if hb_target == "ebm":
-                                    ebm_model = ProteinLatentEBM(n_embd=256, hidden_dim=512).to(device)
+                                    ebm_ckpt = "runs/protein_ebm_1024/checkpoints/best_ebm.pt"
+                                    if not os.path.exists(ebm_ckpt):
+                                        ebm_ckpt = "runs/protein_ebm/checkpoints/best_ebm.pt"
+                                    
                                     ebm_state = torch.load(ebm_ckpt, map_location=device)
                                     if "model" in ebm_state:
                                         ebm_state = ebm_state["model"]
+                                        
+                                    h_dim = 512
+                                    if "net.0.weight" in ebm_state:
+                                        h_dim = ebm_state["net.0.weight"].shape[0]
+                                        
+                                    ebm_model = ProteinLatentEBM(n_embd=256, hidden_dim=h_dim).to(device)
                                     ebm_model.load_state_dict(ebm_state)
                                     ebm_model.eval()
 

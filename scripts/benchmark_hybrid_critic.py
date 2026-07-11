@@ -39,12 +39,22 @@ def run_benchmark():
     critic, c_tokenizer, task_dims = load_critic(critic_ckpt, critic_cfg, device)
 
     # 3. Load EBM model
-    ebm_ckpt = "runs/protein_ebm/checkpoints/best_ebm.pt"
+    ebm_ckpt = "runs/protein_ebm_1024/checkpoints/best_ebm.pt"
+    if not Path(ebm_ckpt).exists():
+        ebm_ckpt = "runs/protein_ebm/checkpoints/best_ebm.pt"
+        
     print(f"[*] Loading trained EBM model from {ebm_ckpt}...")
-    ebm = ProteinLatentEBM(n_embd=256, hidden_dim=512).to(device)
     ebm_state = torch.load(ebm_ckpt, map_location=device)
     if "model" in ebm_state:
         ebm_state = ebm_state["model"]
+        
+    # Auto-detect hidden dimension from weight shape
+    h_dim = 512
+    if "net.0.weight" in ebm_state:
+        h_dim = ebm_state["net.0.weight"].shape[0]
+        print(f"[+] Auto-detected EBM hidden_dim: {h_dim}")
+        
+    ebm = ProteinLatentEBM(n_embd=256, hidden_dim=h_dim).to(device)
     ebm.load_state_dict(ebm_state)
     ebm.eval()
 

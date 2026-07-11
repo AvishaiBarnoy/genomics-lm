@@ -41,6 +41,7 @@ def parse_args():
     parser.add_argument("--pooling", default="attention", help="Backbone pooling type (attention | mean)")
     parser.add_argument("--family_dim", type=int, default=2000, help="Classifier family dimension")
     parser.add_argument("--function_dim", type=int, default=1000, help="Classifier function dimension")
+    parser.add_argument("--hidden_dim", type=int, default=512, help="Hidden size of the EBM network")
     parser.add_argument("--out_dir", default="runs/protein_ebm", help="Output directory for checkpoints")
     parser.add_argument("--seed", type=int, default=1337, help="RNG seed")
     return parser.parse_args()
@@ -101,7 +102,7 @@ def main():
     critic.eval()
 
     # Initialize Energy-Based Model head
-    ebm = ProteinLatentEBM(n_embd=cfg["n_embd"], hidden_dim=512)
+    ebm = ProteinLatentEBM(n_embd=cfg["n_embd"], hidden_dim=args.hidden_dim)
     ebm.to(device)
 
     optimizer = torch.optim.AdamW(ebm.parameters(), lr=args.lr, weight_decay=0.01)
@@ -262,7 +263,7 @@ def main():
 ## 🧠 Model Architecture & Settings
 - **Type:** Protein Latent Energy-Based Model (EBM)
 - **Latent Dim:** {cfg["n_embd"]}
-- **EBM Hidden Dim:** 512
+- **EBM Hidden Dim:** {args.hidden_dim}
 - **Pooling:** {args.pooling}
 - **Backbone Critic Checkpoint:** `{args.critic_ckpt}`
 """
