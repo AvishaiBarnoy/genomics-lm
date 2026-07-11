@@ -487,6 +487,16 @@ def main():
                         with col_red2:
                             max_attempts = st.number_input("Max Attempts", min_value=1, max_value=20, value=5)
 
+                    use_hybrid = st.checkbox("Use Hybrid Critic/EBM Guidance", value=False)
+                    if use_hybrid:
+                        col_hb1, col_hb2, col_hb3 = st.columns(3)
+                        with col_hb1:
+                            hb_alpha = st.slider("Guidance Weight (alpha)", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
+                        with col_hb2:
+                            hb_topk = st.slider("Guidance Top-K", min_value=1, max_value=10, value=5)
+                        with col_hb3:
+                            hb_target = st.selectbox("Guidance Target", ["stability", "ebm", "function", "family"])
+
                     if st.button("Generate"):
                         prefix = dna_input.strip().upper()
                         if not prefix:
@@ -502,7 +512,65 @@ def main():
                                 if codon in stoi:
                                     prefix_ids.append(stoi[codon])
 
-                        if use_red:
+                        if use_hybrid:
+                            with st.spinner("Loading Critic / EBM guidance layers..."):
+                                critic_ckpt = "runs/2026-07-05_critic_bidirectional_attention_scaled/checkpoints/best_critic.pt"
+                                critic_cfg = "configs/protein_critic.yaml"
+                                ebm_ckpt = "runs/protein_ebm/checkpoints/best_ebm.pt"
+                                
+                                from scripts.generative_design_loop import load_critic
+                                from src.protein_lm.ebm import ProteinLatentEBM
+                                from src.codonlm.generate import generate_cds_critic_guided
+                                
+                                critic_model, c_tokenizer, task_dims = load_critic(critic_ckpt, critic_cfg, device)
+                                ebm_model = None
+                                if hb_target == "ebm":
+                                    ebm_model = ProteinLatentEBM(n_embd=256, hidden_dim=512).to(device)
+                                    ebm_state = torch.load(ebm_ckpt, map_location=device)
+                                    if "model" in ebm_state:
+                                        ebm_state = ebm_state["model"]
+                                    ebm_model.load_state_dict(ebm_state)
+                                    ebm_model.eval()
+
+                            # Run within a ReD-style loop if requested, otherwise run once
+                            attempts = max_attempts if use_red else 1
+                            success = False
+                            for attempt in range(attempts):
+                                with st.spinner(f"Generating with Hybrid Guidance (Attempt {attempt+1}/{attempts})..."):
+                                    gen_ids, info = generate_cds_critic_guided(
+                                        model=model,
+                                        critic_model=critic_model,
+                                        c_tokenizer=c_tokenizer,
+                                        device=device,
+                                        ctx_ids=prefix_ids,
+                                        stoi=stoi,
+                                        itos=itos,
+                                        target_codons=target_codons if use_red else max_tokens,
+                                        hard_cap=max_tokens,
+                                        alpha=hb_alpha,
+                                        guide_top_k=hb_topk,
+                                        target_task=hb_target,
+                                        target_class_idx=0,
+                                        ebm_model=ebm_model,
+                                        temperature=temp,
+                                        cds_only=True,
+                                        require_terminal_stop=stop_eos
+                                    )
+                                codon_list = [itos[i] for i in gen_ids if len(itos[i]) == 3 and not (itos[i].startswith("<") or itos[i].endswith(">"))]
+                                has_stop_only_at_end = False
+                                stops = [i for i, t in enumerate(codon_list) if t in ["TAA", "TAG", "TGA"]]
+                                if stops:
+                                    has_stop_only_at_end = (stops[-1] == len(codon_list) - 1) and (len(stops) == 1)
+                                
+                                if not use_red or has_stop_only_at_end:
+                                    success = True
+                                    break
+                            
+                            tokens = [itos[i] for i in gen_ids]
+                            info["attempts"] = attempt + 1
+                            info["had_terminal_stop"] = success
+                            info["total_tokens_red"] = len(gen_ids) * (attempt + 1)
+                        elif use_red:
                             from src.codonlm.generate import generate_cds_red
                             with st.spinner("Generating with Reset-and-Discard (ReD)..."):
                                 gen_ids, info = generate_cds_red(

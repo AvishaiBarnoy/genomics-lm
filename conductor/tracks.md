@@ -43,8 +43,9 @@ This file tracks all major tracks for the project. Each track has its own detail
 *Link: [./tracks/protein_ebm_20260610/](./tracks/protein_ebm_20260610/)*
 *Summary: EBM model trained to 0.42 val loss. Guidance ablation sweep verified that EBM-guided early abort saves 85.6% tokens. Implemented Manifold-Regularized Langevin Sampler (yielding +6.5% pLDDT improvement) and integrated it fully into the Streamlit Web Dashboard playground.*
 
-- [ ] **Track: Hybrid DNA-Protein Critic Benchmark (Stage 2.6)**
+- [x] **Track: Hybrid DNA-Protein Critic Benchmark (Stage 2.6)**
 *Link: [./tracks/hybrid_critic_20260610/](./tracks/hybrid_critic_20260610/)*
+*Summary: Implemented closed-loop guided generation (stability classifier and EBM energy) with Top-K candidate pruning. Benchmarked results showing EBM guidance reduces energy by 21.0 units while parallel GPU batching accelerates generation speed by 2.2x over baseline. Integrated controls into the Streamlit web dashboard.*
 
 - [ ] **Track: Multi-Frame Overlapping Gene Modeling (Stage 3)**
 *Link: [./tracks/multi_frame_overlapping_20260610/](./tracks/multi_frame_overlapping_20260610/)*

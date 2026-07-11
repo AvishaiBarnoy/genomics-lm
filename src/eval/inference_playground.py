@@ -48,8 +48,19 @@ def load_codon_model(run_id_or_dir: str) -> Tuple[TinyGPT, List[str], Dict[str, 
     if not run_dir.exists():
         raise FileNotFoundError(f"Run directory not found: {run_id_or_dir}")
 
+    # Check for weights/checkpoints subfolder
+    weights_filenames = ["weights.pt", "best.pt", "last.pt"]
+    has_weights_at_root = any((run_dir / f).exists() for f in weights_filenames)
+    if not has_weights_at_root and (run_dir / "checkpoints").exists():
+        run_dir_weights = run_dir / "checkpoints"
+    else:
+        run_dir_weights = run_dir
+
     # load vocab
     itos_path = run_dir / "itos.txt"
+    if not itos_path.exists() and (run_dir.parent / "itos.txt").exists():
+        itos_path = run_dir.parent / "itos.txt"
+        
     if not itos_path.exists():
         # fallback to standard codon itos
         itos = CODON_ITOS
@@ -59,14 +70,14 @@ def load_codon_model(run_id_or_dir: str) -> Tuple[TinyGPT, List[str], Dict[str, 
         stoi = {tok: i for i, tok in enumerate(itos)}
 
     # load weights
-    ckpt_path = run_dir / "weights.pt"
+    ckpt_path = run_dir_weights / "weights.pt"
     if not ckpt_path.exists():
-        ckpt_path = run_dir / "best.pt"
+        ckpt_path = run_dir_weights / "best.pt"
         if not ckpt_path.exists():
-            ckpt_path = run_dir / "last.pt"
+            ckpt_path = run_dir_weights / "last.pt"
 
     if not ckpt_path.exists():
-        raise FileNotFoundError(f"No weights found in run directory {run_dir}")
+        raise FileNotFoundError(f"No weights found in run directory {run_dir_weights}")
 
     state = torch.load(ckpt_path, map_location="cpu")
     state_dict = state["model"] if isinstance(state, dict) and "model" in state else state
