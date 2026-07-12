@@ -112,6 +112,29 @@ def build_model_from_state(state_dict: Dict, cfg: Dict) -> TinyGPT:
     model = build_codon_model_from_cfg(cfg)
     model.load_state_dict(state_dict, strict=False)
     model.eval()
+    
+    if getattr(model, "use_shape_guidance", False):
+        from src.codonlm.biophysics import NucleotideEncoder
+        from scripts.train_biophysics_fusion import build_one_hot_lookup
+        
+        encoder = NucleotideEncoder(d_shape=3)
+        enc_ckpt = Path("runs/biophysics_encoder.pt")
+        if enc_ckpt.exists():
+            encoder.load_state_dict(torch.load(enc_ckpt, map_location="cpu"))
+        encoder.eval()
+        
+        # Load vocabulary
+        fallback = cfg.get("itos_path")
+        itos_path = Path(fallback) if (fallback and Path(fallback).exists()) else Path("itos.txt")
+        if itos_path.exists():
+            itos = [line.strip() for line in itos_path.read_text().splitlines() if line.strip()]
+        else:
+            from src.codonlm.generate import CODON_ITOS
+            itos = CODON_ITOS
+            
+        model.encoder = encoder
+        model.lookup_table = build_one_hot_lookup(itos, torch.device("cpu"))
+        
     return model
 
 
@@ -122,7 +145,19 @@ def next_token(
     max_T = getattr(model, "block_size", None)
     ids = ctx_ids[-max_T:] if max_T is not None else ctx_ids
     x = torch.tensor(ids, dtype=torch.long, device=device).unsqueeze(0)  # (1, T)
-    logits, _ = model(x)
+    
+    shapes = None
+    if getattr(model, "use_shape_guidance", False) and hasattr(model, "encoder") and hasattr(model, "lookup_table"):
+        if model.lookup_table.device != device:
+            model.lookup_table = model.lookup_table.to(device)
+        if next(model.encoder.parameters()).device != device:
+            model.encoder = model.encoder.to(device)
+            
+        one_hots = model.lookup_table[x]
+        one_hots = one_hots.view(1, 3 * x.size(1), 4)
+        shapes = model.encoder(one_hots)
+        
+    logits, _ = model(x, shape_embeddings=shapes)
     return logits[0, -1]  # (V,)
 
 

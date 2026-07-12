@@ -51,6 +51,7 @@ def build_codon_model_from_cfg(cfg: dict) -> TinyGPT:
         multi_offset_targets=cfg.get("multi_offset_targets", None),
         use_swiglu=bool(cfg.get("use_swiglu", False)),
         use_rope=bool(cfg.get("use_rope", False)),
+        use_shape_guidance=bool(cfg.get("use_shape_guidance", False)),
     )
 
 
