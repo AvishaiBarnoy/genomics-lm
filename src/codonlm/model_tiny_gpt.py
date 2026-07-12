@@ -163,6 +163,7 @@ class TinyGPT(nn.Module):
         multi_offset_targets: list[int] | None = None,
         use_swiglu: bool = False,
         use_rope: bool = False,
+        use_shape_guidance: bool = False,
     ):
         super().__init__()
         self.block_size = block_size
@@ -181,6 +182,7 @@ class TinyGPT(nn.Module):
         self.termination_n_classes = int(termination_n_classes)
         self.use_swiglu = bool(use_swiglu)
         self.use_rope = bool(use_rope)
+        self.use_shape_guidance = bool(use_shape_guidance)
         
         self.tok_emb = nn.Embedding(vocab_size, n_embd)
         if not self.use_rope:
@@ -210,6 +212,9 @@ class TinyGPT(nn.Module):
             if self.termination_aux
             else None
         )
+        
+        if self.use_shape_guidance:
+            self.shape_proj = nn.Linear(3, n_embd)
 
         self.multi_offset_targets = sorted(list(set([int(t) for t in multi_offset_targets]))) if multi_offset_targets else []
         self.offset_projs = nn.ModuleDict()
@@ -250,14 +255,17 @@ class TinyGPT(nn.Module):
             "multi_offset_targets": self.multi_offset_targets,
             "use_swiglu": bool(self.use_swiglu),
             "use_rope": bool(self.use_rope),
+            "use_shape_guidance": bool(self.use_shape_guidance),
         }
 
-    def forward(self, idx, targets=None, return_aux: bool = False):
+    def forward(self, idx, targets=None, return_aux: bool = False, shape_embeddings=None):
         B, T = idx.shape
         x = self.tok_emb(idx)
         if not self.use_rope:
             pos = torch.arange(0, T, device=idx.device).unsqueeze(0)
             x = x + self.pos_emb(pos)
+        if shape_embeddings is not None and self.use_shape_guidance:
+            x = x + self.shape_proj(shape_embeddings)
         x = self.drop(x)
 
         attn_mask = None
