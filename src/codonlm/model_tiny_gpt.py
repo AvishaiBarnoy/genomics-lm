@@ -215,6 +215,8 @@ class TinyGPT(nn.Module):
         
         if self.use_shape_guidance:
             self.shape_proj = nn.Linear(3, n_embd)
+            nn.init.zeros_(self.shape_proj.weight)
+            nn.init.zeros_(self.shape_proj.bias)
 
         self.multi_offset_targets = sorted(list(set([int(t) for t in multi_offset_targets]))) if multi_offset_targets else []
         self.offset_projs = nn.ModuleDict()

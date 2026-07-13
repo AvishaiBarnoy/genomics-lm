@@ -1,0 +1,71 @@
+# Physical termination shape-guided transfer learning.
+# Conditions generator representations on CNN nucleotide physical shapes.
+
+vocab_size: 74
+block_size: 512
+n_layer: 10
+n_head: 8
+n_embd: 384
+dropout: 0.1
+label_smoothing: 0.05
+use_checkpoint: true
+use_sdpa: true
+sep_mask_enabled: false
+amp: false
+
+transfer_from: "runs/2026-06-18_termination_aux_mps_b4_v1/checkpoints/best.pt"
+
+itos_path: "data/processed/ecoli_k12_hybrid/itos_hybrid.txt"
+train_npz: "data/processed/combined_hybrid/2026-06-19_physical_termination_transfer_mps_b4/train_bs512.npz"
+val_npz: "data/processed/combined_hybrid/2026-06-19_physical_termination_transfer_mps_b4/val_bs512.npz"
+test_npz: "data/processed/combined_hybrid/2026-06-19_physical_termination_transfer_mps_b4/test_bs512.npz"
+
+windows_per_seq: 2
+val_frac: 0.1
+test_frac: 0.1
+
+termination_loss_enabled: true
+termination_loss_weight: 0.1
+termination_stop_ids: [2]
+termination_bucket_edges: [0, 3, 10, 30]
+termination_n_classes: 5
+
+use_shape_guidance: true
+
+batch_size: 8
+grad_accum_steps: 32 
+epochs: 1
+lr: 0.000005
+min_lr: 0.0000005
+weight_decay: 0.05
+warmup_steps: 50
+early_stop_patience: 10
+force_gpu: true
+checkpoint_every_steps: 25
+checkpoint_every_minutes: 15
+
+use_mmap: true
+bucket_batching: true
+n_buckets: 8
+num_workers: 0
+pin_memory: false
+
+out_dir: "runs/2026-07-13_physical_termination_shape_guided_e1_v2/checkpoints"
+scores_dir: "runs/2026-07-13_physical_termination_shape_guided_e1_v2/scores"
+
+batch_optimizer:
+  enabled: true
+  mode: optimize 
+  force: false
+  include_current: true
+  include_in_wall_time: true
+  min_training_minutes_after_opt: 30
+  candidates:
+    - [2, 16]
+    - [4, 16]
+    - [4, 32]
+    - [8, 16]
+    - [8, 32]
+  warmup_steps: 20
+  measure_steps: 100
+  force_gpu: true
