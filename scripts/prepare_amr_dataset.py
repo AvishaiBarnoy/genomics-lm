@@ -78,24 +78,27 @@ def _normalize_drug_class(raw: str) -> str | None:
     return None
 
 
-def _load_aro_drug_classes(path: Path) -> dict[str, str]:
-    """Returns {ARO_accession -> normalized_drug_class}."""
-    mapping: dict[str, str] = {}
+def _load_aro_metadata(path: Path) -> dict[str, tuple[str, str]]:
+    """Returns {ARO_accession -> (normalized_drug_class, amr_gene_family)}."""
+    mapping: dict[str, tuple[str, str]] = {}
     with path.open() as f:
         reader = csv.DictReader(f, delimiter="\t")
         for row in reader:
             aro = row.get("ARO Accession", "").strip()
             drug_raw = row.get("Drug Class", "").strip()
+            family = row.get("AMR Gene Family", "").strip()
             if not aro or not drug_raw:
                 continue
             normalized = _normalize_drug_class(drug_raw)
             if normalized:
-                mapping[aro] = normalized
+                if not family:
+                    family = aro
+                mapping[aro] = (normalized, family)
     return mapping
 
 
 def _parse_fasta(path: Path) -> Iterator[tuple[str, str, str]]:
-    """Yield (header, aro_accession, sequence) from a nucleotide FASTA."""
+    """Yield (header, sequence) from a nucleotide FASTA."""
     header, seq_parts = None, []
     with path.open() as f:
         for line in f:
@@ -134,25 +137,60 @@ def _to_codons(seq: str) -> list[str] | None:
     return codons
 
 
-def _stratified_split(
+def _stratified_group_split(
     records: list[dict],
     test_fraction: float = 0.2,
     seed: int = 42,
 ) -> tuple[list[dict], list[dict]]:
-    """Stratified train/test split by drug_class label."""
+    """Stratified train/test split by drug_class, grouped by family to prevent homology leakage."""
     rng = np.random.default_rng(seed)
-    by_class: dict[str, list[dict]] = defaultdict(list)
+    
+    # 1. Map each unique family to its primary drug_class
+    family_to_class_counts = defaultdict(lambda: Counter())
     for r in records:
-        by_class[r["drug_class"]].append(r)
-
-    train, test = [], []
-    for cls, items in by_class.items():
-        items = list(items)
-        rng.shuffle(items)
-        n_test = max(1, int(len(items) * test_fraction))
-        test.extend(items[:n_test])
-        train.extend(items[n_test:])
-    return train, test
+        family_to_class_counts[r["family"]][r["drug_class"]] += 1
+        
+    family_primary_class = {}
+    for family, class_counts in family_to_class_counts.items():
+        family_primary_class[family] = class_counts.most_common(1)[0][0]
+        
+    # 2. Group unique families by their primary drug class
+    families_by_class = defaultdict(list)
+    for family, cls in family_primary_class.items():
+        families_by_class[cls].append(family)
+        
+    # 3. For each drug class, split the families
+    test_families = set()
+    for cls, families in families_by_class.items():
+        families = list(families)
+        rng.shuffle(families)
+        total_records_in_class = sum(1 for r in records if r["drug_class"] == cls)
+        target_test_records = int(total_records_in_class * test_fraction)
+        
+        current_test_records = 0
+        for family in families:
+            family_record_count = sum(1 for r in records if r["family"] == family and r["drug_class"] == cls)
+            if current_test_records < target_test_records or current_test_records == 0:
+                test_families.add(family)
+                current_test_records += family_record_count
+            else:
+                break
+                
+    # 4. Assign records based on family split
+    train_records = []
+    test_records = []
+    for r in records:
+        if r["family"] in test_families:
+            test_records.append(r)
+        else:
+            train_records.append(r)
+            
+    # Check overlap sanity
+    train_f = {r["family"] for r in train_records}
+    test_f = {r["family"] for r in test_records}
+    assert train_f.isdisjoint(test_f), "[split] overlap detected between train and test families!"
+    
+    return train_records, test_records
 
 
 def main(argv=None) -> None:
@@ -173,16 +211,12 @@ def main(argv=None) -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # -----------------------------------------------------------------------
-    # 1. Load ARO → drug class mapping
-    # -----------------------------------------------------------------------
+    # 1. Load ARO → drug class & family mapping
     print("[amr] Loading ARO index...")
-    aro_map = _load_aro_drug_classes(aro_path)
+    aro_map = _load_aro_metadata(aro_path)
     print(f"[amr] ARO entries with known drug class: {len(aro_map)}")
 
-    # -----------------------------------------------------------------------
-    # 2. Parse FASTA and join to drug class
-    # -----------------------------------------------------------------------
+    # 2. Parse FASTA and join to drug class & family
     print(f"[amr] Parsing FASTA: {fasta_path}")
     records: list[dict] = []
     stats = Counter(skipped_no_aro=0, skipped_no_class=0, skipped_too_short=0, skipped_invalid=0, kept=0)
@@ -193,21 +227,22 @@ def main(argv=None) -> None:
         if not aro:
             stats["skipped_no_aro"] += 1
             continue
-        drug_class = aro_map.get(aro)
-        if not drug_class:
+        metadata = aro_map.get(aro)
+        if not metadata:
             stats["skipped_no_class"] += 1
             continue
+        drug_class, family = metadata
         codons = _to_codons(seq)
         if codons is None:
             stats["skipped_too_short"] += 1
             continue
-        # Truncate to MAX_CODONS
         if len(codons) > MAX_CODONS:
             codons = codons[:MAX_CODONS]
         records.append({
             "id": header.split("|")[1] if "|" in header else header[:40],
             "aro": aro,
-            "sequence": " ".join(codons),  # space-separated codon tokens
+            "family": family,
+            "sequence": " ".join(codons),
             "n_codons": len(codons),
             "drug_class": drug_class,
         })
@@ -215,9 +250,7 @@ def main(argv=None) -> None:
 
     print(f"[amr] Stats: {dict(stats)}")
 
-    # -----------------------------------------------------------------------
     # 3. Filter to top-N classes with >= min_examples
-    # -----------------------------------------------------------------------
     class_counts = Counter(r["drug_class"] for r in records)
     print("\n[amr] Raw drug class distribution:")
     for cls, cnt in class_counts.most_common(20):
@@ -235,16 +268,12 @@ def main(argv=None) -> None:
     for r in records:
         r["label"] = label_map[r["drug_class"]]
 
-    # -----------------------------------------------------------------------
-    # 4. Stratified split
-    # -----------------------------------------------------------------------
-    train_records, test_records = _stratified_split(records, args.test_frac, args.seed)
+    # 4. Stratified group split by family to prevent homology leakage
+    train_records, test_records = _stratified_group_split(records, args.test_frac, args.seed)
     print(f"\n[amr] Train: {len(train_records)}  |  Test: {len(test_records)}")
 
-    # -----------------------------------------------------------------------
     # 5. Write CSVs
-    # -----------------------------------------------------------------------
-    fieldnames = ["id", "aro", "sequence", "n_codons", "drug_class", "label"]
+    fieldnames = ["id", "aro", "family", "sequence", "n_codons", "drug_class", "label"]
     for split_name, split_records in [("train_amr", train_records), ("test_amr", test_records)]:
         out_path = out_dir / f"{split_name}.csv"
         with out_path.open("w", newline="") as f:
@@ -253,15 +282,26 @@ def main(argv=None) -> None:
             writer.writerows(split_records)
         print(f"[amr] Wrote {out_path} ({len(split_records)} rows)")
 
+    # Also write data/processed/train_amr_seqs.csv and test_amr_seqs.csv for k-mer
+    proc_dir = Path("data/processed")
+    proc_dir.mkdir(parents=True, exist_ok=True)
+    for split_name, split_records in [("train_amr", train_records), ("test_amr", test_records)]:
+        seqs_path = proc_dir / f"{split_name}_seqs.csv"
+        with seqs_path.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["id", "seq"])
+            for r in split_records:
+                raw_seq = r["sequence"].replace(" ", "")
+                writer.writerow([r["id"], raw_seq])
+        print(f"[amr] Wrote {seqs_path} ({len(split_records)} rows)")
+
     # Label map
     label_map_path = out_dir / "amr_label_map.json"
     with label_map_path.open("w") as f:
         json.dump({"label_to_id": label_map, "id_to_label": {str(v): k for k, v in label_map.items()}}, f, indent=2)
     print(f"[amr] Label map → {label_map_path}")
 
-    # -----------------------------------------------------------------------
     # 6. Summary
-    # -----------------------------------------------------------------------
     print("\n[amr] ✅ Dataset ready.")
     print(f"  Classes: {len(top_classes)}")
     print(f"  Train:   {len(train_records)}")
