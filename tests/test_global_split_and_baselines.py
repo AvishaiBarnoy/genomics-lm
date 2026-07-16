@@ -127,3 +127,33 @@ def test_global_split_and_baselines_end_to_end(tmp_path):
     assert "Unigram" in res_baselines.stdout
     
     print("Baseline PPL run completed successfully.")
+
+    # 4. Run generate_synonymous_controls script
+    cmd_controls = [
+        "python",
+        "-m",
+        "scripts.generate_synonymous_controls",
+        "--test_npz",
+        str(test_npz),
+    ]
+    res_controls = subprocess.run(cmd_controls, capture_output=True, text=True)
+    assert res_controls.returncode == 0, f"Controls generation failed: {res_controls.stderr}"
+    
+    # Check outputs exist and have correct shape
+    out_dir = test_npz.parent
+    control_syn = out_dir / "test_control_synonymous_bs128.npz"
+    control_shuf = out_dir / "test_control_codon_shuffle_bs128.npz"
+    control_prot = out_dir / "test_control_protein_shuffle_bs128.npz"
+    
+    assert control_syn.exists()
+    assert control_shuf.exists()
+    assert control_prot.exists()
+    
+    with np.load(test_npz) as test_data:
+        expected_len = test_data["X"].shape[0]
+
+    with np.load(control_syn) as data:
+        assert data["X"].shape == (expected_len, 128)
+        
+    print("Synonymous controls test completed successfully.")
+
