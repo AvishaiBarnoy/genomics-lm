@@ -58,19 +58,44 @@ def _dna_to_codon_tokens(dna: str) -> List[str]:
 def _pool_hidden(
     model: torch.nn.Module, idx: torch.Tensor, nonpad_mask: torch.Tensor
 ) -> torch.Tensor:
-    # Reconstruct forward pass up to ln_f to get token embeddings; then mean-pool over non-pad tokens
+    # Reconstruct/retrieve hidden states up to ln_f; then mean-pool over non-pad tokens
     with torch.no_grad():
-        pos = torch.arange(0, idx.shape[1], device=idx.device).unsqueeze(0)
-        x = model.tok_emb(idx) + model.pos_emb(pos)
-        x = model.drop(x)
-        attn_mask = None
-        if getattr(model, "sep_id", None) is not None:
-            sep = idx == int(model.sep_id)
-            seg = torch.cumsum(sep, dim=1)
-            attn_mask = (seg.unsqueeze(-1) == seg.unsqueeze(-2)).unsqueeze(1)
-        for blk in model.blocks:
-            x = blk(x, attn_mask=attn_mask)
-        x = model.ln_f(x)
+        if hasattr(model, "forward_hidden"):
+            shape_embeddings = None
+            if getattr(model, "use_shape_guidance", False):
+                try:
+                    from src.codonlm.biophysics import NucleotideEncoder
+                    from scripts.train_biophysics_fusion import build_one_hot_lookup
+                    from pathlib import Path
+                    encoder = NucleotideEncoder(d_shape=3).to(idx.device).eval()
+                    enc_ckpt = Path("runs/biophysics_encoder.pt")
+                    if enc_ckpt.exists():
+                        encoder.load_state_dict(torch.load(enc_ckpt, map_location=idx.device))
+                    itos_file = Path("itos.txt")
+                    if itos_file.exists():
+                        itos = [line.strip() for line in itos_file.read_text().splitlines() if line.strip()]
+                    else:
+                        from src.codonlm.generate import CODON_ITOS
+                        itos = CODON_ITOS
+                    lookup_table = build_one_hot_lookup(itos, idx.device)
+                    one_hots = lookup_table[idx]
+                    one_hots = one_hots.view(idx.size(0), 3 * idx.size(1), 4)
+                    shape_embeddings = encoder(one_hots)
+                except Exception as e:
+                    print(f"[warn] Failed to generate shape embeddings for extraction: {e}")
+            x = model.forward_hidden(idx, shape_embeddings=shape_embeddings)
+        else:
+            pos = torch.arange(0, idx.shape[1], device=idx.device).unsqueeze(0)
+            x = model.tok_emb(idx) + model.pos_emb(pos)
+            x = model.drop(x)
+            attn_mask = None
+            if getattr(model, "sep_id", None) is not None:
+                sep = idx == int(model.sep_id)
+                seg = torch.cumsum(sep, dim=1)
+                attn_mask = (seg.unsqueeze(-1) == seg.unsqueeze(-2)).unsqueeze(1)
+            for blk in model.blocks:
+                x = blk(x, attn_mask=attn_mask)
+            x = model.ln_f(x)
         # Pool
         mask = nonpad_mask.to(x.dtype).unsqueeze(-1)  # (B,T,1)
         summed = (x * mask).sum(dim=1)

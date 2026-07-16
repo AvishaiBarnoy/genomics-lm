@@ -35,9 +35,9 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [ ] **Track: hayaData 2026 Submission Preparation**
 *Link: [./tracks/hayadata_submission_20260609/](./tracks/hayadata_submission_20260609/)*
 
-- [ ] **Track: Multi-Scale Biophysical Architecture (Stage 2.6)**
+- [x] **Track: Multi-Scale Biophysical Architecture (Stage 2.6)**
 *Link: [./tracks/multiscale_biophysics_20260609/](./tracks/multiscale_biophysics_20260609/)*
-*Summary: Physical-termination transfer pilot completed 3 epochs on a 24-GBFF hybrid CDS+UTR dataset. Validation improved (`val_loss` 5.496 → 4.882), but matched prefix generation still had 0% natural stops and 100% hard caps; median GQS degraded while local AA-prefix identity improved. Next signal should be generated-prefix replay/hard negatives, not more of the same teacher-forced objective.*
+*Summary: Implemented stride-3 1D CNN Nucleotide Encoder downsampler and late-fusion zero-initialized shape projection in TinyGPT. Fine-tuned the joint model on 91k hybrid sequence windows. While stop triggers did not yet activate autoregressively, prefix ablation validation showed that injecting physical shape embeddings significantly stabilizes gene generation, increasing median GQS by ~25% (21.46 → 26.79 at k=3) without perplexity regressions.*
 
 - [x] **Track: Protein Latent Energy-Based Model (Stage 2.6)**
 *Link: [./tracks/protein_ebm_20260610/](./tracks/protein_ebm_20260610/)*

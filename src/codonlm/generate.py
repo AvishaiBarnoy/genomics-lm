@@ -127,7 +127,9 @@ def generate_cds_constrained(
     termination_bias_steps = 0
     last_termination_class = None
 
-    while new_codons < int(hard_cap):
+    total_new_tokens = 0
+    while new_codons < int(hard_cap) and total_new_tokens < 3 * int(hard_cap):
+        total_new_tokens += 1
         bias_length_ok = new_codons >= max(0, int(target_codons) - int(termination_bias_window))
         need_aux = (termination_bias_enabled and bias_length_ok) or multi_offset_prior_enabled
         if need_aux:
@@ -449,7 +451,9 @@ def generate_cds_critic_guided(
     eos_idx = stoi.get("<EOS_CDS>")
     allowed_cds_ids = _cds_token_ids(itos) if cds_only else []
 
-    while new_codons < int(hard_cap):
+    total_new_tokens = 0
+    while new_codons < int(hard_cap) and total_new_tokens < 3 * int(hard_cap):
+        total_new_tokens += 1
         # 1. Get generator next token logits
         logits = _next_token_logits(model, device, ids)
         if cds_only:

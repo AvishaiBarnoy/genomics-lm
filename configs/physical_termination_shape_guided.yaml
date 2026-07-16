@@ -34,7 +34,7 @@ use_shape_guidance: true
 
 batch_size: 8
 grad_accum_steps: 32 
-epochs: 1
+epochs: 3
 lr: 0.000005
 min_lr: 0.0000005
 weight_decay: 0.05
@@ -50,8 +50,8 @@ n_buckets: 8
 num_workers: 0
 pin_memory: false
 
-out_dir: "runs/2026-07-13_physical_termination_shape_guided_e1_v2/checkpoints"
-scores_dir: "runs/2026-07-13_physical_termination_shape_guided_e1_v2/scores"
+out_dir: "runs/2026-07-15_physical_termination_shape_guided_e3/checkpoints"
+scores_dir: "runs/2026-07-15_physical_termination_shape_guided_e3/scores"
 
 batch_optimizer:
   enabled: true

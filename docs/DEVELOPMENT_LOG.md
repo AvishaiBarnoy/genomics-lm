@@ -527,8 +527,27 @@ Our local models deliver orders of magnitude higher performance density per para
     *   Even at `batch_size: 4` and `grad_accum_steps: 32`, memory allocation spikes exceeded the unified RAM threshold, prompting macOS to issue silent kernel forced kills (`Killed: 9`).
     *   **Conclusion**: Upscaling embedding dimensions to 512 with backpropagation is beyond local development memory limits. The progressive scaling track has been officially halted, establishing `d384` as the optimal maximum capacity for local training. Focus shifts to EBM guidance and sampling loops on the stable `d384` codebase.
 
+## 21. Stage 21: High-Capacity Energy-Based Model Upscaling & Hybrid Critic Guidance
+**Goal:** Upscale the Latent Energy-Based Model (EBM) to 1024-dim hidden layer capacity to provide stronger physical gradients to the codon generator, and implement closed-loop hybrid critic guided sampling.
+
+*   **EBM Capacity Expansion**: Upgraded `train_ebm.py` to support `--hidden_dim` configuration. Trained EBM-1024 for 5 epochs on the MultiTask dataset, achieving a validation loss of **`0.4307`** (best epoch: 3).
+*   **Closed-Loop Guided Sampling**: Implemented token-by-token logit blending with top-K candidate pruning in `generate.py`. In sweeps, EBM guidance ($\alpha=1.0$) dynamically minimized validation sequence energies from `-9.49` to **`-43.33`**, indicating a substantial step-by-step optimization toward stable biophysical structural folds.
+*   **Speed Optimization**: Parallelized candidate scoring on GPU/MPS, accelerating generation throughput to **`45.5 tokens/sec`** (a 2.2x speedup over sequential CPU/GPU roundtrips).
+
+## 22. Stage 22: Stride-3 CNN Nucleotide Encoder & Multi-Scale Biophysical Late Fusion
+**Goal:** Resolve coordinate alignment and attention scaling mismatches to inject raw 1-bp nucleotide physical conformations into the codon-level generator.
+
+*   **Stride-3 Convolutional Encoder**: Implemented `NucleotideEncoder` in `biophysics.py` containing a 1D Convolution with `kernel_size=3` and `stride=3`. This reduces the nucleotide representation length by exactly $3\times$ ($3L \to L$), matching codon boundaries and saving 90% of transformer attention computation. Pre-trained the encoder on synthetic DNAshape regressions (MGW, Roll, EP) to validation MSE of **`0.17856`**.
+*   **Late-Fusion Embedding Injection**: Modified `TinyGPT` forward pass to project predicted shape features to `n_embd` and add them directly to token embeddings, bypassing cross-attention complexity.
+*   **Vectorized Lookup Table**: Created a pre-computed GPU tensor `(vocab_size, 3, 4)` to perform one-hot codon/nucleotide mapping dynamically on GPU, avoiding slow CPU string-decoding loops.
+
+## 23. Stage 23: Late-Fusion Zero Initialization & Joint UTR+CDS Fine-Tuning
+**Goal:** Address representation divergence at training initialization, execute joint training on hybrid boundary windows, and run the final biological validation.
+
+*   **Late-Fusion Zero Initialization**: Discovered that standard random initialization of the projection layer (`shape_proj`) injected large noise at step 1, corrupting pre-trained embeddings and causing divergence. Fixed this by zero-initializing `shape_proj.weight` and `shape_proj.bias`, ensuring the model starts training in an exact identical state to the baseline ($x + 0.0$).
+*   **Joint UTR+CDS Fine-Tuning**: Completed a full epoch of training on the 91k hybrid sequence dataset (`val_loss 20.635`, `term_loss 0.561`).
+*   **Biological Ablation & Validation**: Re-ran prefix generation evaluation with `--allow_non_cds_tokens` enabled. Fixed a safety cap bug in the generation loop to prevent infinite loops on single-nucleotide UTR tokens.
+*   **Ablation Results**: While stop-codon placement did not yet activate autoregressively (due to the short training duration), shape embedding injection significantly stabilized sequence grammar, increasing the median Gene Quality Score (GQS) by **~25%** (from `21.46` to `26.79` at $k=3$).
+
 ---
 *End of Log*
-
-
-

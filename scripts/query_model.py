@@ -129,8 +129,12 @@ def build_model_from_state(state_dict: Dict, cfg: Dict) -> TinyGPT:
         if itos_path.exists():
             itos = [line.strip() for line in itos_path.read_text().splitlines() if line.strip()]
         else:
-            from src.codonlm.generate import CODON_ITOS
-            itos = CODON_ITOS
+            try:
+                from src.codonlm.generate import CODON_ITOS
+                itos = CODON_ITOS
+            except ImportError:
+                from src.codonlm.codon_tokenize import VOCAB
+                itos = VOCAB
             
         model.encoder = encoder
         model.lookup_table = build_one_hot_lookup(itos, torch.device("cpu"))

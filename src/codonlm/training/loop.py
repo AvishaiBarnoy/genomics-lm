@@ -244,6 +244,47 @@ def run_training(cfg: dict, args) -> None:
     torch.manual_seed(base_seed)
     amp = bool(cfg.get("amp", True)) and (device.type == "mps")
 
+    use_shape_guidance = bool(cfg.get("use_shape_guidance", False))
+    encoder = None
+    lookup_table = None
+    if use_shape_guidance:
+        from src.codonlm.biophysics import NucleotideEncoder, generate_shape_training_data
+        from scripts.train_biophysics_fusion import build_one_hot_lookup
+        
+        encoder = NucleotideEncoder(d_shape=3).to(device)
+        enc_ckpt = Path("runs/biophysics_encoder.pt")
+        if enc_ckpt.exists():
+            print(f"[biophysics] Loading pre-trained encoder from {enc_ckpt}")
+            encoder.load_state_dict(torch.load(enc_ckpt, map_location=device))
+        else:
+            print("[biophysics] runs/biophysics_encoder.pt not found. Pre-training on-the-fly...")
+            train_x, train_y = generate_shape_training_data(num_samples=5000, seq_len_codons=60)
+            optimizer_enc = torch.optim.AdamW(encoder.parameters(), lr=0.005)
+            criterion_enc = nn.MSELoss()
+            encoder.train()
+            for _ in range(5):
+                for i in range(0, len(train_x), 64):
+                    bx = train_x[i : i + 64].to(device)
+                    by = train_y[i : i + 64].to(device)
+                    optimizer_enc.zero_grad()
+                    pred = encoder(bx)
+                    loss = criterion_enc(pred, by)
+                    loss.backward()
+                    optimizer_enc.step()
+            print("[biophysics] On-the-fly encoder pre-training completed.")
+            
+        encoder.eval()
+        for p in encoder.parameters():
+            p.requires_grad = False
+            
+        itos_file = Path(cfg.get("itos_path", "itos.txt"))
+        if itos_file.exists():
+            itos = [line.strip() for line in itos_file.read_text().splitlines() if line.strip()]
+        else:
+            from src.codonlm.generate import CODON_ITOS
+            itos = CODON_ITOS
+        lookup_table = build_one_hot_lookup(itos, device)
+
     model = TinyGPT(
         cfg["vocab_size"],
         cfg["block_size"],
@@ -263,6 +304,7 @@ def run_training(cfg: dict, args) -> None:
         multi_offset_targets=multi_offset_targets if multi_offset_enabled else None,
         use_swiglu=bool(cfg.get("use_swiglu", False)),
         use_rope=bool(cfg.get("use_rope", False)),
+        use_shape_guidance=use_shape_guidance,
     ).to(device)
 
     replay_loader = None
@@ -571,11 +613,17 @@ def run_training(cfg: dict, args) -> None:
                 xb, yb = xb.to(device), yb.to(device)
                 def fwd():
                     nonlocal replay_iter
+                    shapes = None
+                    if use_shape_guidance and encoder is not None and lookup_table is not None:
+                        one_hots = lookup_table[xb]
+                        one_hots = one_hots.view(xb.size(0), 3 * xb.size(1), 4)
+                        shapes = encoder(one_hots)
+
                     need_aux = termination_loss_enabled or bool(multi_offset_weights)
                     if need_aux:
-                        logits_, next_loss_, aux_ = model(xb, yb, return_aux=True)
+                        logits_, next_loss_, aux_ = model(xb, yb, return_aux=True, shape_embeddings=shapes)
                     else:
-                        logits_, next_loss_ = model(xb, yb)
+                        logits_, next_loss_ = model(xb, yb, shape_embeddings=shapes)
                         aux_ = {}
                     total_loss_ = next_loss_
                     offset_losses_ = {}
@@ -616,7 +664,12 @@ def run_training(cfg: dict, args) -> None:
                             replay_x, replay_labels = next(replay_iter)
                         replay_x = replay_x.to(device)
                         replay_labels = replay_labels.to(device)
-                        _, _, replay_aux = model(replay_x, return_aux=True)
+                        replay_shapes = None
+                        if use_shape_guidance and encoder is not None and lookup_table is not None:
+                            r_one_hots = lookup_table[replay_x]
+                            r_one_hots = r_one_hots.view(replay_x.size(0), 3 * replay_x.size(1), 4)
+                            replay_shapes = encoder(r_one_hots)
+                        _, _, replay_aux = model(replay_x, return_aux=True, shape_embeddings=replay_shapes)
                         replay_logits = replay_aux.get("termination_logits")
                         if replay_logits is None:
                             raise RuntimeError("replay_loss_enabled=true but model returned no termination logits")
@@ -672,6 +725,21 @@ def run_training(cfg: dict, args) -> None:
                     offset_counts[offset] += 1
                 n += 1
                 wall_timer.check()
+            
+            # Step on remainder if training and loader length is not divisible by gacc
+            if split == "train" and n % gacc != 0:
+                if (not use_cosine) and warmup_steps > 0 and step < warmup_steps:
+                    scale = float(step + 1) / max(1, warmup_steps)
+                    for pg in optim.param_groups:
+                        pg["lr"] = base_lr * scale
+                optim.step()
+                optim.zero_grad(set_to_none=True)
+                step += 1
+                if use_cosine:
+                    scheduler.step()
+                if device.type == "mps":
+                    torch.mps.empty_cache()
+
             offset_avgs = {
                 offset: (offset_totals[offset] / max(offset_counts[offset], 1))
                 for offset in offset_totals

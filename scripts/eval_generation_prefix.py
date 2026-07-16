@@ -34,7 +34,7 @@ import torch
 import matplotlib.pyplot as plt
 
 from . import query_model as Q
-from src.codonlm.generate import generate_cds_constrained
+from src.codonlm.generate import generate_cds_constrained, generate_cds_critic_guided
 from .generative_design_loop import load_critic, score_with_critic
 
 PRESETS = {
@@ -167,7 +167,7 @@ def _model_spec_from(meta: dict, ckpt: object) -> dict:
     keys = [
         "vocab_size", "block_size", "n_layer", "n_head", "n_embd",
         "multi_offset_targets", "termination_aux", "termination_n_classes", "termination_loss_enabled",
-        "use_swiglu", "use_rope"
+        "use_swiglu", "use_rope", "use_shape_guidance", "itos_path"
     ]
     for k in keys:
         if k in cfg and k not in spec:
@@ -451,6 +451,41 @@ def main() -> None:
         default="configs/protein_critic.yaml",
         help="Path to ProteinCritic YAML config.",
     )
+    ap.add_argument(
+        "--critic_guidance",
+        action="store_true",
+        default=False,
+        help="Enable active critic-guided blending during generation.",
+    )
+    ap.add_argument(
+        "--ebm_guidance",
+        action="store_true",
+        default=False,
+        help="Enable active EBM-guided blending during generation.",
+    )
+    ap.add_argument(
+        "--ebm_ckpt",
+        default="runs/protein_ebm_1024/checkpoints/best_ebm.pt",
+        help="Path to EBM checkpoint.",
+    )
+    ap.add_argument(
+        "--ebm_hidden_dim",
+        type=int,
+        default=1024,
+        help="Hidden dimension of the EBM.",
+    )
+    ap.add_argument(
+        "--guide_alpha",
+        type=float,
+        default=0.5,
+        help="Blending weight alpha for critic/EBM guidance.",
+    )
+    ap.add_argument(
+        "--guide_top_k",
+        type=int,
+        default=5,
+        help="Pruning size guide_top_k for guided generation.",
+    )
     args = ap.parse_args()
     preset = PRESETS.get(args.preset or "full", {})
     args.max_genes = int(args.max_genes if args.max_genes is not None else preset.get("max_genes", 50))
@@ -512,10 +547,20 @@ def main() -> None:
     critic_model = None
     critic_tokenizer = None
     critic_task_dims = {}
-    if args.critic_stability:
+    if args.critic_stability or args.critic_guidance or args.ebm_guidance:
         critic_model, critic_tokenizer, critic_task_dims = load_critic(
             args.critic_ckpt, args.critic_cfg, device
         )
+
+    ebm_model = None
+    if args.ebm_guidance:
+        from src.protein_lm.ebm import ProteinLatentEBM
+        ebm_model = ProteinLatentEBM(n_embd=256, hidden_dim=args.ebm_hidden_dim)
+        ebm_state = torch.load(args.ebm_ckpt, map_location=device)
+        if isinstance(ebm_state, dict) and "model" in ebm_state:
+            ebm_state = ebm_state["model"]
+        ebm_model.load_state_dict(ebm_state)
+        ebm_model.to(device).eval()
 
     model.to(device).eval()
     # Validate AA length constraints
@@ -655,25 +700,46 @@ def main() -> None:
                 target_codons = int(min(args.target_aa_len, hard_cap))
                 target_codons = int(max(target_codons, args.min_aa_len))
                 # Constrained generation
-                gen_ids, info = generate_cds_constrained(
-                    model=model,
-                    device=device,
-                    ctx_ids=ctx_ids,
-                    stoi=stoi,
-                    itos=itos,
-                    target_codons=target_codons,
-                    hard_cap=hard_cap,
-                    require_terminal_stop=bool(args.require_terminal_stop),
-                    temperature=float(args.temperature),
-                    topk=int(args.topk) if args.topk > 0 else 0,
-                    termination_bias_enabled=bool(args.termination_bias),
-                    termination_stop_bias=float(args.termination_stop_bias),
-                    termination_trigger_class_max=int(args.termination_trigger_class_max),
-                    termination_bias_window=int(args.termination_bias_window),
-                    cds_only=not bool(args.allow_non_cds_tokens),
-                    multi_offset_prior_enabled=bool(args.multi_offset_prior),
-                    multi_offset_prior_weights=multi_offset_prior_weights,
-                )
+                if args.critic_guidance or args.ebm_guidance:
+                    gen_ids, info = generate_cds_critic_guided(
+                        model=model,
+                        critic_model=critic_model,
+                        c_tokenizer=critic_tokenizer,
+                        device=device,
+                        ctx_ids=ctx_ids,
+                        stoi=stoi,
+                        itos=itos,
+                        target_codons=target_codons,
+                        hard_cap=hard_cap,
+                        alpha=float(args.guide_alpha),
+                        guide_top_k=int(args.guide_top_k),
+                        target_task="ebm" if args.ebm_guidance else "stability",
+                        target_class_idx=None,
+                        ebm_model=ebm_model if args.ebm_guidance else None,
+                        temperature=float(args.temperature),
+                        cds_only=not bool(args.allow_non_cds_tokens),
+                        require_terminal_stop=bool(args.require_terminal_stop)
+                    )
+                else:
+                    gen_ids, info = generate_cds_constrained(
+                        model=model,
+                        device=device,
+                        ctx_ids=ctx_ids,
+                        stoi=stoi,
+                        itos=itos,
+                        target_codons=target_codons,
+                        hard_cap=hard_cap,
+                        require_terminal_stop=bool(args.require_terminal_stop),
+                        temperature=float(args.temperature),
+                        topk=int(args.topk) if args.topk > 0 else 0,
+                        termination_bias_enabled=bool(args.termination_bias),
+                        termination_stop_bias=float(args.termination_stop_bias),
+                        termination_trigger_class_max=int(args.termination_trigger_class_max),
+                        termination_bias_window=int(args.termination_bias_window),
+                        cds_only=not bool(args.allow_non_cds_tokens),
+                        multi_offset_prior_enabled=bool(args.multi_offset_prior),
+                        multi_offset_prior_weights=multi_offset_prior_weights,
+                    )
                 gen_toks = Q.ids_to_codons(gen_ids, itos)
                 # strip BOS and anything before first codon
                 codons = [t for t in gen_toks if len(t) == 3 and set(t) <= set("ACGT")]

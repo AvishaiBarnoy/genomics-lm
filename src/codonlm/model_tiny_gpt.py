@@ -316,6 +316,30 @@ class TinyGPT(nn.Module):
             return logits, loss, aux
         return logits, loss
 
+    def forward_hidden(self, idx, shape_embeddings=None):
+        B, T = idx.shape
+        x = self.tok_emb(idx)
+        if not self.use_rope:
+            pos = torch.arange(0, T, device=idx.device).unsqueeze(0)
+            x = x + self.pos_emb(pos)
+        if shape_embeddings is not None and self.use_shape_guidance:
+            x = x + self.shape_proj(shape_embeddings)
+        x = self.drop(x)
+
+        attn_mask = None
+        if self.sep_id is not None:
+            sep = (idx == int(self.sep_id))
+            seg = torch.cumsum(sep, dim=1)
+            seg_mask = (seg.unsqueeze(-1) == seg.unsqueeze(-2)).unsqueeze(1)  # (B,1,T,T)
+            causal_mask = torch.tril(torch.ones(T, T, device=idx.device)).unsqueeze(0).unsqueeze(0) > 0  # (1,1,T,T)
+            attn_mask = causal_mask & seg_mask  # Pre-combined mask (B,1,T,T)
+
+        for blk in self.blocks:
+            x = blk(x, attn_mask=attn_mask)
+
+        x = self.ln_f(x)
+        return x
+
 class NoPropBlock(nn.Module):
     def __init__(self, n_embd, n_head, dropout, block_size, n_kv_head: int | None = None, use_sdpa: bool = False):
         super().__init__()
