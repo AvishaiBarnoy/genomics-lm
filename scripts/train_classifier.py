@@ -158,7 +158,7 @@ def main() -> None:
                 logits = model(torch.from_numpy(test_X.astype(np.float32)).to(device))
                 y_pred = torch.argmax(logits, dim=1).cpu().numpy()
                 y_proba = torch.softmax(logits, dim=1).cpu().numpy()
-        metrics = compute_metrics(test_y, y_pred, y_proba)
+        metrics = compute_metrics(test_y, y_pred, y_proba, bootstrap=True)
         save_json(out_dir / "metrics.json", metrics)
         plot_confusion(test_y, y_pred, out_dir / "confusion.png")
         if y_proba is not None:
@@ -218,7 +218,7 @@ def main() -> None:
                 y_proba = model.predict_proba(Xte)
             except Exception:
                 y_proba = None
-        metrics = compute_metrics(y_test_i, y_pred, y_proba)
+        metrics = compute_metrics(y_test_i, y_pred, y_proba, bootstrap=True)
         save_json(out_dir / "metrics.json", metrics)
         plot_confusion(y_test_i, y_pred, out_dir / "confusion.png")
         if y_proba is not None:

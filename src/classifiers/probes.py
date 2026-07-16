@@ -36,26 +36,67 @@ def _one_hot(y: np.ndarray, n_classes: int) -> np.ndarray:
     return out
 
 
-def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_proba: Optional[np.ndarray] = None) -> Dict[str, float]:
-    """Computes standard classification evaluation metrics (accuracy, f1, and optionally AUROC)."""
+def compute_metrics(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    y_proba: Optional[np.ndarray] = None,
+    bootstrap: bool = False,
+    n_resamples: int = 1000,
+    seed: int = 42,
+) -> Dict[str, float]:
+    """Computes standard and robust evaluation metrics (accuracy, macro_f1, balanced_accuracy, auroc, macro_auprc) and optional bootstrapped 95% CIs."""
     metrics: Dict[str, float] = {}
-    metrics["accuracy"] = float(skm.accuracy_score(y_true, y_pred))
-    try:
-        metrics["macro_f1"] = float(skm.f1_score(y_true, y_pred, average="macro"))
-    except Exception:
-        pass
-    # AUROC: try OVR multiclass if probabilities or decision scores provided
-    if y_proba is not None:
+
+    def _calc(true, pred, proba):
+        res = {}
+        res["accuracy"] = float(skm.accuracy_score(true, pred))
+        res["balanced_accuracy"] = float(skm.balanced_accuracy_score(true, pred))
         try:
-            if y_proba.ndim == 1:
-                # binary case needs probabilities for positive class
-                metrics["auroc"] = float(skm.roc_auc_score(y_true, y_proba))
-            else:
-                n_classes = y_proba.shape[1]
-                y_true_oh = _one_hot(y_true, n_classes)
-                metrics["auroc"] = float(skm.roc_auc_score(y_true_oh, y_proba, multi_class="ovr"))
+            res["macro_f1"] = float(skm.f1_score(true, pred, average="macro"))
         except Exception:
             pass
+            
+        if proba is not None:
+            try:
+                if proba.ndim == 1:
+                    res["auroc"] = float(skm.roc_auc_score(true, proba))
+                    res["macro_auprc"] = float(skm.average_precision_score(true, proba))
+                else:
+                    n_classes = proba.shape[1]
+                    true_oh = _one_hot(true, n_classes)
+                    res["auroc"] = float(skm.roc_auc_score(true_oh, proba, multi_class="ovr"))
+                    res["macro_auprc"] = float(skm.average_precision_score(true_oh, proba, average="macro"))
+            except Exception:
+                pass
+        return res
+
+    # Compute point estimates
+    point_estimates = _calc(y_true, y_pred, y_proba)
+    metrics.update(point_estimates)
+
+    # Compute bootstrap confidence intervals
+    if bootstrap and len(y_true) > 0:
+        rng = np.random.default_rng(seed)
+        bootstrap_runs = []
+        for _ in range(n_resamples):
+            indices = rng.choice(len(y_true), size=len(y_true), replace=True)
+            y_true_b = y_true[indices]
+            y_pred_b = y_pred[indices]
+            y_proba_b = y_proba[indices] if y_proba is not None else None
+            try:
+                bootstrap_runs.append(_calc(y_true_b, y_pred_b, y_proba_b))
+            except Exception:
+                pass
+
+        if bootstrap_runs:
+            for key in point_estimates:
+                vals = sorted([run[key] for run in bootstrap_runs if key in run])
+                if vals:
+                    low_idx = int(len(vals) * 0.025)
+                    high_idx = int(len(vals) * 0.975)
+                    metrics[f"{key}_ci_lower"] = float(vals[low_idx])
+                    metrics[f"{key}_ci_upper"] = float(vals[high_idx])
+                    
     return metrics
 
 
