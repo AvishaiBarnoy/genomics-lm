@@ -537,3 +537,140 @@ def generate_cds_critic_guided(
         "cds_only": bool(cds_only),
     }
     return ids, info
+
+
+# Standard genetic code dictionary
+CODON_TABLE = {
+    'ATA':'I', 'ATC':'I', 'ATT':'I', 'ATG':'M',
+    'ACA':'T', 'ACC':'T', 'ACG':'T', 'ACT':'T',
+    'AAC':'N', 'AAT':'N', 'AAG':'K', 'AAA':'K',
+    'GCA':'A', 'GCC':'A', 'GCG':'A', 'GCT':'A',
+    'GAC':'D', 'GAT':'D', 'GAG':'E', 'GAA':'E',
+    'GGA':'G', 'GGC':'G', 'GGG':'G', 'GGT':'G',
+    'CTA':'L', 'CTC':'L', 'CTG':'L', 'CTT':'L',
+    'CCA':'P', 'CCC':'P', 'CCG':'P', 'CCT':'P',
+    'CAC':'H', 'CAT':'H', 'CAG':'Q', 'CAA':'Q',
+    'CGA':'R', 'CGC':'R', 'CGG':'R', 'CGT':'R',
+    'GTA':'V', 'GTC':'V', 'GTG':'V', 'GTT':'V',
+    'TCA':'S', 'TCC':'S', 'TCG':'S', 'TCT':'S',
+    'TTC':'F', 'TTT':'F', 'TTA':'L', 'TTG':'L',
+    'TAC':'Y', 'TAT':'Y', 'TAA':'_', 'TAG':'_',
+    'TGC':'C', 'TGT':'C', 'TGA':'_', 'TGG':'W',
+    'AGA':'R', 'AGG':'R', 'AGC':'S', 'AGT':'S',
+}
+
+from collections import defaultdict
+AA_TO_CODONS = defaultdict(list)
+for codon, aa in CODON_TABLE.items():
+    AA_TO_CODONS[aa].append(codon)
+
+
+@torch.no_grad()
+def generate_cds_synonymous(
+    model,
+    critic_model,
+    c_tokenizer,
+    device: torch.device,
+    ctx_ids: List[int],
+    stoi: Dict[str, int],
+    itos: List[str],
+    target_protein: str,
+    alpha: float = 0.5,
+    guide_top_k: int = 5,
+    target_task: str = "stability",
+    target_class_idx: int | None = None,
+    ebm_model = None,
+    temperature: float = 1.0,
+) -> Tuple[List[int], dict]:
+    """
+    Generate codon tokens constrained to translate exactly to the target amino acid sequence.
+    Supports EBM and Critic logit blending for thermodynamic/fold shape optimization.
+    """
+    from src.eval.inference_playground import translate_codons_to_aa
+
+    ids = list(ctx_ids)
+    had_terminal_stop = False
+    new_codons = 0
+    eos_idx = stoi.get("<EOS_CDS>")
+    
+    # 1. Constrained codon generation for each amino acid residue
+    for t, target_aa in enumerate(target_protein):
+        logits = _next_token_logits(model, device, ids)
+        
+        allowed_codons = AA_TO_CODONS.get(target_aa.upper(), [])
+        allowed_ids = [stoi[c] for c in allowed_codons if c in stoi]
+        if not allowed_ids:
+            allowed_ids = _cds_token_ids(itos)
+            
+        logits = _mask_to_allowed_tokens(logits, allowed_ids)
+        if temperature != 1.0:
+            logits = logits / max(1e-6, float(temperature))
+            
+        probs = torch.softmax(logits, dim=-1)
+        
+        if (critic_model is not None or ebm_model is not None) and alpha != 0.0:
+            valid_idxs = torch.where(probs > 0.0)[0]
+            k_val = min(guide_top_k, valid_idxs.numel())
+            if k_val > 0:
+                top_vals, top_sub_idxs = torch.topk(probs[valid_idxs], k=k_val)
+                top_idxs = valid_idxs[top_sub_idxs]
+                
+                aa_seqs = []
+                candidate_ids = []
+                for c_id in top_idxs:
+                    c_id = c_id.item()
+                    cand_ids = ids + [c_id]
+                    cand_codons = [itos[i] for i in cand_ids if len(itos[i]) == 3 and not (itos[i].startswith("<") or itos[i].endswith(">"))]
+                    aa_seq = translate_codons_to_aa(cand_codons)
+                    aa_seqs.append(aa_seq)
+                    candidate_ids.append(c_id)
+                    
+                critic_scores = batch_score_critic(
+                    critic_model=critic_model,
+                    tokenizer=c_tokenizer,
+                    aa_seqs=aa_seqs,
+                    target_task=target_task,
+                    target_class_idx=target_class_idx,
+                    device=device,
+                    ebm_model=ebm_model
+                )
+                
+                gen_log_probs = torch.log(top_vals + 1e-10)
+                blended_log_probs = gen_log_probs + alpha * critic_scores
+                blended_probs = torch.softmax(blended_log_probs, dim=-1)
+                
+                pick = torch.multinomial(blended_probs, 1).item()
+                next_id = candidate_ids[pick]
+            else:
+                next_id = torch.multinomial(probs, 1).item()
+        else:
+            next_id = torch.multinomial(probs, 1).item()
+            
+        ids.append(next_id)
+        new_codons += 1
+
+    # 2. Append stop codon at the end of the open reading frame
+    logits = _next_token_logits(model, device, ids)
+    stop_codons = AA_TO_CODONS.get('_', ['TAA', 'TAG', 'TGA'])
+    stop_ids = [stoi[c] for c in stop_codons if c in stoi]
+    logits = _mask_to_allowed_tokens(logits, stop_ids)
+    probs = torch.softmax(logits, dim=-1)
+    next_id = torch.multinomial(probs, 1).item()
+    ids.append(next_id)
+    new_codons += 1
+    had_terminal_stop = True
+
+    # 3. Append UTR boundary token (EOS)
+    if eos_idx is not None:
+        ids.append(eos_idx)
+        
+    info = {
+        "had_terminal_stop": True,
+        "early_stop": False,
+        "hit_hard_cap": False,
+        "target_codons": len(target_protein) + 1,
+        "generated_codons": new_codons,
+        "cds_only": True,
+    }
+    return ids, info
+

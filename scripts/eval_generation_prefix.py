@@ -34,7 +34,7 @@ import torch
 import matplotlib.pyplot as plt
 
 from . import query_model as Q
-from src.codonlm.generate import generate_cds_constrained, generate_cds_critic_guided
+from src.codonlm.generate import generate_cds_constrained, generate_cds_critic_guided, generate_cds_synonymous
 from .generative_design_loop import load_critic, score_with_critic
 
 PRESETS = {
@@ -486,12 +486,28 @@ def main() -> None:
         default=5,
         help="Pruning size guide_top_k for guided generation.",
     )
+    ap.add_argument(
+        "--target_protein",
+        type=str,
+        default=None,
+        help="Target amino acid sequence for constrained synonymous generation (raw string or file path to FASTA)."
+    )
     args = ap.parse_args()
     preset = PRESETS.get(args.preset or "full", {})
     args.max_genes = int(args.max_genes if args.max_genes is not None else preset.get("max_genes", 50))
     args.samples = int(args.samples if args.samples is not None else preset.get("samples", 5))
     args.max_new = int(args.max_new if args.max_new is not None else preset.get("max_new", 300))
     _set_seed(int(args.seed))
+
+    target_protein = None
+    if args.target_protein:
+        p_path = Path(args.target_protein)
+        if p_path.is_file():
+            lines = p_path.read_text().splitlines()
+            seq_lines = [line.strip() for line in lines if line.strip() and not line.startswith(">")]
+            target_protein = "".join(seq_lines).upper()
+        else:
+            target_protein = args.target_protein.strip().upper()
 
     repo = Path(__file__).resolve().parents[1]
     run_dir = repo / "runs" / args.run_id
@@ -700,7 +716,24 @@ def main() -> None:
                 target_codons = int(min(args.target_aa_len, hard_cap))
                 target_codons = int(max(target_codons, args.min_aa_len))
                 # Constrained generation
-                if args.critic_guidance or args.ebm_guidance:
+                if target_protein is not None:
+                    gen_ids, info = generate_cds_synonymous(
+                        model=model,
+                        critic_model=critic_model,
+                        c_tokenizer=critic_tokenizer,
+                        device=device,
+                        ctx_ids=ctx_ids,
+                        stoi=stoi,
+                        itos=itos,
+                        target_protein=target_protein,
+                        alpha=float(args.guide_alpha) if (args.critic_guidance or args.ebm_guidance) else 0.0,
+                        guide_top_k=int(args.guide_top_k),
+                        target_task="ebm" if args.ebm_guidance else "stability",
+                        target_class_idx=None,
+                        ebm_model=ebm_model if args.ebm_guidance else None,
+                        temperature=float(args.temperature),
+                    )
+                elif args.critic_guidance or args.ebm_guidance:
                     gen_ids, info = generate_cds_critic_guided(
                         model=model,
                         critic_model=critic_model,
