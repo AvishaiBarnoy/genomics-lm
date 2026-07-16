@@ -64,3 +64,58 @@ def test_regression_probe_alignment():
         clf.fit(hidden_states, pooled_targets[name])
         preds = clf.predict(hidden_states)
         assert len(preds) == T
+
+
+def test_shape_baselines_end_to_end(tmp_path):
+    import json
+    import torch
+    import subprocess
+    
+    # Create a mock run directory with meta.json, itos.txt and weights.pt
+    run_dir = tmp_path / "runs" / "test_run"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    
+    itos_path = run_dir / "itos.txt"
+    CODONS = [a + b + c for a in "ACGT" for b in "ACGT" for c in "ACGT"]
+    SPECIALS = ["<PAD>", "<BOS_CDS>", "<EOS_CDS>", "<SEP>"]
+    VOCAB = SPECIALS + CODONS
+    itos_path.write_text("\n".join(VOCAB) + "\n")
+    
+    meta = {
+        "model_spec": {
+            "model_type": "tiny_gpt",
+            "vocab_size": len(VOCAB),
+            "block_size": 32,
+            "n_layer": 1,
+            "n_head": 1,
+            "n_embd": 4
+        }
+    }
+    (run_dir / "meta.json").write_text(json.dumps(meta))
+    
+    from src.codonlm.model_tiny_gpt import TinyGPT
+    model = TinyGPT(vocab_size=len(VOCAB), block_size=32, n_layer=1, n_head=1, n_embd=4)
+    torch.save(model.state_dict(), run_dir / "weights.pt")
+    
+    test_npz = tmp_path / "test_set.npz"
+    X_test = np.random.randint(4, len(VOCAB), size=(3, 32))
+    X_test[:, 0] = 1
+    X_test[:, -1] = 2
+    np.savez(test_npz, X=X_test)
+    
+    cmd = [
+        "python",
+        "-m",
+        "scripts.eval_shape_baselines",
+        "--run_dir", str(run_dir),
+        "--ckpt", "weights.pt",
+        "--test_npz", str(test_npz),
+        "--max_seqs", "3"
+    ]
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    assert res.returncode == 0, f"Script failed: {res.stderr}\nStdout: {res.stdout}"
+    assert "DNA-Shape Property" in res.stdout
+    assert "One-Hot R^2" in res.stdout
+    assert "Random Model R^2" in res.stdout
+    assert "Pretrained Model R^2" in res.stdout
+
