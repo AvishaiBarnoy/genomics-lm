@@ -191,6 +191,15 @@ def load_model(
     state_dict = (
         ckpt["model"] if isinstance(ckpt, Mapping) and "model" in ckpt else ckpt
     )
+    # Dynamically resolve vocabulary size to prevent configuration mismatches
+    if "tok_emb.weight" in state_dict:
+        spec.vocab_size = state_dict["tok_emb.weight"].shape[0]
+    else:
+        try:
+            tokens = load_token_list(run_dir)
+            spec.vocab_size = len(tokens)
+        except Exception:
+            pass
     model = build_model(spec)
     model.load_state_dict(state_dict, strict=False)
     model.to(device)
