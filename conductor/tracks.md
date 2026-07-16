@@ -83,9 +83,10 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [x] **Track: AMR Classification Probe (Conference)**
 *Link: [./tracks/amr_classification_20260615/](./tracks/amr_classification_20260615/)*
+*Summary: Completed. Created preparation script for CARD dataset. Integrated strict, homology-aware gene family splits (PR #66) and upgraded evaluations with Balanced Accuracy, Macro-AUPRC, and 1000-resample bootstrapped 95% confidence intervals (PR #69) to handle class imbalance.*
 
 - [x] **Track: EC & AMR Downstream Evaluation (Conference)**
-*Summary: Completed EC Level-1 probe (AUROC=0.703), AMR probe (AUROC=0.967), k-mer baselines, UMAP+attention figures, SOTA table consolidation.*
+*Summary: Completed EC Level-1 probe (AUROC=0.703), homology-aware AMR probe (AUROC=0.893), k-mer baselines, UMAP+attention figures, SOTA table consolidation.*
 
 - [x] **Track: Generative Design Loop**
 *Link: [./tracks/generative_design_loop_20260615/](./tracks/generative_design_loop_20260615/)*

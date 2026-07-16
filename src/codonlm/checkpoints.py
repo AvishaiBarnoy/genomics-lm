@@ -61,6 +61,15 @@ def load_codon_model(
     ckpt_name: str = "best.pt",
 ) -> tuple[TinyGPT, dict, Path]:
     state_dict, cfg, ckpt_path = load_codon_checkpoint(run_dir, ckpt_name=ckpt_name)
+    # Dynamically resolve vocabulary size to prevent configuration mismatches
+    if "tok_emb.weight" in state_dict:
+        cfg["vocab_size"] = state_dict["tok_emb.weight"].shape[0]
+    else:
+        itos_path = Path(run_dir) / "itos.txt"
+        if itos_path.exists():
+            tokens = [line.strip() for line in itos_path.read_text().splitlines() if line.strip()]
+            if tokens:
+                cfg["vocab_size"] = len(tokens)
     model = build_codon_model_from_cfg(cfg)
     model.load_state_dict(state_dict, strict=False)
     model.to(device)

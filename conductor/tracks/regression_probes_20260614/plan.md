@@ -26,3 +26,12 @@ Write unit tests and compare baseline vs. transfer learning runs.
 - [x] Task: Run comparison.
     - Evaluate `2026-06-12_stage2.5_6L4H_d384_e5` and `2026-06-12_stage2.5_10L8H_d384_e5` models.
     - Compare unsupervised PCA(1) correlation vs. supervised regression $R^2$/correlation.
+
+## Phase 4: Baseline Comparison Controls (P1)
+Establish one-hot sequence and random model controls to validate structural representation learning.
+
+- [x] Task: Implement baseline controls and comparison scripts.
+    - Created `scripts/eval_shape_baselines.py` to compare Ridge regression prediction performance of pretrained model representations against raw one-hot codons and randomly initialized frozen models.
+    - Added verification tests in `tests/test_structural_probe.py`.
+    - Merged in **PR #67**.
+

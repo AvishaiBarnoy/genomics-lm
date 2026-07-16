@@ -1,6 +1,6 @@
 # Track: AMR Classification Probe
 **Track ID:** `amr_classification_20260615`
-**Status:** 🟡 PLANNING
+**Status:** ✅ COMPLETED
 **Priority:** Medium (conference readiness)
 **Depends on:** Stage 2.6 checkpoint (✅ done), EC probe pipeline (✅ done)
 
@@ -53,27 +53,28 @@ Expected result range based on EC results:
 ## Implementation Plan
 
 ### Phase 1: Data Acquisition & Preprocessing (≈ 2h)
-- [ ] Download CARD `broadstreet` nucleotide FASTA
-- [ ] Write `scripts/prepare_amr_dataset.py`:
+- [x] Download CARD `broadstreet` nucleotide FASTA
+- [x] Write `scripts/prepare_amr_dataset.py`:
   - Parse CARD FASTA headers → drug class labels
   - Filter to sequences 50–512 codons (fits model context)
-  - Stratified train/test split (80/20)
+  - Enforce strict group-splits on antibiotic resistance gene families to guarantee $0\%$ homology leakage (merged in **PR #66**)
   - Output: `data/labels/train_amr.csv`, `data/labels/test_amr.csv`
-- [ ] Validate class distribution (print histogram)
+- [x] Validate class distribution (print histogram)
 
 ### Phase 2: Embedding Extraction (≈ 15 min)
-- [ ] Run `scripts/extract_embeddings.py` with Stage 2.6 checkpoint on AMR sequences
-- [ ] Output: `data/embeddings/amr_train_embeddings.npy`, `amr_test_embeddings.npy`
+- [x] Run `scripts/extract_embeddings.py` with Stage 2.6 checkpoint on AMR sequences
+- [x] Output: `data/embeddings/amr_train_embeddings.npy`, `amr_test_embeddings.npy`
 
 ### Phase 3: Probe Training (≈ 5 min)
-- [ ] Create `configs/classifier/probe_amr.yaml` (copy from `probe_ec.yaml`, update paths/labels)
-- [ ] Run `scripts/train_classifier.py --config configs/classifier/probe_amr.yaml`
-- [ ] Evaluate: LogReg, SVM, MLP — same protocol as EC
+- [x] Create `configs/classifier/probe_amr.yaml` (copy from `probe_ec.yaml`, update paths/labels)
+- [x] Run `scripts/train_classifier.py --config configs/classifier/probe_amr.yaml`
+- [x] Evaluate: LogReg, SVM, MLP — same protocol as EC
+- [x] Compute Balanced Accuracy and Macro-AUPRC metrics with 1000-resample bootstrap 95% confidence intervals to handle CARD class imbalance (merged in **PR #69**)
 
 ### Phase 4: Results & Reporting
-- [ ] Add AMR results row to `conference/sota_benchmark_table.md`
-- [ ] Update `docs/DEVELOPMENT_LOG.md`
-- [ ] Add `amr` column to `runs/_summary/summary.csv`
+- [x] Add AMR results row to `conference/sota_benchmark_table.md`
+- [x] Update `docs/DEVELOPMENT_LOG.md`
+- [x] Add `amr` column to `runs/_summary/summary.csv`
 
 ---
 
