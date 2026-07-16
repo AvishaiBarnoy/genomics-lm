@@ -549,5 +549,15 @@ Our local models deliver orders of magnitude higher performance density per para
 *   **Biological Ablation & Validation**: Re-ran prefix generation evaluation with `--allow_non_cds_tokens` enabled. Fixed a safety cap bug in the generation loop to prevent infinite loops on single-nucleotide UTR tokens.
 *   **Ablation Results**: While stop-codon placement did not yet activate autoregressively (due to the short training duration), shape embedding injection significantly stabilized sequence grammar, increasing the median Gene Quality Score (GQS) by **~25%** (from `21.46` to `26.79` at $k=3$).
 
+## 24. Stage 24: Evaluation Controls, Cross-Leakage Auditing, & Dynamic Vocab Resolution
+**Goal:** Address representation leakage, baseline deficits, and class imbalance issues in the evaluation pipeline to establish scientific validation rigor.
+
+*   **Gradient Accumulation Remainder Fix (`loop.py`)**: Fixed a bug where leftover microbatches at the end of an epoch accumulated gradients but were cleared by `zero_grad()` at the next epoch's start without being stepped. Merged in **PR #65**.
+*   **Homology-Aware AMR Group Splitting (`prepare_amr_dataset.py`)**: Replaced standard stratified splitting with antibiotic resistance gene family group splits, guaranteeing $0\%$ sequence homology overlap between train and test splits to prevent memorization-based probe accuracy. Merged in **PR #66**.
+*   **DNA-Shape Probing Controls (`eval_shape_baselines.py`)**: Implemented control comparison sweeps against raw one-hot codons and randomly initialized models to validate true representation learning. Merged in **PR #67**.
+*   **Pretraining Split Cross-Leakage Auditor (`audit_duplicates.py`)**: Added exact hash matching and contiguous codon L-mer overlap checks ($L \in \{10, 20, 30\}$) to track split cross-contamination. Merged in **PR #68**.
+*   **Imbalanced Metrics & Bootstrapping (`probes.py`)**: Integrated Balanced Accuracy and Macro-AUPRC alongside 1000-resample bootstrap loops to compute 95% confidence intervals for robust evaluations. Merged in **PR #69**.
+*   **Dynamic Vocabulary Size Resolution (`checkpoints.py`, `_shared.py`)**: Updated checkpoint model loaders to dynamically extract vocabulary size from saved state weight embedding dimensions, preventing config mismatches. Merged in **PR #70**.
+
 ---
 *End of Log*

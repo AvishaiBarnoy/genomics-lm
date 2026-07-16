@@ -233,7 +233,7 @@ python -m scripts.infer_score_mutations --run_dir runs/<RUN_ID>/checkpoints --se
 
 ### Benchmarking & Evaluation
 
-Evaluate a trained run on the held‑out test split and compute sanity KPIs:
+Evaluate a trained run on the held‑out test split, check for cross-leakage, compare against baselines, and compute sanity KPIs:
 
 ```bash
 # Test cross‑entropy and perplexity; updates runs/<RUN_ID>/scores/metrics.json
@@ -241,6 +241,18 @@ python -m scripts.evaluate_test --run_dir runs/<RUN_ID>/checkpoints
 
 # Sanity KPIs (codon_corr, frameshift_delta, start/stop deltas, syn_gap)
 python -m scripts.sanity_kpis --run_dir runs/<RUN_ID>/checkpoints
+
+# Audit pretraining splits for duplicate sequence and L-mer cross-leakage (exact & near-duplicates)
+python -m scripts.audit_duplicates --train_npz data/processed/train_bs256.npz --test_npz data/processed/test_bs256.npz
+
+# Calculate baseline perplexities (Uniform, Unigram, Bigram, Trigram Markov baselines)
+python -m scripts.eval_ppl_baselines --test_npz data/processed/test_bs256.npz --train_npz data/processed/train_bs256.npz
+
+# Generate synonymous recoding and shuffled sequence controls for perplexity evaluation
+python -m scripts.generate_synonymous_controls --test_npz data/processed/test_bs256.npz --out_dir data/processed/controls
+
+# Compare DNA-shape regression prediction performance against one-hot and random model baselines
+python -m scripts.eval_shape_baselines --run_dir runs/<RUN_ID> --ckpt best.pt --test_npz data/processed/test_bs256.npz
 
 # Compare multiple runs and produce a table + plots
 python -m scripts.compare_runs
