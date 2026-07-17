@@ -431,6 +431,27 @@ def main() -> None:
             f"[integrity] ok: empty_windows train={empty_train} val={empty_val} test={empty_test}"
         )
 
+    # ---------- Run Split Duplication soft audit ----------
+    print("\n[prepare] Running split duplication soft audit...")
+    try:
+        import sys
+        import subprocess
+        cmd = [
+            sys.executable,
+            "-m",
+            "scripts.audit_duplicates",
+            "--train_npz",
+            str(train_out),
+            "--test_npz",
+            str(test_out),
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        print(res.stdout)
+        if res.returncode != 0:
+            print(f"[warning] split duplication audit encountered an issue:\n{res.stderr}")
+    except Exception as exc:
+        print(f"[warning] failed to run split duplication audit: {exc}")
+
 
 if __name__ == "__main__":
     main()
