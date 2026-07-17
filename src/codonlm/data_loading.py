@@ -114,14 +114,72 @@ class PackedDataset(Dataset):
 
 
 class MmapPackedDataset(Dataset):
-    """Memory-mapped alternative to PackedDataset for dynamic-length NPZ files."""
+    """Memory-mapped alternative to PackedDataset supporting uncompressed NPY or dynamic NPZ."""
 
     def __init__(self, paths):
+        from pathlib import Path
         if isinstance(paths, (str, os.PathLike)):
             paths = [paths]
         else:
             paths = list(paths)
 
+        # 1. Check if uncompressed .npy files are available next to all paths
+        self.use_npy_mmap = True
+        npy_configs = []
+        for path in paths:
+            p = Path(path)
+            x_path = p.with_name(p.stem + "_X.npy")
+            y_path = p.with_name(p.stem + "_Y.npy")
+            len_path = p.with_name(p.stem + "_lengths.npy")
+            if x_path.exists():
+                npy_configs.append({
+                    "X": x_path,
+                    "Y": y_path if y_path.exists() else None,
+                    "lengths": len_path if len_path.exists() else None,
+                    "is_dynamic": len_path.exists()
+                })
+            else:
+                self.use_npy_mmap = False
+                break
+
+        if self.use_npy_mmap:
+            self.is_dynamic = npy_configs[0]["is_dynamic"]
+            self._mmaps_X = []
+            self._mmaps_Y = []
+            self._offsets = []
+            self._lengths = []
+            
+            total_seqs = 0
+            for cfg in npy_configs:
+                mmap_X = np.load(cfg["X"], mmap_mode="r")
+                self._mmaps_X.append(mmap_X)
+                
+                if self.is_dynamic:
+                    lengths = np.load(cfg["lengths"])
+                    offsets = np.concatenate([[0], np.cumsum(lengths[:-1])])
+                    self._offsets.append(offsets)
+                    self._lengths.append(lengths)
+                    total_seqs += len(lengths)
+                else:
+                    mmap_Y = np.load(cfg["Y"], mmap_mode="r")
+                    self._mmaps_Y.append(mmap_Y)
+                    total_seqs += mmap_X.shape[0]
+                    self._lengths.append(mmap_X.shape[0])
+            
+            global_file = []
+            global_local = []
+            for fi, length_info in enumerate(self._lengths):
+                n_seq = len(length_info) if self.is_dynamic else length_info
+                global_file.append(np.full(n_seq, fi, dtype=np.int32))
+                global_local.append(np.arange(n_seq, dtype=np.int32))
+            
+            self._global_file = np.concatenate(global_file)
+            self._global_local = np.concatenate(global_local)
+            self._total = total_seqs
+            self._delegate = None
+            return
+
+        # 2. Fallback to original NPZ loading logic
         with np.load(paths[0], allow_pickle=False) as probe:
             is_dynamic = "lengths" in probe
 
@@ -164,8 +222,21 @@ class MmapPackedDataset(Dataset):
     def __getitem__(self, i):
         if self._delegate is not None:
             return self._delegate[i]
+            
         fi = int(self._global_file[i])
         li = int(self._global_local[i])
+        
+        if self.use_npy_mmap:
+            if self.is_dynamic:
+                start = int(self._offsets[fi][li])
+                length = int(self._lengths[fi][li])
+                seq = np.array(self._mmaps_X[fi][start : start + length], dtype=np.int64)
+                return torch.from_numpy(seq)
+            else:
+                x = np.array(self._mmaps_X[fi][li], dtype=np.int64)
+                y = np.array(self._mmaps_Y[fi][li], dtype=np.int64)
+                return torch.from_numpy(x), torch.from_numpy(y)
+                
         start = int(self._offsets[fi][li])
         length = int(self._lengths[fi][li])
         seq = np.array(self._mmaps[fi][start : start + length], dtype=np.int64)
@@ -175,6 +246,14 @@ class MmapPackedDataset(Dataset):
     def seq_lengths(self) -> np.ndarray:
         if self._delegate is not None:
             return self._delegate.seq_lengths
+        if self.use_npy_mmap:
+            if self.is_dynamic:
+                return np.concatenate(self._lengths)
+            else:
+                all_lens = []
+                for fi, length_info in enumerate(self._lengths):
+                    all_lens.append(np.full(length_info, self._mmaps_X[fi].shape[1], dtype=np.int32))
+                return np.concatenate(all_lens)
         return np.concatenate(self._lengths)
 
 

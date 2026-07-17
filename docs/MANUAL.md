@@ -254,6 +254,19 @@ python -m scripts.generate_synonymous_controls --test_npz data/processed/test_bs
 # Compare DNA-shape regression prediction performance against one-hot and random model baselines
 python -m scripts.eval_shape_baselines --run_dir runs/<RUN_ID> --ckpt best.pt --test_npz data/processed/test_bs256.npz
 
+### Dataset Memory-Mapping (Host RAM Optimization)
+
+By default, training datasets saved in compressed `.npz` files are fully decompressed and loaded into Host RAM at startup. For large datasets, this can cause out-of-memory errors on the host machine.
+
+You can convert any `.npz` dataset into uncompressed `.npy` arrays, enabling **true zero-startup memory mapping** (where elements are lazily paged from disk only when requested by the dataloader):
+
+```bash
+# Convert a compressed .npz dataset to uncompressed .npy arrays
+python -m scripts.convert_npz_to_npy path/to/dataset.npz
+```
+
+This generates `_X.npy`, `_Y.npy` (and/or `_lengths.npy`) files in the same directory. The data loaders in `genomics-lm` will automatically detect these `.npy` arrays and load them in memory-mapped mode without changing any YAML training configurations.
+
 # Compare multiple runs and produce a table + plots
 python -m scripts.compare_runs
 # outputs:

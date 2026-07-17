@@ -567,5 +567,12 @@ Our local models deliver orders of magnitude higher performance density per para
 *   **Ablation Sweep Matrix (`run_ablation_sweep.py`)**: Updated results reporting to display raw baseline metrics side-by-side with guided metrics.
 *   **Verification**: Registered end-to-end integration tests in `tests/test_eval_generation_prefix.py`. Merged in **PR #71**.
 
+## 26. Stage 26: Memory-Mapped NPY Dataset Loader
+**Goal:** Migrate dataset loaders from compressed `.npz` archives to uncompressed `.npy` arrays to enable true virtual memory mapping, minimizing host RAM footprint and eliminating startup CPU decompression overhead.
+
+*   **NPY Conversion Utility (`convert_npz_to_npy.py`)**: Created a command-line script to unpack `.npz` archives into individual uncompressed `.npy` arrays.
+*   **Memory-Mapped Loader Integration (`data_loading.py`)**: Enhanced `MmapPackedDataset` to automatically detect `.npy` array pairs (e.g. `_X.npy` and `_Y.npy`) next to specified `.npz` manifest paths, allowing seamless true `mmap` loading without changing configurations.
+*   **Performance Verification**: Confirmed a **36.6x startup speedup** and a **99% reduction in host RAM delta** (down from 374 MB to 4 MB) on a 400 MB mock dataset benchmark. Registered tests in `tests/test_mmap_dataset.py`. Merged in **PR #72**.
+
 ---
 *End of Log*
