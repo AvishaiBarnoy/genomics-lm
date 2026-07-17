@@ -355,6 +355,12 @@ class SampleResult:
     critic_stability: float = 0.0
     critic_family_prob: float = 0.0
     critic_function_prob: float | None = None
+    # raw unguided metrics
+    raw_gqs: float = 0.0
+    raw_gen_len: int = 0
+    raw_had_terminal_stop: bool = False
+    raw_hit_hard_cap: bool = False
+    raw_valid_end: bool = False
 
 
 def main() -> None:
@@ -792,6 +798,64 @@ def main() -> None:
                 frame = frame_integrity_ok(codons)
                 score = gqs(stop_score, aaid, syn, stab, norep, usage, frame)
 
+                # Raw baseline computation: unguided, unbiased, no priors
+                is_guided = (
+                    target_protein is not None or
+                    bool(args.critic_guidance) or
+                    bool(args.ebm_guidance) or
+                    bool(args.termination_bias) or
+                    bool(args.multi_offset_prior)
+                )
+                raw_gen_ids = None
+                raw_info = {}
+                if is_guided:
+                    try:
+                        raw_gen_ids, raw_info = generate_cds_constrained(
+                            model=model,
+                            device=device,
+                            ctx_ids=ctx_ids,
+                            stoi=stoi,
+                            itos=itos,
+                            target_codons=target_codons,
+                            hard_cap=hard_cap,
+                            require_terminal_stop=bool(args.require_terminal_stop),
+                            temperature=float(args.temperature),
+                            topk=int(args.topk) if args.topk > 0 else 0,
+                            termination_bias_enabled=False,
+                            multi_offset_prior_enabled=False,
+                            cds_only=not bool(args.allow_non_cds_tokens),
+                        )
+                    except Exception as exc:
+                        print(f"[gen-prefix] raw baseline generation failed, falling back: {exc}")
+                        raw_gen_ids = None
+
+                if raw_gen_ids is not None:
+                    raw_gen_toks = Q.ids_to_codons(raw_gen_ids, itos)
+                    raw_codons = [t for t in raw_gen_toks if len(t) == 3 and set(t) <= set("ACGT")]
+                    raw_gen_cont_cod = raw_codons[min(k, len(raw_codons)) :]
+                    raw_gen_cont_ids = [stoi[c] for c in raw_gen_cont_cod if c in stoi]
+                    raw_gen_cont_aa = _aa_seq(raw_gen_cont_cod)
+                    raw_aaid = aa_identity(truth_aa[k:], raw_gen_cont_aa)
+                    raw_syn = syn_rate(truth_codons[k:], raw_gen_cont_cod)
+                    raw_stop_score, raw_valid_end, raw_early = _score_stop_behavior(
+                        raw_codons, truth_len_codons=len(truth_codons)
+                    )
+                    raw_stab = ppl_stability([stoi.get(c, 0) for c in raw_codons])
+                    raw_norep = 1.0 - _ngram_repeat_ratio(raw_codons, n=3)
+                    raw_usage = usage_agree(raw_gen_cont_ids)
+                    raw_frame = frame_integrity_ok(raw_codons)
+                    raw_gqs = gqs(raw_stop_score, raw_aaid, raw_syn, raw_stab, raw_norep, raw_usage, raw_frame)
+                    raw_gen_len = len(raw_codons)
+                    raw_had_terminal_stop = bool(raw_info.get("had_terminal_stop", False))
+                    raw_hit_hard_cap = bool(raw_info.get("hit_hard_cap", False))
+                    raw_valid_end_val = raw_valid_end
+                else:
+                    raw_gqs = score
+                    raw_gen_len = len(codons)
+                    raw_had_terminal_stop = bool(info.get("had_terminal_stop", False))
+                    raw_hit_hard_cap = bool(info.get("hit_hard_cap", False))
+                    raw_valid_end_val = valid_end
+
                 critic_stability = 0.0
                 critic_family_prob = 0.0
                 critic_function_prob = 0.0
@@ -837,6 +901,11 @@ def main() -> None:
                         critic_stability=critic_stability,
                         critic_family_prob=critic_family_prob,
                         critic_function_prob=critic_function_prob,
+                        raw_gqs=raw_gqs,
+                        raw_gen_len=raw_gen_len,
+                        raw_had_terminal_stop=raw_had_terminal_stop,
+                        raw_hit_hard_cap=raw_hit_hard_cap,
+                        raw_valid_end=raw_valid_end_val,
                     )
                 )
                 done += 1
@@ -879,6 +948,15 @@ def main() -> None:
         median_len = float(stats.median([r.gen_len_codons for r in rks]))
         stop_rate = sum(1 for r in rks if r.had_terminal_stop) / len(rks)
         hard_cap_rate = sum(1 for r in rks if r.hit_hard_cap) / len(rks)
+
+        # Raw baseline metrics aggregation
+        raw_term_rate = sum(1 for r in rks if r.raw_valid_end) / len(rks)
+        raw_median_gqs = float(stats.median([r.raw_gqs for r in rks]))
+        raw_mean_len = float(sum(r.raw_gen_len for r in rks) / len(rks))
+        raw_median_len = float(stats.median([r.raw_gen_len for r in rks]))
+        raw_stop_rate = sum(1 for r in rks if r.raw_had_terminal_stop) / len(rks)
+        raw_hard_cap_rate = sum(1 for r in rks if r.raw_hit_hard_cap) / len(rks)
+
         # Optional length-normalized GQS
         mean_gqs_norm = None
         median_gqs_norm = None
@@ -913,6 +991,12 @@ def main() -> None:
                 "median_aa_len": median_len,
                 "terminal_stop_rate": stop_rate,
                 "hard_cap_rate": hard_cap_rate,
+                "raw_termination_rate": raw_term_rate,
+                "raw_median_gqs": raw_median_gqs,
+                "raw_mean_aa_len": raw_mean_len,
+                "raw_median_aa_len": raw_median_len,
+                "raw_terminal_stop_rate": raw_stop_rate,
+                "raw_hard_cap_rate": raw_hard_cap_rate,
                 **(
                     {"mean_gqs_norm": mean_gqs_norm, "median_gqs_norm": median_gqs_norm}
                     if args.gqs_normalize == "len"
@@ -943,6 +1027,12 @@ def main() -> None:
             "median_aa_len",
             "terminal_stop_rate",
             "hard_cap_rate",
+            "raw_termination_rate",
+            "raw_median_gqs",
+            "raw_mean_aa_len",
+            "raw_median_aa_len",
+            "raw_terminal_stop_rate",
+            "raw_hard_cap_rate",
             "n",
         ]
         extra = []
