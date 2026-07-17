@@ -43,12 +43,6 @@ def main():
         help="Delete all intermediate checkpoints (e.g., last.pt, epoch_*.pt) keeping only 'best' weights."
     )
     ap.add_argument(
-        "--older_than_days",
-        type=int,
-        default=None,
-        help="Purge entire run directories whose last-modified timestamp is older than N days."
-    )
-    ap.add_argument(
         "--force",
         action="store_true",
         default=False,
@@ -57,8 +51,7 @@ def main():
     args = ap.parse_args()
 
     # If no cleanup action is specified, default to dry-run reporting
-    action_specified = args.keep_only_best or (args.older_than_days is not None)
-    is_dry_run = args.dry_run or not action_specified
+    is_dry_run = args.dry_run or not args.keep_only_best
 
     runs_dir = REPO_DIR / "runs"
     
@@ -72,28 +65,8 @@ def main():
     
     total_reclaimed = 0.0
 
-    # 1. Purge old runs
-    if args.older_than_days is not None:
-        now = time.time()
-        cutoff_sec = args.older_than_days * 86400
-        print(f"\nScanning for runs older than {args.older_than_days} days...")
-        
-        for folder in run_folders:
-            # Check modification time of the folder itself
-            mtime = folder.stat().st_mtime
-            age_days = (now - mtime) / 86400
-            if now - mtime > cutoff_sec:
-                size_mb = get_dir_size_mb(folder)
-                total_reclaimed += size_mb
-                print(f"Target: [Run Folder] {folder.name} (Age: {age_days:.1f} days, Size: {size_mb:.2f} MB)")
-                
-                if not is_dry_run:
-                    if args.force or input(f"Confirm delete {folder.name}? [y/N] ").lower() == "y":
-                        shutil.rmtree(folder)
-                        print(f"Deleted {folder.name}")
-
-    # 2. Purge intermediate checkpoints
-    elif args.keep_only_best:
+    # 1. Purge intermediate checkpoints
+    if args.keep_only_best:
         print("\nScanning for intermediate checkpoint weights...")
         for folder in run_folders:
             chk_dir = folder / "checkpoints"
@@ -116,10 +89,9 @@ def main():
     print("\n=== Cleanup Summary ===")
     if is_dry_run:
         print(f"Dry-run finished. Total space targetable for cleanup: {total_reclaimed:.2f} MB")
-        if not action_specified:
+        if not args.keep_only_best:
             print("\nTo perform cleanup, specify an action:")
             print("  --keep_only_best    : Delete non-best model checkpoints.")
-            print("  --older_than_days N : Delete run folders older than N days.")
             print("Use --force to skip confirmations.")
     else:
         print(f"Cleanup finished. Reclaimed: {total_reclaimed:.2f} MB")

@@ -580,7 +580,4 @@ python -m scripts.cleanup_runs
 
 # 2. Delete all intermediate checkpoints (e.g. last.pt, epoch_*.pt), keeping only best.pt
 python -m scripts.cleanup_runs --keep_only_best
-
-# 3. Purge entire run directories older than 14 days
-python -m scripts.cleanup_runs --older_than_days 14
 ```
