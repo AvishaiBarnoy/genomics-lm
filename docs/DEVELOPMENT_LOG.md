@@ -574,5 +574,12 @@ Our local models deliver orders of magnitude higher performance density per para
 *   **Memory-Mapped Loader Integration (`data_loading.py`)**: Enhanced `MmapPackedDataset` to automatically detect `.npy` array pairs (e.g. `_X.npy` and `_Y.npy`) next to specified `.npz` manifest paths, allowing seamless true `mmap` loading without changing configurations.
 *   **Performance Verification**: Confirmed a **36.6x startup speedup** and a **99% reduction in host RAM delta** (down from 374 MB to 4 MB) on a 400 MB mock dataset benchmark. Registered tests in `tests/test_mmap_dataset.py`. Merged in **PR #72**.
 
+## 27. Stage 27: Training-Set Similarity & Memorization Audit
+**Goal:** Track generated sequence novelty and prevent verbatim training data memorization by auditing generated outputs against pretraining corpus.
+
+*   **Training Set N-Gram Indexer (`eval_generation_prefix.py`)**: Built an automated sliding-window N-gram lookup index over the pretraining dataset loaded via memory-mapped `MmapPackedDataset`. Included configurable token cap limit (`--max_train_audit_tokens`) to prevent RAM bloat.
+*   **Memorization Overlap Metrics (`eval_generation_prefix.py`)**: Computes sliding-window Jaccard-style matching rates (`train_overlap_10` and `train_overlap_20`) for each generated sequence, reporting metrics in `samples.csv` and `summary.csv`.
+*   **Integration Testing**: Added verification assertions to the end-to-end integration test in `tests/test_eval_generation_prefix.py`. Merged in **PR #73**.
+
 ---
 *End of Log*

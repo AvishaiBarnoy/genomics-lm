@@ -124,7 +124,8 @@ def test_eval_generation_prefix_end_to_end(tmp_path):
                 "n_layer": 1,
                 "n_head": 1,
                 "n_embd": 4,
-                "dataset_name": "combined_hybrid"
+                "dataset_name": "combined_hybrid",
+                "train_npz": "runs/test_run_tmp/train_mock.npz"
             }
         }
         (test_run_dir / "meta.json").write_text(json.dumps(meta))
@@ -133,6 +134,12 @@ def test_eval_generation_prefix_end_to_end(tmp_path):
         from src.codonlm.model_tiny_gpt import TinyGPT
         model = TinyGPT(vocab_size=len(VOCAB), block_size=64, n_layer=1, n_head=1, n_embd=4)
         torch.save(model.state_dict(), test_run_dir / "best.pt")
+        
+        # Write mock train_mock.npz
+        import numpy as np
+        X_train = np.random.randint(4, len(VOCAB), size=(5, 16), dtype=np.int64)
+        Y_train = np.random.randint(4, len(VOCAB), size=(5, 16), dtype=np.int64)
+        np.savez(test_run_dir / "train_mock.npz", X=X_train, Y=Y_train)
         
         # Write mock combined_manifest.json under runs/test_run_tmp/
         # to mock DNA database resolve
@@ -184,6 +191,8 @@ def test_eval_generation_prefix_end_to_end(tmp_path):
             assert "raw_median_gqs" in first_row
             assert "raw_mean_aa_len" in first_row
             assert "raw_terminal_stop_rate" in first_row
+            assert "train_overlap_10" in first_row
+            assert "train_overlap_20" in first_row
             
     finally:
         if test_run_dir.exists():
