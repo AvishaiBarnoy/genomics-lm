@@ -123,6 +123,51 @@ def _extract_hybrid_cds_file(repo: Path, run_dir: Path, manifest_path: Path, max
     return out_path if written else None
 
 
+def _build_train_ngram_set(repo: Path, cfg: dict, n: int, max_tokens: int) -> set[tuple[int, ...]]:
+    from src.codonlm.data_loading import MmapPackedDataset
+    train_npz = cfg.get("train_npz")
+    if not train_npz:
+        return set()
+    
+    paths = train_npz if isinstance(train_npz, list) else [train_npz]
+    resolved_paths = []
+    for p in paths:
+        path = _resolve_repo_path(repo, p)
+        if path and path.exists():
+            resolved_paths.append(path)
+            
+    if not resolved_paths:
+        return set()
+        
+    print(f"[gen-prefix] building training set {n}-gram index from {len(resolved_paths)} paths (cap={max_tokens} tokens)...", flush=True)
+    ngram_set = set()
+    total_tokens_indexed = 0
+    
+    try:
+        ds = MmapPackedDataset(resolved_paths)
+        for i in range(len(ds)):
+            if total_tokens_indexed >= max_tokens:
+                print(f"[gen-prefix] training index cap reached ({total_tokens_indexed} tokens). Stopping.", flush=True)
+                break
+            
+            item = ds[i]
+            if isinstance(item, tuple):
+                seq = item[0].numpy()
+            else:
+                seq = item.numpy()
+                
+            total_tokens_indexed += len(seq)
+            if len(seq) >= n:
+                for start in range(len(seq) - n + 1):
+                    window = tuple(seq[start : start + n])
+                    ngram_set.add(window)
+    except Exception as exc:
+        print(f"[gen-prefix] warning: failed to build train ngram set: {exc}", flush=True)
+        
+    print(f"[gen-prefix] built training index with {len(ngram_set)} unique {n}-grams.", flush=True)
+    return ngram_set
+
+
 def _resolve_cds_dna_path(repo: Path, run_dir: Path, cfg: dict, max_genes: int) -> Path | None:
     # Legacy/main.sh manifest layout.
     manifest = run_dir / "combined_manifest.json"
@@ -361,6 +406,9 @@ class SampleResult:
     raw_had_terminal_stop: bool = False
     raw_hit_hard_cap: bool = False
     raw_valid_end: bool = False
+    # memorization/similarity audit
+    train_overlap_10: float = 0.0
+    train_overlap_20: float = 0.0
 
 
 def main() -> None:
@@ -435,6 +483,24 @@ def main() -> None:
         choices=["none", "len"],
         default="none",
         help="Normalize GQS by reference length (truth length if available, else gen length)",
+    )
+    ap.add_argument(
+        "--no_memorization_audit",
+        action="store_false",
+        dest="memorization_audit",
+        help="Disable training-set memorization and similarity audit.",
+    )
+    ap.add_argument(
+        "--memorization_n_list",
+        type=str,
+        default="10,20",
+        help="Comma-separated list of N-gram window sizes for memorization checks.",
+    )
+    ap.add_argument(
+        "--max_train_audit_tokens",
+        type=int,
+        default=10000000,
+        help="Maximum training tokens to index for memorization audit to prevent RAM bloat.",
     )
     ap.add_argument(
         "--ckpt",
@@ -595,6 +661,13 @@ def main() -> None:
         raise SystemExit(
             "[gen-prefix] could not locate a CDS dna file via combined or hybrid manifest"
         )
+
+    # Build memorization training indices
+    train_ngram_sets = {}
+    if args.memorization_audit:
+        ns = [int(x.strip()) for x in args.memorization_n_list.split(",") if x.strip()]
+        for n in ns:
+            train_ngram_sets[n] = _build_train_ngram_set(repo, cfg, n, args.max_train_audit_tokens)
 
     # Build reference corpus codon unigram from test manifest if present (fallback: from dna file)
     codon_mask = np.array(
@@ -875,6 +948,21 @@ def main() -> None:
                     if "function" in critic_task_dims:
                         critic_function_prob = crit_scores.get("function_top1_conf", 0.0)
 
+                # Calculate train overlap rates for memorization check
+                overlap_10 = 0.0
+                overlap_20 = 0.0
+                full_gen_ids = [stoi[c] for c in codons if c in stoi]
+                if 10 in train_ngram_sets and train_ngram_sets[10]:
+                    s10 = train_ngram_sets[10]
+                    if len(full_gen_ids) >= 10:
+                        matches = sum(1 for idx in range(len(full_gen_ids) - 10 + 1) if tuple(full_gen_ids[idx : idx + 10]) in s10)
+                        overlap_10 = matches / (len(full_gen_ids) - 10 + 1)
+                if 20 in train_ngram_sets and train_ngram_sets[20]:
+                    s20 = train_ngram_sets[20]
+                    if len(full_gen_ids) >= 20:
+                        matches = sum(1 for idx in range(len(full_gen_ids) - 20 + 1) if tuple(full_gen_ids[idx : idx + 20]) in s20)
+                        overlap_20 = matches / (len(full_gen_ids) - 20 + 1)
+
                 rows.append(
                     SampleResult(
                         args.run_id,
@@ -906,6 +994,8 @@ def main() -> None:
                         raw_had_terminal_stop=raw_had_terminal_stop,
                         raw_hit_hard_cap=raw_hit_hard_cap,
                         raw_valid_end=raw_valid_end_val,
+                        train_overlap_10=overlap_10,
+                        train_overlap_20=overlap_20,
                     )
                 )
                 done += 1
@@ -957,6 +1047,10 @@ def main() -> None:
         raw_stop_rate = sum(1 for r in rks if r.raw_had_terminal_stop) / len(rks)
         raw_hard_cap_rate = sum(1 for r in rks if r.raw_hit_hard_cap) / len(rks)
 
+        # Memorization rates aggregation
+        mean_overlap_10 = float(sum(r.train_overlap_10 for r in rks) / len(rks)) if args.memorization_audit else 0.0
+        mean_overlap_20 = float(sum(r.train_overlap_20 for r in rks) / len(rks)) if args.memorization_audit else 0.0
+
         # Optional length-normalized GQS
         mean_gqs_norm = None
         median_gqs_norm = None
@@ -997,6 +1091,8 @@ def main() -> None:
                 "raw_median_aa_len": raw_median_len,
                 "raw_terminal_stop_rate": raw_stop_rate,
                 "raw_hard_cap_rate": raw_hard_cap_rate,
+                "train_overlap_10": mean_overlap_10,
+                "train_overlap_20": mean_overlap_20,
                 **(
                     {"mean_gqs_norm": mean_gqs_norm, "median_gqs_norm": median_gqs_norm}
                     if args.gqs_normalize == "len"
@@ -1033,6 +1129,8 @@ def main() -> None:
             "raw_median_aa_len",
             "raw_terminal_stop_rate",
             "raw_hard_cap_rate",
+            "train_overlap_10",
+            "train_overlap_20",
             "n",
         ]
         extra = []
