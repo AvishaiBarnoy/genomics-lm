@@ -4,11 +4,18 @@
 > [!NOTE]
 > All our models are trained on a single Apple M2 Mac (8 GB unified RAM, MPS GPU). External SOTA models (Evo 1, GenSLM) were trained on hundreds of A100 GPUs. Metrics marked `—` were not evaluated for that run.
 
+### 🏷️ Scientific Validation Legend
+To maintain rigorous scientific standards, metrics are categorized according to their verification basis:
+*   `[Intrinsic]`: Intrinsic mathematical language model performance on validation/test holdout sequences.
+*   `[in silico]`: Regressions or comparisons against computational structural prediction software models (e.g., DNAshapeR structural profiles).
+*   `[Annotation]`: Downstream linear probes evaluated on curated database annotations representing biochemically characterized functions (e.g., EC numbers, CARD classes, essentiality labels).
+*   `[Experimental]`: Direct comparison against in vitro or in vivo biological laboratory measurements (e.g., Deep Mutational Scanning fitness scores).
+
 ---
 
 ## 1. Internal Model Progression
 
-| Run ID | Stage | Architecture | Dataset | Val PPL ↓ | Test PPL ↓ | DNAshape avg R² ↑ | DNAshape avg ρ ↑ | Protein DMS ρ ↑ | EC Acc ↑ | EC AUROC ↑ | AMR Acc ↑ | AMR AUROC ↑ |
+| Run ID | Stage | Architecture | Dataset | Val PPL ↓ [Intrinsic] | Test PPL ↓ [Intrinsic] | DNAshape avg R² ↑ [in silico] | DNAshape avg ρ ↑ [in silico] | Protein DMS ρ ↑ [Experimental] | EC Acc ↑ [Annotation] | EC AUROC ↑ [Annotation] | AMR Acc ↑ [Annotation] | AMR AUROC ↑ [Annotation] |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `2026-06-03_stage2_6L4H_d256_e10` | Stage 2 | 6L·4H·d256 | 3-family, multi-pack | 86.21 | — | — | — | — | — | — | — | — |
 | `2026-06-06_stage2.5_6L4H_d256_e20` | Stage 2.5 | 6L·4H·d256 | 3-family, anchored | 76.67 | — | — | — | −0.105 | — | — | — | — |
@@ -25,7 +32,7 @@
 
 > Random baseline accuracy = **1/7 = 14.3%**
 
-| Classifier Head | Test Accuracy ↑ | Macro-F1 ↑ | AUROC ↑ | vs. Random |
+| Classifier Head | Test Accuracy ↑ [Annotation] | Macro-F1 ↑ [Annotation] | AUROC ↑ [Annotation] | vs. Random |
 | :--- | :--- | :--- | :--- | :--- |
 | Linear SVM (`probe_svm`) | **40.46%** | 25.44% | 0.699 | +26.2 pp |
 | Logistic Regression (`probe_logreg`) | 39.63% | **25.68%** | **0.703** | +25.3 pp |
@@ -41,7 +48,7 @@
 > Source: [CARD](https://card.mcmaster.ca) Comprehensive Antibiotic Resistance Database v3 (CC BY 4.0)
 > Random baseline accuracy = **1/7 = 14.3%** | Dataset: 5,108 genes · 7 antibiotic classes · 4,089 train / 1,019 test
 
-| Classifier Head | Test Accuracy ↑ | Macro-F1 ↑ | AUROC ↑ | vs. Random |
+| Classifier Head | Test Accuracy ↑ [Annotation] | Macro-F1 ↑ [Annotation] | AUROC ↑ [Annotation] | vs. Random |
 | :--- | :--- | :--- | :--- | :--- |
 | Linear SVM (`probe_svm`) | **94.2%** | **65.4%** | 0.932 | **6.6×** |
 | Logistic Regression (`probe_logreg`) | 93.1% | 59.5% | **0.967** | 6.5× |
@@ -56,7 +63,7 @@
 
 ## 3. DNAshape Regression Probe Detail (Stage 2.6 vs. Baseline)
 
-| DNA Shape Feature | Stage 2.6 R² | Stage 2.6 ρ | Stage 2.5 Baseline R² | Stage 2.5 Baseline ρ | Δ R² |
+| DNA Shape Feature | Stage 2.6 R² [in silico] | Stage 2.6 ρ [in silico] | Stage 2.5 Baseline R² [in silico] | Stage 2.5 Baseline ρ [in silico] | Δ R² |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | MGW (Minor Groove Width) | 0.356 | 0.597 | 0.346 | 0.589 | +0.010 |
 | Roll | 0.596 | 0.772 | 0.557 | 0.747 | **+0.039** |
@@ -73,7 +80,7 @@
 
 This task measures how well frozen sequence representations encode properties dictating whether a gene is indispensable (essential) for organism survival. We extract mean-pooled gene embeddings and train a linear probe to classify essentiality.
 
-| Model | Size (Params) | Lambda Phage Essentiality (F1 Score) | *P. aeruginosa* Essentiality (F1 Score) |
+| Model | Size (Params) | Lambda Phage Essentiality (F1 Score) [Annotation] | *P. aeruginosa* Essentiality (F1 Score) [Annotation] |
 | :--- | :---: | :---: | :---: |
 | **Our Model (TinyGPT, Stage 2.6)** | **20.6M** | **0.873** | **0.707** |
 | **Evo 1 (1.8B)** | 1800.0M | 0.810 | **0.720** |
@@ -85,7 +92,7 @@ This task measures how well frozen sequence representations encode properties di
 
 ## 5. External SOTA Comparison (Compute Efficiency Density)
 
-| Model | Architecture | Params | Training Hardware | Pre-train Hours | Protein DMS ρ | Compute Efficiency† |
+| Model | Architecture | Params | Training Hardware | Pre-train Hours | Protein DMS ρ [Experimental] | Compute Efficiency† |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Evo 1** | StripedHyena (Hybrid) | 1.8B | 8× A100 80GB | ~500 | ~0.40+ | 0.000134 |
 | **GenSLM** | GPT-style Transformer | 2.5B | 512× A100 | ~2000+ | ~0.35+ | 0.000013 |
@@ -118,7 +125,7 @@ graph LR
 
 ### EC Level-1 Classification
 
-| Method | Accuracy | Macro-F1 | AUROC | AUROC Δ vs. k-mer |
+| Method | Accuracy [Annotation] | Macro-F1 [Annotation] | AUROC [Annotation] | AUROC Δ vs. k-mer |
 | :--- | :--- | :--- | :--- | :--- |
 | **LM Probe (LogReg)** | 39.6% | **25.7%** | **0.703** | **+0.061** |
 | **LM Probe (SVM)** | **40.5%** | 25.4% | 0.699 | +0.057 |
@@ -127,7 +134,7 @@ graph LR
 
 ### AMR Classification (CARD v3)
 
-| Method | Accuracy | Macro-F1 | AUROC | Macro-F1 Δ vs. k-mer |
+| Method | Accuracy [Annotation] | Macro-F1 [Annotation] | AUROC [Annotation] | Macro-F1 Δ vs. k-mer |
 | :--- | :--- | :--- | :--- | :--- |
 | **LM Probe (LogReg)** | 93.1% | 59.5% | **0.967** | **+0.330** |
 | **LM Probe (SVM)** | **94.2%** | **65.4%** | 0.932 | +0.389 |
