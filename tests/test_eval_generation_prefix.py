@@ -82,3 +82,110 @@ def test_dna_prefix_to_ids_omits_eos_marker():
 
     assert Q.dna_to_ids("ATGAAA", stoi) == [1, 3, 4, 2]
     assert Q.dna_prefix_to_ids("ATGAAA", stoi) == [1, 3, 4]
+
+
+def test_eval_generation_prefix_end_to_end(tmp_path):
+    import json
+    import torch
+    import subprocess
+    import csv
+    import shutil
+    from pathlib import Path
+
+    repo_dir = Path(__file__).resolve().parents[1]
+    test_run_dir = repo_dir / "runs" / "test_run_tmp"
+    
+    if test_run_dir.exists():
+        shutil.rmtree(test_run_dir)
+        
+    try:
+        test_run_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Write mock itos.txt
+        itos_path = test_run_dir / "itos.txt"
+        CODONS = [a + b + c for a in "ACGT" for b in "ACGT" for c in "ACGT"]
+        SPECIALS = ["<PAD>", "<BOS_CDS>", "<EOS_CDS>", "<SEP>"]
+        VOCAB = SPECIALS + CODONS
+        itos_path.write_text("\n".join(VOCAB) + "\n")
+        
+        # Write mock meta.json
+        meta = {
+            "model_spec": {
+                "model_type": "tiny_gpt",
+                "vocab_size": len(VOCAB),
+                "block_size": 64,
+                "n_layer": 1,
+                "n_head": 1,
+                "n_embd": 4
+            },
+            "cfg": {
+                "vocab_size": len(VOCAB),
+                "block_size": 64,
+                "n_layer": 1,
+                "n_head": 1,
+                "n_embd": 4,
+                "dataset_name": "combined_hybrid"
+            }
+        }
+        (test_run_dir / "meta.json").write_text(json.dumps(meta))
+        
+        # Write mock best.pt
+        from src.codonlm.model_tiny_gpt import TinyGPT
+        model = TinyGPT(vocab_size=len(VOCAB), block_size=64, n_layer=1, n_head=1, n_embd=4)
+        torch.save(model.state_dict(), test_run_dir / "best.pt")
+        
+        # Write mock combined_manifest.json under runs/test_run_tmp/
+        # to mock DNA database resolve
+        manifest_data = {
+            "datasets": [
+                {"dna": "runs/test_run_tmp/test_dna.txt"}
+            ]
+        }
+        (test_run_dir / "combined_manifest.json").write_text(json.dumps(manifest_data))
+        
+        # Write mock DNA file in tmp_path
+        dna_path = test_run_dir / "test_dna.txt"
+        dna_path.write_text("ATGAACGCGTAG\nATGGGGCCCTAA\n")
+        
+        # Run prefix generation script
+        cmd = [
+            "python",
+            "-m",
+            "scripts.eval_generation_prefix",
+            "--run_id", "test_run_tmp",
+            "--device", "cpu",
+            "--preset", "quick",
+            "--samples", "2",
+            "--k_list", "1,2",
+            "--max_genes", "2",
+            "--max_new", "8",
+            "--min_aa_len", "2",
+            "--target_aa_len", "4",
+            "--max_aa_len", "10",
+        ]
+        
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        assert res.returncode == 0, f"Script failed: {res.stderr}\nStdout: {res.stdout}"
+        
+        # Check that samples.csv and summary.csv are written
+        samples_csv = test_run_dir / "scores" / "gen_prefix" / "samples.csv"
+        summary_csv = test_run_dir / "scores" / "gen_prefix" / "summary.csv"
+        
+        assert samples_csv.exists()
+        assert summary_csv.exists()
+        
+        # Verify columns in summary.csv
+        with summary_csv.open() as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+            assert len(rows) > 0
+            # Check raw columns are present
+            first_row = rows[0]
+            assert "raw_median_gqs" in first_row
+            assert "raw_mean_aa_len" in first_row
+            assert "raw_terminal_stop_rate" in first_row
+            
+    finally:
+        if test_run_dir.exists():
+            shutil.rmtree(test_run_dir)
+

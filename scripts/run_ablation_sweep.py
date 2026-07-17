@@ -101,18 +101,26 @@ def collect_results():
             row_k3 = df[df["k"] == 3].iloc[0]
             results.append({
                 "Configuration": name,
-                "Mean AA Len (k=3)": f"{row_k3['mean_aa_len']:.2f}",
-                "Median GQS (k=3)": f"{row_k3['median_gqs']:.2f}",
-                "Hard Cap Rate (k=3)": f"{row_k3['hard_cap_rate']:.2f}",
-                "Termination Rate (k=3)": f"{row_k3['termination_rate']:.2f}"
+                "Mean AA Len": f"{row_k3['mean_aa_len']:.2f}",
+                "Raw Mean AA Len": f"{row_k3.get('raw_mean_aa_len', row_k3['mean_aa_len']):.2f}",
+                "Median GQS": f"{row_k3['median_gqs']:.2f}",
+                "Raw Median GQS": f"{row_k3.get('raw_median_gqs', row_k3['median_gqs']):.2f}",
+                "Hard Cap Rate": f"{row_k3['hard_cap_rate']:.2f}",
+                "Raw Hard Cap Rate": f"{row_k3.get('raw_hard_cap_rate', row_k3['hard_cap_rate']):.2f}",
+                "Termination Rate": f"{row_k3['termination_rate']:.2f}",
+                "Raw Termination Rate": f"{row_k3.get('raw_termination_rate', row_k3['termination_rate']):.2f}"
             })
         else:
             results.append({
                 "Configuration": name,
-                "Mean AA Len (k=3)": "N/A",
-                "Median GQS (k=3)": "N/A",
-                "Hard Cap Rate (k=3)": "N/A",
-                "Termination Rate (k=3)": "N/A"
+                "Mean AA Len": "N/A",
+                "Raw Mean AA Len": "N/A",
+                "Median GQS": "N/A",
+                "Raw Median GQS": "N/A",
+                "Hard Cap Rate": "N/A",
+                "Raw Hard Cap Rate": "N/A",
+                "Termination Rate": "N/A",
+                "Raw Termination Rate": "N/A"
             })
             
     # Print as Markdown Table

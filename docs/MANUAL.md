@@ -195,7 +195,7 @@ python -m scripts.infer_score_mutations --run_dir runs/<RUN_ID>/checkpoints --se
     --samples 5 --max_genes 50 --max_new 500 --min_aa_len 300 --target_aa_len 360 \
     --max_aa_len 400 --require_terminal_stop --special_margin 6
 - Constraint: k + target_aa_len + special_margin ≤ block_size (from the model config). Lower target_aa_len or increase block_size if violated.
-- Outputs add AA length stats (mean/median), terminal stop rate, hard‑cap rate, and an extra plot `aa_len_vs_k.png`.
+- Outputs add AA length stats (mean/median), terminal stop rate, hard‑cap rate, an extra plot `aa_len_vs_k.png`, and **parallel unguided raw baseline metrics** (e.g. `raw_median_gqs`, `raw_mean_aa_len`, `raw_terminal_stop_rate`) to `samples.csv` and `summary.csv` when guided/biased decoding is active.
 - Runs trained with the termination auxiliary head can test decoder-side stop
   guidance:
   - python -m scripts.eval_generation_prefix --run_id <RUN_ID> --ckpt best.pt \

@@ -559,5 +559,13 @@ Our local models deliver orders of magnitude higher performance density per para
 *   **Imbalanced Metrics & Bootstrapping (`probes.py`)**: Integrated Balanced Accuracy and Macro-AUPRC alongside 1000-resample bootstrap loops to compute 95% confidence intervals for robust evaluations. Merged in **PR #69**.
 *   **Dynamic Vocabulary Size Resolution (`checkpoints.py`, `_shared.py`)**: Updated checkpoint model loaders to dynamically extract vocabulary size from saved state weight embedding dimensions, preventing config mismatches. Merged in **PR #70**.
 
+## 25. Stage 25: Guided vs. Raw Generation Decoupling
+**Goal:** Decouple autoregressive generation evaluations from guided search policies (EBM/ProteinCritic/biases) to track base causal model performance.
+
+*   **Raw Baseline Parallel Generation (`eval_generation_prefix.py`)**: Modified the evaluation loop to run a parallel unguided, unbiased raw baseline generation for every prefix evaluated under guidance.
+*   **Metric Isolation (`eval_generation_prefix.py`)**: Saves raw unguided metrics (`raw_gqs`, `raw_gen_len`, `raw_had_terminal_stop`, `raw_hit_hard_cap`, `raw_valid_end`) separately in output CSVs.
+*   **Ablation Sweep Matrix (`run_ablation_sweep.py`)**: Updated results reporting to display raw baseline metrics side-by-side with guided metrics.
+*   **Verification**: Registered end-to-end integration tests in `tests/test_eval_generation_prefix.py`. Merged in **PR #71**.
+
 ---
 *End of Log*
