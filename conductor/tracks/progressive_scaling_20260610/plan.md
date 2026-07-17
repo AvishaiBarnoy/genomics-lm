@@ -10,12 +10,16 @@ This plan details the implementation milestones to execute progressive transfer 
 - **Completed:** 2026-07-10
 - **Primary file:** `scripts/expand_model.py`
 
+> Stage 2.6 PPL, regression-probe, EC, and AMR values below are legacy-protocol
+> historical records. They are not controlled evidence for model selection; see
+> issue #92.
+
 ## Status Update (2026-06-16)
 We have successfully implemented and executed the model scaling ladder for the **`d_embd: 384`** series:
 - **`4L2H_d384`** (Base model trained from scratch)
 - **`6L4H_d384`** (Layer-transfer from `4L2H`, trained successfully)
 - **`10L8H_d384`** (Layer-transfer from `6L4H`, trained successfully)
-- **Stage 2.6 `10L8H_d384` on the expanded 15-genome corpus** became the current best CodonLM (`2026-06-15_stage2.6_10L8H_d384_e10`).
+- **Stage 2.6 `10L8H_d384` on the expanded 15-genome corpus** became the historical mainline checkpoint (`2026-06-15_stage2.6_10L8H_d384_e10`).
 
 Because `d_embd` was kept constant at 384, the linear projections in attention heads had identical tensor shapes `(384, 384)`. This bypassed the need for tensor resizing, allowing PyTorch's native `load_state_dict(..., strict=False)` to transfer weights seamlessly (leaving only the new layers initialized randomly).
 

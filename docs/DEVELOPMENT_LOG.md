@@ -3,6 +3,13 @@
 
 This document captures the end-to-end journey of Genomics-LM. It details how we translated biological intuition into data engineering, how we overcame the limitations of local hardware (Apple M2, 8GB RAM), and how the model evolved from a naive text-predictor into a physically-aware genomic architect.
 
+> **Historical-results notice:** Stage 2 through Stage 2.6 metrics and downstream
+> probe interpretations in this narrative use a legacy protocol. They predate
+> mandatory global genome-aware splitting and corrected causal embedding
+> extraction. Values are retained to document project history, not as controlled
+> evidence. Corrected revalidation is tracked in
+> [issue #92](https://github.com/AvishaiBarnoy/genomics-lm/issues/92).
+
 ---
 
 ## 1. Stage 1: Toy Scale (The Grammar School)
@@ -28,7 +35,7 @@ We built `scripts/analyze_dialects.py` and discovered the model successfully lea
 **The Physics Breakthrough (Structural Probing):**
 We hypothesized that the model was implicitly learning 3D DNA physics as a shortcut to predicting the next codon. We built `scripts/probe_structural_awareness.py` using DNAshapeR heuristics.
 *   **Result:** The frozen hidden states of the 6-layer model showed strong correlations (e.g., 0.61 EP, 0.54 Roll) with physical properties like Minor Groove Width and Electrostatic Potential.
-*   **Significance:** The AI discovered *on its own* that A-tracts act as "structural rebar" and GC-repeats act as "flexible hinges." It proved that a 1D language model can encode 3D stereochemistry.
+*   **Historical interpretation:** Hidden states correlated with computational DNA-shape targets under a position-level protocol. Grouped controls are required before attributing this to learned 3D stereochemistry.
 
 ---
 
@@ -101,14 +108,14 @@ We designed a domain-aligned benchmarking framework to evaluate our models exclu
 2.  **Gene Essentiality:** Downstream classification using sequence embeddings + linear probes. Stratified 5-fold cross-validation yielded F1 scores of **87.3%** on Lambda Phage essentiality and **70.7%** on *Pseudomonas aeruginosa* essentiality.
 3.  **SOTA Report & Compute Efficiency Density:** Contrasts our local models against published benchmarks of Evo 1 and GenSLM.
 
-**Compute Efficiency Breakthrough:**
-While absolute scores of Evo 1 (1.8B) are higher due to its massive parameter count, computing the **Compute Efficiency Density Ratio** revealed our model's huge efficiency advantage:
+**Historical Compute-Footprint Calculation:**
+The project calculated a **Compute Efficiency Density Ratio** from results produced on different tasks and datasets:
 $$\text{Efficiency Density} = \frac{\text{F1 Score}}{\text{Params (M)} \times \text{Pre-training GPU Hours}} \times 1000$$
 *   **Our Model (TinyGPT):** **23.12** (Lambda Phage) / **18.72** (Pseudomonas)
 *   **Evo 1 (1.8B):** **0.000134** (Lambda Phage) / **0.000119** (Pseudomonas)
 *   **GenSLM (2.5B):** **0.000013** (Lambda Phage) / **0.000012** (Pseudomonas)
 
-Our local models deliver orders of magnitude higher performance density per parameter-hour on consumer-grade hardware compared to massive A100-supercomputer-trained foundations.
+These ratios are descriptive arithmetic only. Because the numerator metrics and evaluation protocols differ, they do not establish a model-efficiency advantage over Evo 1 or GenSLM.
 
 ---
 
@@ -133,13 +140,13 @@ Our local models deliver orders of magnitude higher performance density per para
 *   **The Model Scale-up (`d384`)**:
     We scaled the model embedding dimension from $D=256$ to $D=384$ and expanded the architecture to 10 layers and 8 heads (`10L8H_d384_transfer`). This added network capacity allowed the model to represent both the structural grammar (stop-codon placement, gene length boundaries) and the stereochemical shapes of DNA.
 *   **Industry Context & The Entropy Trade-Off (Codon Tokenization)**:
-    While massive foundation models like Evo (1.8B) or DNABERT-2 (117M) utilize single-nucleotide or Byte Pair Encoding (BPE) tokenization, they suffer from distorted coordinate step alignment when predicting local physical parameters. Industry-level models built specifically for coding DNA and protein expression optimization—such as **CodonTransformer** and InstaDeep's **Codon-NT**—also utilize codon-level (3-mer non-overlapping) tokenization. This uniform spacing ensures a strict 1-to-1 mapping to physical double-helix coordinates, allowing our TinyGPT model to achieve state-of-the-art biophysical probing accuracy on par with models $100\times$ its size.
+    Foundation models such as Evo and DNABERT-2 use nucleotide or subword tokenization, while coding-DNA models such as **CodonTransformer** and **Codon-NT** use codon-level tokenization. Codon tokens provide convenient coordinate alignment, but the legacy probe protocol does not support a state-of-the-art comparison.
     *   **The Entropy/Perplexity Split**: CodonTransformer operates as a *conditional* model. By conditioning on the target amino acid sequence, it restricts the prediction search space at each position to synonymous codons (representing the degeneracy of the genetic code: 1-out-of-2 to 1-out-of-6 options). This conditional search yields a very low perplexity ($1.2 - 1.8$) and guarantees translation fidelity, but *loses* the ability for de novo gene generation and regulatory (non-coding promoter/operon) sequence modeling.
     *   **Our Unconditional Advantage**: Our CodonLM is a causal "biological writer." By predicting the next codon unconditionally out of all 64 options, it has a higher perplexity ($\approx 84.0$) but *gains* the capacity to generate novel gene structures from scratch and implicitly encodes DNA stereochemistry and regulatory spacing in its hidden states.
 *   **The PCA-1 vs. Supervised Regression Probing Story**:
     *   **The Problem**: After training under the dynamic gene-level padding setup, the unsupervised $PCA_1$ structural awareness score dropped significantly (from $\approx 0.60$ to $0.1677$). The model's primary direction of variance ($PCA_1$) was hijacked by the strong grammatical signals of gene boundaries and stop codon positioning.
     *   **The Solution**: We implemented supervised **Ridge Regression Probes** (with 5-fold cross-validation) to scan all 384 hidden dimensions.
-    *   **The Finding**: The regression probe successfully decoded physical DNAshape features (MGW, EP, Roll, ProT, HelT) with high accuracy ($R^2 \approx 0.50$, Pearson $\rho \approx 0.70$), proving that the physical representations were not lost but simply re-organized into secondary orthogonal dimensions. Both the 6L4H baseline and the 10L8H model showed strong, identical biophysical decoding capability (97% agreement).
+    *   **Historical observation**: The regression probe decoded computational DNAshape features ($R^2 \approx 0.50$, Pearson $\rho \approx 0.70$). Because positions were not grouped by gene/genome and local-sequence controls were absent, this does not establish how much signal came from pretrained representations.
 *   **Taxonomic Expansion**:
     Downloaded a fully diverse 15-genome bacterial corpus spanning multiple phyla and balanced GC content (from 30% to 75%), extracting 44,953 coding sequences for scaled training.
 
@@ -196,7 +203,7 @@ Our local models deliver orders of magnitude higher performance density per para
     *   **MLP 2×128 (`mlp`):** Acc = 34.01%, Macro-F1 = 7.25%, AUROC = 0.528
     *   **Random Baseline:** 14.3% (1/7 classes)
 
-    **Key Finding:** Linear probes substantially outperform the non-linear MLP (2.8× random vs. 2.4× random), confirming that EC functional classes are **linearly separable** in the pre-trained embedding space. This is a hallmark of disentangled biological representations and validates the unsupervised pre-training strategy.
+    **Legacy-protocol observation:** Linear probes outperformed the tested MLP and random baselines. The embeddings predate the causal extraction fix, so this result does not establish disentangled representations or validate the pretraining strategy.
 
 *   **Gene Essentiality Officially Retired:**
     Gene essentiality (Lambda Phage, *Pseudomonas aeruginosa*) was formally removed from the core evaluation suite. MCC = 0.0 across all probes confirms it is a multi-gene network-level property unreachable by single-gene linear projections.
@@ -219,8 +226,8 @@ Our local models deliver orders of magnitude higher performance density per para
     3. **Lazy/memmap dataset** to eliminate host-memory preloading overhead.
     Updated [`ROADMAP.md`](file:///Users/User/github/genomics-lm/ROADMAP.md) and [`conductor/tracks.md`](file:///Users/User/github/genomics-lm/conductor/tracks.md) to reflect the new track.
 
-*   **Conference Readiness Status:**
-    The project has reached a clear "first-draft conference" state with: a physically-aware pre-trained model (DNAshape R²=0.57), confirmed functional linear separability (EC AUROC=0.703), and a systematic plan for UMAP visualizations, attention heatmaps, and generative design evaluation (ProteinCritic + ESMFold).
+*   **Historical Conference Draft Status:**
+    The project assembled a first-draft artifact set around legacy DNAshape and EC results. Those values now require grouped controls, corrected embeddings, and leakage-controlled revalidation before scientific use.
 
 ---
 
@@ -240,7 +247,7 @@ Our local models deliver orders of magnitude higher performance density per para
     *   **Logistic Regression (`probe_logreg`):** Acc = 93.1%, Macro-F1 = 59.5%, AUROC = **0.967** ← Best AUROC
     *   **Random Baseline:** 14.3% (1/7 classes)
 
-    **Key Finding:** AMR resistance class is **dramatically more linearly separable than EC function** (AUROC 0.967 vs. 0.703, 6.6× vs. 2.8× random). This is biologically expected — AMR gene families (β-lactamases, aminoglycoside-modifying enzymes) share high sequence identity within class. The result confirms that CodonLM embeddings encode **resistance-relevant sequence motifs** from next-codon prediction alone, a clinically significant finding for conference presentation.
+    **Legacy-protocol observation:** AMR labels were easier to separate than EC labels in the original split. Conserved family identity, the random split, and pre-correction embeddings are confounders; the result does not isolate resistance-relevant representations learned during pretraining.
 
 *   **Conference Figure Generation:**
     Wrote two reusable conference figure scripts:
@@ -263,7 +270,7 @@ Our local models deliver orders of magnitude higher performance density per para
     *   **AMR family** (AUROC 0.967): Highest — mechanistically conserved enzyme families with strong seq identity
     *   **EC class** (AUROC 0.703): Moderate — broader biochemical function, more diverse seq space
     *   **Gene Essentiality** (MCC 0.0): Lowest — network-level systemic property, not sequence-encodable
-    This gradient is itself a publishable result about the limits and strengths of sequence-level genomic LMs.
+    This historical gradient is a hypothesis for controlled re-evaluation, not a validated comparison of representation content.
 
 ---
 

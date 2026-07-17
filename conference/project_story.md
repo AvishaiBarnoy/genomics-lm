@@ -1,6 +1,12 @@
-# The Genomics-LM Story: From Toy Scale to SOTA Compute-Efficiency Density
+# The Genomics-LM Story: Historical Development Record
 
 This document outlines the end-to-end development journey of the **Genomics-LM** project. It details how we translated biological intuition into data engineering, overcame local hardware constraints (Apple M2, 8GB RAM), and benchmarked local models against massive supercomputer-trained foundations.
+
+> **Validation status: Legacy/leaky.** Stage 2 through Stage 2.6 metrics in this
+> narrative predate mandatory global genome-aware splitting and corrected causal
+> embedding extraction. They are historical observations, not controlled model
+> comparisons. Evidence sources include intrinsic metrics, computational proxies,
+> annotations, and experimental measurements as described per section.
 
 ---
 
@@ -33,7 +39,7 @@ graph TD
 *   **Dataset:** Expanded to 9 diverse bacterial genomes, introducing High-GC and Gram-positive taxa.
 *   **Breakthroughs:**
     *   *Bacterial Dialects:* Validated that the model learned taxon-specific **Codon Usage Bias** (e.g., High-GC bacteria using specific Alanine codons 7x more than Gram-positives).
-    *   *Structural DNA Probing:* Hidden states were mapped using [DNAshapeR](https://bioconductor.org/packages/release/bioc/html/DNAshapeR.html) heuristics to rolling, electrostatic potential (EP), and minor groove width (MGW). High correlations (e.g., $0.61$ EP, $0.54$ Roll) proved the LM implicitly decoded 3D stereochemistry without explicit structural supervision.
+    *   *Structural DNA Probing:* Hidden states correlated with computational [DNAshapeR](https://bioconductor.org/packages/release/bioc/html/DNAshapeR.html) targets under a position-level protocol. Grouped and local-sequence controls are needed before attributing the signal to pretrained representations.
 
 ### 3. Stage 2.5: Genomic Architect (Resolving the Termination Problem)
 *   **Goal:** Overcome the 0.0% termination rate by teaching the model gene boundary transitions.
@@ -61,7 +67,8 @@ graph TD
 
 ## 2. Key Technical Metrics & Efficiency Density
 
-While absolute downstream scores of models like Evo 1 (1.8B) are higher due to parameter scale, the **Compute Efficiency Density Ratio** demonstrates the optimization density of the local model:
+The historical report calculated a **Compute Efficiency Density Ratio** from
+non-equivalent downstream tasks and datasets:
 
 $$\text{Efficiency Density} = \frac{\text{F1 Score}}{\text{Params (M)} \times \text{Pre-training GPU Hours}} \times 1000$$
 
@@ -71,8 +78,9 @@ $$\text{Efficiency Density} = \frac{\text{F1 Score}}{\text{Params (M)} \times \t
 | **Evo 1 (1.8B)** | 1800.00M | 3360.0 | 0.8100 | 0.000134 | 0.000119 |
 | **GenSLM (2.5B)** | 2500.00M | 20480.0 | 0.6800 | 0.000013 | 0.000012 |
 
-> [!TIP]
-> **Key Insight:** Local models deliver orders of magnitude higher efficiency density per parameter-hour on consumer-grade hardware compared to massive A100-supercomputer-trained foundations.
+> [!WARNING]
+> The numerator metrics use different datasets and protocols. These ratios are
+> descriptive arithmetic and do not establish relative model efficiency.
 
 ---
 

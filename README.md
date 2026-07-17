@@ -1,9 +1,13 @@
 # Genomics‑LM
 
-A compact codon‑level causal GPT trained on diverse bacterial genomes, with a full downstream evaluation and interpretability pipeline.
+A compact codon‑level causal GPT for bacterial genomes, with downstream
+evaluation and interpretability tooling.
 
-**Stage 2.6 (current best):** 10L·8H·d384 · 20.6M params · 15 genomes · Apple M2 8GB
-**Test PPL: 68.5** | **DNAshape avg R²: 0.569** | **EC AUROC: 0.703** | **AMR AUROC: 0.967**
+> **Scientific status:** Published Stage 2.6 metrics use a legacy protocol that
+> predates mandatory global genome-aware splitting and corrected causal embedding
+> extraction. They are retained for historical auditability, not presented as
+> current validated results. Leakage-controlled revalidation is tracked in
+> [issue #92](https://github.com/AvishaiBarnoy/genomics-lm/issues/92).
 
 ---
 
@@ -63,4 +67,4 @@ Outputs land in `conference/figures/`. All assets and the SOTA table are in [`co
 - [docs/MANUAL.md](docs/MANUAL.md) — full configuration, training, and analysis reference
 - [docs/DEVELOPMENT_LOG.md](docs/DEVELOPMENT_LOG.md) — narrative project history
 - [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) — high-level changelog
-- [conference/sota_benchmark_table.md](conference/sota_benchmark_table.md) — full benchmark table with k-mer baseline comparison
+- [conference/sota_benchmark_table.md](conference/sota_benchmark_table.md) — historical benchmark table with protocol-status labels
