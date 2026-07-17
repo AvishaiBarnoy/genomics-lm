@@ -156,6 +156,52 @@ uses subprocesses for each candidate so OOM/allocation failures can be recorded
 without aborting the whole benchmark. With `force_gpu: true`, it fails fast if
 the run would fall back to CPU instead of MPS/CUDA.
 
+Candidates are ranked by non-PAD tokens per second. Reports also retain raw
+processed-token and sequence throughput, and include padding fraction,
+microbatch timing, optimizer-step timing, and backend memory peaks where the
+installed PyTorch backend exposes them.
+
+For the broader Stage 2.6 checkpointing, batch, GQA, and precision matrix, run:
+
+```bash
+caffeinate -i python -m scripts.benchmark_training_speed \
+  --matrix configs/stage2.6_mps_benchmark.yaml \
+  --out runs/stage2.6_mps_benchmark
+```
+
+Each variant runs in an isolated subprocess. The matrix is throughput-only and
+does not rewrite the production Stage 2.6 configuration.
+
+Before training a similar new dataset, use the same matrix as a short smoke
+test. CLI values override the matrix's default 20 warmup and 100 measured
+microbatches:
+
+```bash
+caffeinate -i python -m scripts.benchmark_training_speed \
+  --matrix configs/stage2.6_mps_benchmark.yaml \
+  --warmup 5 \
+  --steps 20 \
+  --out runs/stage2.6_mps_smoke
+```
+
+`--warmup` and `--steps` count microbatches, not optimizer updates. Both commands
+write `results.csv` and `results.json` under the requested output directory.
+Compare `non_pad_tokens_per_sec` first, then confirm `padding_fraction`,
+`peak_driver_bytes`, and candidate status before selecting a setting.
+
+For a single existing training configuration rather than a variant matrix:
+
+```bash
+python -m scripts.benchmark_training_speed \
+  --config configs/my_training_config.yaml \
+  --warmup 5 \
+  --steps 20 \
+  --out runs/my_training_smoke
+```
+
+For a materially different dataset or model, copy the Stage 2.6 matrix manifest,
+point `base_config` at the new training YAML, and adjust its named overrides.
+
 When resuming mid-epoch, do not force a new sweep unless needed. If `--force`
 selects a different `batch_size` or `grad_accum_steps` than the checkpoint used,
 the trainer restores model/optimizer state but ignores the old mid-epoch skip
@@ -265,7 +311,11 @@ You can convert any `.npz` dataset into uncompressed `.npy` arrays, enabling **t
 python -m scripts.convert_npz_to_npy path/to/dataset.npz
 ```
 
-This generates `_X.npy`, `_Y.npy` (and/or `_lengths.npy`) files in the same directory. The data loaders in `genomics-lm` will automatically detect these `.npy` arrays and load them in memory-mapped mode without changing any YAML training configurations.
+This generates `_X.npy`, `_Y.npy` (and/or `_lengths.npy`) files in the same
+directory. Set `use_mmap: true` in the training YAML to select
+`MmapPackedDataset`; it will report `storage_mode=npy_mmap` when all required
+sidecars are present. If they are absent, it reports `storage_mode=npz_memory`
+and warns that compressed NPZ members are being loaded into memory.
 
 # Compare multiple runs and produce a table + plots
 python -m scripts.compare_runs

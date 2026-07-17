@@ -18,6 +18,8 @@ def test_dynamic_dataset_loading_and_collate(tmp_path):
     # Load dataset
     ds = PackedDataset(npz_path)
     assert ds.is_dynamic is True
+    assert ds.storage_mode == "npz_memory"
+    assert ds._flat_X[0].dtype == np.int32
     assert len(ds) == 2
     assert torch.equal(ds[0], torch.tensor([1, 10, 20, 2], dtype=torch.long))
     assert torch.equal(ds[1], torch.tensor([1, 15, 25, 35, 45, 2], dtype=torch.long))
