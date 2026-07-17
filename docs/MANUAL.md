@@ -21,7 +21,7 @@ A compact codon‑level GPT‑style LM with a reproducible training + analysis p
 
 - TinyGPT model (src/codonlm/model_tiny_gpt.py) with optional grad checkpointing and segment‑masked attention for <SEP>.
 - Trainer with AMP, cosine warmup, early stopping, CSV curves (src/codonlm/train_codon_lm.py).
-- Data prep that extracts CDS, tokenizes codons, builds NPZ datasets, and checks integrity (scripts/pipeline_prepare.py).
+- Global genome-aware data preparation that extracts CDS, resolves accessions, splits groups before packing, and records provenance (`scripts/build_global_manifest.py`).
 - Analysis scripts for frequencies, embeddings, attention, next‑token probes, saliency, and linear probes (scripts/*).
 
 ### Compare Runs

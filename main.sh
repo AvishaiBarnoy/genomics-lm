@@ -11,7 +11,7 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<USAGE
-Usage: $0 [-c|--config PATH] [-r|--resume CHECKPOINT] [--dataset NAME,GBFF[,MIN_LEN]] [--force] [--with-artifacts] [--with-motifs] [--preprocess-only] [--dry-run]
+Usage: $0 [-c|--config PATH] [-r|--resume CHECKPOINT] [--dataset NAME,GBFF[,MIN_LEN]] [--force] [--allow-sequence-split] [--with-artifacts] [--with-motifs] [--preprocess-only] [--dry-run]
 USAGE
   exit 1
 }
@@ -28,6 +28,7 @@ DEFAULT_CONF="configs/tiny_mps.yaml"
 CONF="$DEFAULT_CONF"
 RESUME=""
 FORCE=0
+ALLOW_SEQUENCE_SPLIT=0
 RUN_ID_WAS_SET=0
 if [[ -n "${RUN_ID:-}" ]]; then
   RUN_ID_WAS_SET=1
@@ -51,6 +52,8 @@ while [[ $# -gt 0 ]]; do
       EXTRA_DATASETS+=("$2"); shift 2 ;;
     --force)
       FORCE=1; shift ;;
+    --allow-sequence-split)
+      ALLOW_SEQUENCE_SPLIT=1; shift ;;
     --with-artifacts)
       WITH_ARTIFACTS=1; shift ;;
     --with-motifs)
@@ -207,25 +210,26 @@ print(cfg.get('test_npz') or data.get('test_npz', ''))
     PRIMARY_DNA=""
     COMBINED_MANIFEST=""
   else
-    # Prepare datasets via Python helper
+    # Prepare all CodonLM records globally before assigning grouped splits.
     PREP_ARGS=(--config "$CONF" --run-id "$RUN_ID" --run-dir "$RUN_DIR")
     if [[ $FORCE -eq 1 ]]; then PREP_ARGS+=(--force); fi
+    if [[ $ALLOW_SEQUENCE_SPLIT -eq 1 ]]; then PREP_ARGS+=(--allow-sequence-split); fi
     if [[ ${#EXTRA_DATASETS[@]} -gt 0 ]]; then
       for spec in "${EXTRA_DATASETS[@]}"; do PREP_ARGS+=(--extra-dataset "$spec"); done
     fi
     if [[ $DRY_RUN -eq 1 ]]; then
-      echo "[dry-run] Planned dataset preparation: python -m scripts.pipeline_prepare ${PREP_ARGS[*]}"
-      TRAIN_NPZ="data/processed/train_bs512.npz"
-      VAL_NPZ="data/processed/val_bs512.npz"
-      TEST_NPZ="data/processed/test_bs512.npz"
-      PRIMARY_DNA="data/processed/primary.fasta"
-      COMBINED_MANIFEST="data/processed/manifest.json"
+      echo "[dry-run] Planned dataset preparation: python -m scripts.build_global_manifest ${PREP_ARGS[*]}"
+      TRAIN_NPZ="data/processed/global/${RUN_ID}/train_bs512.npz"
+      VAL_NPZ="data/processed/global/${RUN_ID}/val_bs512.npz"
+      TEST_NPZ="data/processed/global/${RUN_ID}/test_bs512.npz"
+      PRIMARY_DNA="data/processed/global/${RUN_ID}/cds_dna.txt"
+      COMBINED_MANIFEST="data/processed/global/${RUN_ID}/manifest.json"
     else
-      python -m scripts.pipeline_prepare "${PREP_ARGS[@]}" 2>&1 | tee -a "$LOG"
+      python -m scripts.build_global_manifest "${PREP_ARGS[@]}" 2>&1 | tee -a "$LOG"
 
       PREP_JSON="${RUN_DIR}/pipeline_prepare.json"
       if [[ ! -f "$PREP_JSON" ]]; then
-        echo "[error] pipeline_prepare did not produce ${PREP_JSON}" | tee -a "$LOG"
+        echo "[error] build_global_manifest did not produce ${PREP_JSON}" | tee -a "$LOG"
         exit 1
       fi
 
