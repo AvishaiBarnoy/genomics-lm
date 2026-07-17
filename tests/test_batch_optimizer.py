@@ -4,6 +4,9 @@ import argparse
 import json
 from pathlib import Path
 
+import numpy as np
+import pytest
+import torch
 import yaml
 
 from scripts.optimize_train_batching import (
@@ -17,7 +20,9 @@ from scripts.optimize_train_batching import (
     select_best_result,
     train_command_for,
     write_report,
+    run_candidate_benchmark,
 )
+from scripts.benchmark_training_speed import load_matrix
 
 
 def test_parse_candidates_default_and_explicit():
@@ -103,6 +108,94 @@ def test_select_best_ignores_failed_and_tiebreaks():
     assert selected is not None
     assert selected["batch_size"] == 4
     assert selected["grad_accum_steps"] == 16
+
+
+def test_select_best_prefers_non_pad_token_throughput():
+    results = [
+        {
+            "status": "ok",
+            "batch_size": 8,
+            "grad_accum_steps": 4,
+            "seq_per_sec": 20.0,
+            "tokens_per_sec": 200.0,
+            "non_pad_tokens_per_sec": 80.0,
+        },
+        {
+            "status": "ok",
+            "batch_size": 4,
+            "grad_accum_steps": 8,
+            "seq_per_sec": 10.0,
+            "tokens_per_sec": 150.0,
+            "non_pad_tokens_per_sec": 100.0,
+        },
+    ]
+
+    assert select_best_result(results)["batch_size"] == 4
+
+
+def test_candidate_benchmark_counts_non_pad_tokens_and_partial_step(tmp_path):
+    path = tmp_path / "dynamic.npz"
+    seqs = [np.array([1, 4, 5, 2], dtype=np.int32), np.array([1, 6, 7, 8, 9, 2], dtype=np.int32)]
+    np.savez_compressed(
+        path,
+        X=np.concatenate(seqs),
+        lengths=np.array([len(seq) for seq in seqs], dtype=np.int32),
+    )
+    cfg = {
+        "vocab_size": 16,
+        "block_size": 8,
+        "n_layer": 1,
+        "n_head": 1,
+        "n_embd": 8,
+        "dropout": 0.0,
+        "batch_size": 2,
+        "grad_accum_steps": 2,
+        "lr": 1e-3,
+        "weight_decay": 0.0,
+        "train_npz": str(path),
+        "amp": False,
+        "use_checkpoint": False,
+    }
+
+    result = run_candidate_benchmark(
+        cfg,
+        batch_size=2,
+        grad_accum_steps=2,
+        warmup_steps=1,
+        measure_steps=3,
+        force_gpu=False,
+        device_override=torch.device("cpu"),
+    )
+
+    assert result["status"] == "ok"
+    assert result["optimizer_steps"] == 2
+    assert result["processed_tokens"] == 30
+    assert result["non_pad_tokens"] == 24
+    assert result["padding_fraction"] == pytest.approx(0.2)
+
+
+def test_benchmark_matrix_applies_base_and_variant_overrides(tmp_path, monkeypatch):
+    base = tmp_path / "base.yaml"
+    base.write_text("batch_size: 4\ntransfer_from: old.pt\n")
+    matrix = tmp_path / "matrix.yaml"
+    matrix.write_text(
+        "base_config: base.yaml\n"
+        "base_overrides:\n"
+        "  transfer_from: null\n"
+        "variants:\n"
+        "  - name: checkpoint_off\n"
+        "    overrides:\n"
+        "      use_checkpoint: false\n"
+    )
+    monkeypatch.chdir(tmp_path)
+
+    variants, warmup, steps = load_matrix(matrix)
+
+    assert warmup == 20
+    assert steps == 100
+    assert variants == [
+        ("checkpoint_off", {"batch_size": 4, "transfer_from": None, "use_checkpoint": False})
+    ]
 
 
 def test_write_report_outputs_files(tmp_path: Path):

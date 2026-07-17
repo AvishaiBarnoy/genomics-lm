@@ -21,6 +21,7 @@ import yaml
 from src.codonlm.data_loading import build_codon_lm_dataloaders, build_codon_lm_datasets
 from src.codonlm.model_tiny_gpt import TinyGPT
 from src.codonlm.training.checkpoint import _load_transfer_state_dict, _read_itos
+from src.codonlm.training.loop import _average_accumulated_gradients
 from src.codonlm.training.objectives import (
     termination_aux_loss,
     termination_distance_bucket_labels,
@@ -178,6 +179,14 @@ def build_model(cfg: dict[str, Any], device: torch.device) -> TinyGPT:
         use_sdpa=bool(cfg.get("use_sdpa", False)),
         termination_aux=bool(cfg.get("termination_loss_enabled", cfg.get("termination_aux", False))),
         termination_n_classes=int(cfg.get("termination_n_classes", 5)),
+        multi_offset_targets=(
+            [int(value) for value in cfg.get("multi_offset_targets", [])]
+            if bool(cfg.get("multi_offset_loss_enabled", False))
+            else None
+        ),
+        use_swiglu=bool(cfg.get("use_swiglu", False)),
+        use_rope=bool(cfg.get("use_rope", False)),
+        use_shape_guidance=bool(cfg.get("use_shape_guidance", False)),
     ).to(device)
     transfer_from = cfg.get("transfer_from")
     if transfer_from:
@@ -190,6 +199,9 @@ def build_model(cfg: dict[str, Any], device: torch.device) -> TinyGPT:
             source_itos=_read_itos(source_cfg.get("itos_path"), Path.cwd()),
             target_itos=_read_itos(cfg.get("itos_path"), Path.cwd()),
         )
+    if bool(cfg.get("freeze_backbone", False)):
+        for name, param in model.named_parameters():
+            param.requires_grad = "offset_projs" in name or "termination_head" in name
     model.train(True)
     return model
 
@@ -202,12 +214,15 @@ def run_candidate_benchmark(
     warmup_steps: int,
     measure_steps: int,
     force_gpu: bool,
+    device_override: torch.device | None = None,
 ) -> dict[str, Any]:
     cfg = dict(cfg)
     cfg["batch_size"] = int(batch_size)
     cfg["grad_accum_steps"] = int(grad_accum_steps)
-    device = select_device(force_gpu)
-    torch.manual_seed(int(cfg.get("seed", 1337)))
+    device = device_override or select_device(force_gpu)
+    seed = int(cfg.get("seed", 1337))
+    torch.manual_seed(seed)
+    cfg.setdefault("dataloader_seed", seed)
 
     train_paths = _path_list(cfg.get("train_npz", cfg.get("train_paths")))
     if not train_paths:
@@ -228,49 +243,104 @@ def run_candidate_benchmark(
     stop_ids = tuple(int(x) for x in cfg.get("termination_stop_ids", [2]))
     bucket_edges = tuple(int(x) for x in cfg.get("termination_bucket_edges", [0, 3, 10, 30]))
 
-    total_sequences = 0
-    total_tokens = 0
-    times: list[float] = []
-    total_steps = int(warmup_steps) + int(measure_steps)
+    amp = bool(cfg.get("amp", True)) and device.type == "mps"
+    mps_autocast_ok = True
+    parameters = [param for param in model.parameters() if param.requires_grad]
 
-    for idx in range(total_steps):
-        try:
-            xb, yb = next(loader_iter)
-        except StopIteration:
-            loader_iter = iter(loader)
-            xb, yb = next(loader_iter)
-        xb = xb.to(device)
-        yb = yb.to(device)
-
-        t0 = time.perf_counter()
-        if termination_enabled:
-            _, next_loss, aux = model(xb, yb, return_aux=True)
-            term_labels = termination_distance_bucket_labels(yb, stop_ids=stop_ids, bucket_edges=bucket_edges)
-            term_loss = termination_aux_loss(aux["termination_logits"], term_labels)
-            loss = next_loss + (termination_weight * term_loss)
-        else:
-            _, loss = model(xb, yb)
-        (loss / max(1, int(grad_accum_steps))).backward()
-        if (idx + 1) % max(1, int(grad_accum_steps)) == 0:
-            optimizer.step()
-            optimizer.zero_grad(set_to_none=True)
+    def synchronize() -> None:
         if device.type == "mps":
             torch.mps.synchronize()
         elif device.type == "cuda":
             torch.cuda.synchronize()
-        t1 = time.perf_counter()
 
-        if idx >= int(warmup_steps):
-            elapsed = t1 - t0
-            times.append(elapsed)
-            total_sequences += int(xb.shape[0])
-            total_tokens += int(xb.numel())
+    def forward_loss(xb: torch.Tensor, yb: torch.Tensor) -> torch.Tensor:
+        if termination_enabled:
+            _, next_loss, aux = model(xb, yb, return_aux=True)
+            term_labels = termination_distance_bucket_labels(yb, stop_ids=stop_ids, bucket_edges=bucket_edges)
+            term_loss = termination_aux_loss(aux["termination_logits"], term_labels)
+            return next_loss + (termination_weight * term_loss)
+        _, loss = model(xb, yb)
+        return loss
+
+    def run_phase(microbatches: int, *, measure: bool) -> dict[str, Any]:
+        nonlocal loader_iter, mps_autocast_ok
+        stats: dict[str, Any] = {
+            "sequences": 0,
+            "processed_tokens": 0,
+            "non_pad_tokens": 0,
+            "times": [],
+            "optimizer_steps": 0,
+            "peak_allocated_bytes": 0,
+            "peak_driver_bytes": 0,
+        }
+        accumulated = 0
+        optimizer.zero_grad(set_to_none=True)
+        for idx in range(max(0, int(microbatches))):
+            try:
+                xb, yb = next(loader_iter)
+            except StopIteration:
+                loader_iter = iter(loader)
+                xb, yb = next(loader_iter)
+            xb = xb.to(device)
+            yb = yb.to(device)
+            synchronize()
+            t0 = time.perf_counter()
+            if amp and mps_autocast_ok:
+                try:
+                    with torch.amp.autocast(device_type="mps", dtype=torch.float16):
+                        loss = forward_loss(xb, yb)
+                except RuntimeError as exc:
+                    if "autocast" not in str(exc).lower():
+                        raise
+                    mps_autocast_ok = False
+                    loss = forward_loss(xb, yb)
+            else:
+                loss = forward_loss(xb, yb)
+            loss.backward()
+            accumulated += 1
+            if measure and device.type == "mps":
+                stats["peak_allocated_bytes"] = max(
+                    stats["peak_allocated_bytes"], int(torch.mps.current_allocated_memory())
+                )
+                driver_memory = getattr(torch.mps, "driver_allocated_memory", None)
+                if callable(driver_memory):
+                    stats["peak_driver_bytes"] = max(
+                        stats["peak_driver_bytes"], int(driver_memory())
+                    )
+            is_last = idx + 1 == int(microbatches)
+            if accumulated == max(1, int(grad_accum_steps)) or is_last:
+                _average_accumulated_gradients(parameters, accumulated)
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
+                accumulated = 0
+                stats["optimizer_steps"] += 1
+            synchronize()
+            elapsed = time.perf_counter() - t0
+            if measure:
+                stats["times"].append(elapsed)
+                stats["sequences"] += int(xb.shape[0])
+                stats["processed_tokens"] += int(yb.numel())
+                stats["non_pad_tokens"] += int(yb.ne(0).sum().item())
+                if device.type == "cuda":
+                    stats["peak_allocated_bytes"] = int(torch.cuda.max_memory_allocated(device))
+        return stats
+
+    run_phase(int(warmup_steps), measure=False)
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
+    measured_stats = run_phase(int(measure_steps), measure=True)
 
     if device.type == "mps":
         torch.mps.empty_cache()
+    times = measured_stats["times"]
     measured = max(sum(times), 1e-9)
+    total_sequences = int(measured_stats["sequences"])
+    total_tokens = int(measured_stats["processed_tokens"])
+    non_pad_tokens = int(measured_stats["non_pad_tokens"])
+    optimizer_steps = int(measured_stats["optimizer_steps"])
     seq_per_sec = total_sequences / measured
     tokens_per_sec = total_tokens / measured
+    non_pad_tokens_per_sec = non_pad_tokens / measured
     train_len = len(train_ds)
     return {
         "status": "ok",
@@ -282,6 +352,17 @@ def run_candidate_benchmark(
         "measure_steps": int(measure_steps),
         "seq_per_sec": seq_per_sec,
         "tokens_per_sec": tokens_per_sec,
+        "non_pad_tokens_per_sec": non_pad_tokens_per_sec,
+        "processed_tokens": total_tokens,
+        "non_pad_tokens": non_pad_tokens,
+        "padding_fraction": 1.0 - (non_pad_tokens / max(total_tokens, 1)),
+        "optimizer_steps": optimizer_steps,
+        "avg_microbatch_ms": (sum(times) / max(len(times), 1)) * 1000.0,
+        "wall_sec_per_optimizer_step": measured / max(optimizer_steps, 1),
+        "peak_allocated_bytes": int(measured_stats["peak_allocated_bytes"]),
+        "peak_driver_bytes": int(measured_stats["peak_driver_bytes"]),
+        "amp_requested": bool(cfg.get("amp", True)),
+        "amp_active": amp and mps_autocast_ok,
         "avg_step_ms": (sum(times) / max(len(times), 1)) * 1000.0,
         "train_windows": int(train_len),
         "estimated_epoch_sec": train_len / max(seq_per_sec, 1e-9),
@@ -301,7 +382,11 @@ def select_best_result(results: list[dict[str, Any]]) -> dict[str, Any] | None:
         return None
     return sorted(
         passed,
-        key=lambda r: (-float(r.get("seq_per_sec", 0.0)), int(r["batch_size"]), int(r["grad_accum_steps"])),
+        key=lambda r: (
+            -float(r.get("non_pad_tokens_per_sec", r.get("tokens_per_sec", r.get("seq_per_sec", 0.0)))),
+            int(r["batch_size"]),
+            int(r["grad_accum_steps"]),
+        ),
     )[0]
 
 
@@ -411,6 +496,14 @@ def write_report(
         "effective_batch_size",
         "seq_per_sec",
         "tokens_per_sec",
+        "non_pad_tokens_per_sec",
+        "padding_fraction",
+        "optimizer_steps",
+        "avg_microbatch_ms",
+        "wall_sec_per_optimizer_step",
+        "peak_allocated_bytes",
+        "peak_driver_bytes",
+        "amp_active",
         "avg_step_ms",
         "estimated_epoch_sec",
         "returncode",
@@ -562,7 +655,7 @@ def main(argv: list[str] | None = None) -> int:
             if status == "ok":
                 print(
                     f"[batch-opt] ok {candidate[0]}/{candidate[1]} "
-                    f"seq/sec={float(result['seq_per_sec']):.2f} "
+                    f"non-pad tok/sec={float(result['non_pad_tokens_per_sec']):.2f} "
                     f"epoch_h={float(result['estimated_epoch_sec']) / 3600.0:.2f}",
                     flush=True,
                 )
@@ -595,7 +688,8 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"[batch-opt] selected batch_size={selected['batch_size']} "
         f"grad_accum_steps={selected['grad_accum_steps']} "
-        f"seq/sec={float(selected['seq_per_sec']):.2f}",
+        "non-pad tok/sec="
+        f"{float(selected.get('non_pad_tokens_per_sec', selected.get('tokens_per_sec', selected.get('seq_per_sec', 0.0)))):.2f}",
         flush=True,
     )
     print(f"[batch-opt] wrote report to {out_dir}", flush=True)

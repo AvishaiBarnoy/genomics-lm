@@ -1,0 +1,72 @@
+# Throughput-only matrix. It does not alter the production Stage 2.6 config.
+base_config: configs/stage2.6_large_scaling.yaml
+base_overrides:
+  transfer_from: null
+  force_gpu: true
+warmup_steps: 20
+measure_steps: 100
+variants:
+  - name: baseline_unbucketed
+    overrides:
+      batch_size: 4
+      grad_accum_steps: 32
+      use_checkpoint: true
+      amp: true
+      bucket_batching: false
+  - name: baseline_bucketed
+    overrides:
+      batch_size: 4
+      grad_accum_steps: 32
+      use_checkpoint: true
+      amp: true
+      bucket_batching: true
+      n_buckets: 8
+  - name: b4_e128_no_checkpoint
+    overrides:
+      batch_size: 4
+      grad_accum_steps: 32
+      use_checkpoint: false
+      amp: true
+      bucket_batching: true
+      n_buckets: 8
+  - name: b8_e128_no_checkpoint
+    overrides:
+      batch_size: 8
+      grad_accum_steps: 16
+      use_checkpoint: false
+      amp: true
+      bucket_batching: true
+      n_buckets: 8
+  - name: b4_e32_no_checkpoint
+    overrides:
+      batch_size: 4
+      grad_accum_steps: 8
+      use_checkpoint: false
+      amp: true
+      bucket_batching: true
+      n_buckets: 8
+  - name: b4_e64_no_checkpoint
+    overrides:
+      batch_size: 4
+      grad_accum_steps: 16
+      use_checkpoint: false
+      amp: true
+      bucket_batching: true
+      n_buckets: 8
+  - name: b4_e128_gqa4
+    overrides:
+      batch_size: 4
+      grad_accum_steps: 32
+      n_kv_head: 2
+      use_checkpoint: true
+      amp: true
+      bucket_batching: true
+      n_buckets: 8
+  - name: b4_e128_fp32
+    overrides:
+      batch_size: 4
+      grad_accum_steps: 32
+      use_checkpoint: true
+      amp: false
+      bucket_batching: true
+      n_buckets: 8

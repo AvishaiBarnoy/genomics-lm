@@ -1,11 +1,8 @@
-import os
-import tempfile
 from pathlib import Path
 import numpy as np
 import torch
-import pytest
 
-from src.codonlm.data_loading import MmapPackedDataset, PackedDataset
+from src.codonlm.data_loading import MmapPackedDataset
 
 
 def test_mmap_packed_dataset_npz_fallback(tmp_path: Path):
@@ -19,6 +16,7 @@ def test_mmap_packed_dataset_npz_fallback(tmp_path: Path):
     # Init MmapPackedDataset (will fall back to PackedDataset)
     ds = MmapPackedDataset(npz_path)
     assert not ds.is_dynamic
+    assert ds.storage_mode == "npz_memory"
     assert len(ds) == 10
     
     x_sample, y_sample = ds[3]
@@ -44,6 +42,7 @@ def test_mmap_packed_dataset_npy_fixed(tmp_path: Path):
     # Init MmapPackedDataset (should detect and use npy mmap)
     ds = MmapPackedDataset(npz_path)
     assert ds.use_npy_mmap
+    assert ds.storage_mode == "npy_mmap"
     assert not ds.is_dynamic
     assert len(ds) == 10
     
@@ -70,6 +69,7 @@ def test_mmap_packed_dataset_npy_dynamic(tmp_path: Path):
     # Init MmapPackedDataset (should detect and use npy mmap)
     ds = MmapPackedDataset(npz_path)
     assert ds.use_npy_mmap
+    assert ds.storage_mode == "npy_mmap"
     assert ds.is_dynamic
     assert len(ds) == 3
     

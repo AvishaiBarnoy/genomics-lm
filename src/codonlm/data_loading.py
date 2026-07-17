@@ -47,6 +47,7 @@ class PackedDataset(Dataset):
         else:
             paths = list(paths)
 
+        self.storage_mode = "npz_memory"
         self.is_dynamic = False
         if len(paths) > 0:
             with np.load(paths[0], allow_pickle=False) as data:
@@ -54,19 +55,28 @@ class PackedDataset(Dataset):
                     self.is_dynamic = True
 
         if self.is_dynamic:
-            self.seqs = []
-            for path in paths:
+            self._flat_X: list[np.ndarray] = []
+            self._offsets: list[np.ndarray] = []
+            self._lengths: list[np.ndarray] = []
+            global_file = []
+            global_local = []
+            for file_idx, path in enumerate(paths):
                 with np.load(path, allow_pickle=False) as data:
-                    flat_X = data["X"]
-                    lengths = data["lengths"]
-                    offsets = np.insert(np.cumsum(lengths), 0, 0)
-                    for i in range(len(lengths)):
-                        seq = flat_X[offsets[i] : offsets[i + 1]]
-                        self.seqs.append(torch.from_numpy(seq.astype(np.int64)))
+                    flat_X = np.asarray(data["X"])
+                    lengths = np.asarray(data["lengths"])
+                self._flat_X.append(flat_X)
+                self._offsets.append(np.concatenate([[0], np.cumsum(lengths[:-1])]))
+                self._lengths.append(lengths)
+                global_file.append(np.full(len(lengths), file_idx, dtype=np.int32))
+                global_local.append(np.arange(len(lengths), dtype=np.int32))
+            self._global_file = np.concatenate(global_file)
+            self._global_local = np.concatenate(global_local)
         else:
             totals = []
             tail_shape = None
             y_tail_shape = None
+            x_dtype = None
+            y_dtype = None
             for path in paths:
                 with np.load(path, allow_pickle=False) as data:
                     X = data["X"]
@@ -74,6 +84,8 @@ class PackedDataset(Dataset):
                     if tail_shape is None:
                         tail_shape = X.shape[1:]
                         y_tail_shape = Y.shape[1:]
+                    x_dtype = np.result_type(x_dtype, X.dtype) if x_dtype is not None else X.dtype
+                    y_dtype = np.result_type(y_dtype, Y.dtype) if y_dtype is not None else Y.dtype
                     totals.append(X.shape[0])
             total_rows = sum(totals)
             if total_rows == 0:
@@ -81,14 +93,14 @@ class PackedDataset(Dataset):
                 self.Y = torch.empty((0,) + (y_tail_shape or (0,)), dtype=torch.long)
                 return
 
-            X_agg = np.empty((total_rows,) + tail_shape, dtype=np.int64)
-            Y_agg = np.empty((total_rows,) + y_tail_shape, dtype=np.int64)
+            X_agg = np.empty((total_rows,) + tail_shape, dtype=x_dtype)
+            Y_agg = np.empty((total_rows,) + y_tail_shape, dtype=y_dtype)
 
             offset = 0
             for path in paths:
                 with np.load(path, allow_pickle=False) as data:
-                    X = np.asarray(data["X"], dtype=np.int64)
-                    Y = np.asarray(data["Y"], dtype=np.int64)
+                    X = np.asarray(data["X"])
+                    Y = np.asarray(data["Y"])
                     rows = X.shape[0]
                     X_agg[offset : offset + rows] = X
                     Y_agg[offset : offset + rows] = Y
@@ -98,18 +110,22 @@ class PackedDataset(Dataset):
 
     def __len__(self):
         if self.is_dynamic:
-            return len(self.seqs)
+            return len(self._global_file)
         return self.X.shape[0]
 
     def __getitem__(self, i):
         if self.is_dynamic:
-            return self.seqs[i]
-        return self.X[i], self.Y[i]
+            file_idx = int(self._global_file[i])
+            local_idx = int(self._global_local[i])
+            start = int(self._offsets[file_idx][local_idx])
+            length = int(self._lengths[file_idx][local_idx])
+            return torch.from_numpy(self._flat_X[file_idx][start : start + length]).long()
+        return self.X[i].long(), self.Y[i].long()
 
     @property
     def seq_lengths(self) -> np.ndarray:
         if self.is_dynamic:
-            return np.array([len(seq) for seq in self.seqs], dtype=np.int32)
+            return np.concatenate(self._lengths).astype(np.int32, copy=False)
         return np.full(len(self), self.X.shape[1], dtype=np.int32)
 
 
@@ -131,7 +147,7 @@ class MmapPackedDataset(Dataset):
             x_path = p.with_name(p.stem + "_X.npy")
             y_path = p.with_name(p.stem + "_Y.npy")
             len_path = p.with_name(p.stem + "_lengths.npy")
-            if x_path.exists():
+            if x_path.exists() and (len_path.exists() or y_path.exists()):
                 npy_configs.append({
                     "X": x_path,
                     "Y": y_path if y_path.exists() else None,
@@ -143,6 +159,10 @@ class MmapPackedDataset(Dataset):
                 break
 
         if self.use_npy_mmap:
+            dataset_kinds = {cfg["is_dynamic"] for cfg in npy_configs}
+            if len(dataset_kinds) != 1:
+                raise ValueError("all memory-mapped dataset shards must use the same format")
+            self.storage_mode = "npy_mmap"
             self.is_dynamic = npy_configs[0]["is_dynamic"]
             self._mmaps_X = []
             self._mmaps_Y = []
@@ -155,7 +175,7 @@ class MmapPackedDataset(Dataset):
                 self._mmaps_X.append(mmap_X)
                 
                 if self.is_dynamic:
-                    lengths = np.load(cfg["lengths"])
+                    lengths = np.load(cfg["lengths"], mmap_mode="r")
                     offsets = np.concatenate([[0], np.cumsum(lengths[:-1])])
                     self._offsets.append(offsets)
                     self._lengths.append(lengths)
@@ -185,9 +205,11 @@ class MmapPackedDataset(Dataset):
 
         if not is_dynamic:
             self._delegate = PackedDataset(paths)
+            self.storage_mode = self._delegate.storage_mode
             self.is_dynamic = False
             return
 
+        self.storage_mode = "npz_memory"
         self.is_dynamic = True
         self._delegate = None
         self._mmaps: list[np.ndarray] = []
@@ -196,9 +218,9 @@ class MmapPackedDataset(Dataset):
 
         total_seqs = 0
         for path in paths:
-            data = np.load(path, allow_pickle=False, mmap_mode="r")
-            flat_X = data["X"]
-            lengths = data["lengths"]
+            with np.load(path, allow_pickle=False) as data:
+                flat_X = np.asarray(data["X"])
+                lengths = np.asarray(data["lengths"])
             offsets = np.concatenate([[0], np.cumsum(lengths[:-1])])
             self._mmaps.append(flat_X)
             self._offsets.append(offsets)

@@ -1,0 +1,31 @@
+# Follow-up matrix combining the strongest settings from stage2.6_mps_benchmark.
+base_config: configs/stage2.6_large_scaling.yaml
+base_overrides:
+  transfer_from: null
+  force_gpu: true
+  use_checkpoint: false
+  bucket_batching: true
+  n_buckets: 8
+warmup_steps: 20
+measure_steps: 100
+variants:
+  - name: b8_e128_no_checkpoint_amp
+    overrides:
+      batch_size: 8
+      grad_accum_steps: 16
+      amp: true
+  - name: b8_e128_no_checkpoint_fp32
+    overrides:
+      batch_size: 8
+      grad_accum_steps: 16
+      amp: false
+  - name: b16_e128_no_checkpoint_amp
+    overrides:
+      batch_size: 16
+      grad_accum_steps: 8
+      amp: true
+  - name: b16_e128_no_checkpoint_fp32
+    overrides:
+      batch_size: 16
+      grad_accum_steps: 8
+      amp: false

@@ -8,6 +8,7 @@ import logging
 import shutil
 from pathlib import Path
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from src.codonlm.model_tiny_gpt import TinyGPT
@@ -43,6 +44,14 @@ from src.codonlm.training.objectives import (
 
 RUN_ID_ENV = "RUN_ID"
 PAD_ID = 0
+
+
+def _average_accumulated_gradients(parameters, microbatch_count: int) -> None:
+    if microbatch_count <= 0:
+        raise ValueError("microbatch_count must be positive")
+    for param in parameters:
+        if param.grad is not None:
+            param.grad.div_(microbatch_count)
 
 def dev(force_gpu: bool = False):
     device = default_device()
@@ -100,7 +109,14 @@ def run_training(cfg: dict, args) -> None:
     use_mmap = bool(cfg.get("use_mmap", False))
     train_ds, val_ds = build_codon_lm_datasets(train_paths, val_paths, use_mmap=use_mmap)
     if use_mmap:
-        print("[loader] using MmapPackedDataset (memory-mapped, on-demand paging)")
+        train_storage = getattr(train_ds, "storage_mode", "unknown")
+        val_storage = getattr(val_ds, "storage_mode", "unknown")
+        print(f"[loader] storage train={train_storage} val={val_storage}")
+        if train_storage != "npy_mmap" or val_storage != "npy_mmap":
+            print(
+                "[loader] warning: use_mmap=true requires adjacent *_X.npy and "
+                "*_lengths.npy/*_Y.npy sidecars; compressed NPZ data is loaded into memory."
+            )
     train_audit = dataset_length_audit(train_ds, int(cfg["block_size"]))
     val_audit = dataset_length_audit(val_ds, int(cfg["block_size"]))
     cfg["dataset_audit"] = {"train": train_audit, "val": val_audit}
@@ -594,6 +610,7 @@ def run_training(cfg: dict, args) -> None:
             offset_totals = {offset: 0.0 for offset in multi_offset_weights}
             offset_counts = {offset: 0 for offset in multi_offset_weights}
             optim.zero_grad(set_to_none=True)
+            accumulated_microbatches = 0
             skipped = 0
             start_time = time.perf_counter()
             if split == "train" and skip_microbatches > 0:
@@ -675,7 +692,23 @@ def run_training(cfg: dict, args) -> None:
                             raise RuntimeError("replay_loss_enabled=true but model returned no termination logits")
                         replay_loss_ = termination_aux_loss(replay_logits, replay_labels)
                         total_loss_ = total_loss_ + (replay_loss_weight * replay_loss_)
-                    return total_loss_ / gacc, next_loss_, offset_losses_, term_loss_, replay_loss_
+                    return total_loss_, next_loss_, offset_losses_, term_loss_, replay_loss_
+
+                def step_optimizer(group_size: int) -> None:
+                    nonlocal step, current_resume_microbatch_idx
+                    if group_size <= 0:
+                        return
+                    _average_accumulated_gradients(trainable_params, group_size)
+                    if (not use_cosine) and warmup_steps > 0 and step < warmup_steps:
+                        scale = float(step + 1) / max(1, warmup_steps)
+                        for pg in optim.param_groups:
+                            pg["lr"] = base_lr * scale
+                    optim.step()
+                    optim.zero_grad(set_to_none=True)
+                    step += 1
+                    current_resume_microbatch_idx = batch_idx + 1
+                    if use_cosine:
+                        scheduler.step()
 
                 if amp and mps_autocast_ok:
                     try:
@@ -695,24 +728,13 @@ def run_training(cfg: dict, args) -> None:
                     continue
                 if split=="train":
                     loss.backward()
-                    if (n+1) % gacc == 0:
-                        if (not use_cosine) and warmup_steps > 0 and step < warmup_steps:
-                            scale = float(step + 1) / max(1, warmup_steps)
-                            for pg in optim.param_groups:
-                                pg["lr"] = base_lr * scale
-                        optim.step()
-                        optim.zero_grad(set_to_none=True)
-                        step += 1
-                        current_resume_microbatch_idx = batch_idx + 1
-                        if use_cosine:
-                            scheduler.step()
-                        if device.type == "mps":
-                            torch.mps.empty_cache()
+                    accumulated_microbatches += 1
+                    if accumulated_microbatches == gacc:
+                        step_optimizer(accumulated_microbatches)
+                        accumulated_microbatches = 0
                         if split == "train" and periodic_ckpt.should_save(step):
                             save_last_checkpoint(epoch_idx, reason="periodic")
-                            if device.type == "mps":
-                                torch.mps.empty_cache()
-                total += loss.item()*gacc
+                total += loss.item()
                 next_total += float(next_loss.detach().item())
                 if term_loss is not None:
                     term_total += float(term_loss.detach().item())
@@ -726,19 +748,8 @@ def run_training(cfg: dict, args) -> None:
                 n += 1
                 wall_timer.check()
             
-            # Step on remainder if training and loader length is not divisible by gacc
-            if split == "train" and n % gacc != 0:
-                if (not use_cosine) and warmup_steps > 0 and step < warmup_steps:
-                    scale = float(step + 1) / max(1, warmup_steps)
-                    for pg in optim.param_groups:
-                        pg["lr"] = base_lr * scale
-                optim.step()
-                optim.zero_grad(set_to_none=True)
-                step += 1
-                if use_cosine:
-                    scheduler.step()
-                if device.type == "mps":
-                    torch.mps.empty_cache()
+            if split == "train" and accumulated_microbatches:
+                step_optimizer(accumulated_microbatches)
 
             offset_avgs = {
                 offset: (offset_totals[offset] / max(offset_counts[offset], 1))
