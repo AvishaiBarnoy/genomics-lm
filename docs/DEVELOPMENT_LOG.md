@@ -581,5 +581,12 @@ Our local models deliver orders of magnitude higher performance density per para
 *   **Memorization Overlap Metrics (`eval_generation_prefix.py`)**: Computes sliding-window Jaccard-style matching rates (`train_overlap_10` and `train_overlap_20`) for each generated sequence, reporting metrics in `samples.csv` and `summary.csv`.
 *   **Integration Testing**: Added verification assertions to the end-to-end integration test in `tests/test_eval_generation_prefix.py`. Merged in **PR #73**.
 
+## 28. Stage 28: Local Run & Checkpoint Cleanup Utility
+**Goal:** Provide a local workspace cleanup utility script to purge untracked intermediate model checkpoints and old run directories, helping developers reclaim local storage disk space.
+
+*   **Audit Analysis**: Verified that the repository's git database history is extremely clean (~32 MB) and does not track large `.pt` checkpoint files, meaning repository size is already optimized for clean cloning.
+*   **Run Cleanup Script (`cleanup_runs.py`)**: Created a command-line cleanup utility supporting dry-run auditing, intermediate checkpoint purging (keeping only protected files like `best.pt`), and directory removal for runs older than N days.
+*   **Unit Testing**: Added a test suite `tests/test_cleanup_runs.py` verifying correct targeted item removal and preservation rules.
+
 ---
 *End of Log*

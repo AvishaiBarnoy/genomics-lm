@@ -567,3 +567,17 @@ The repository uses two output directory conventions due to a historical migrati
 > rm -rf outputs/checkpoints/
 > ```
 > All active model checkpoints are in `runs/<RUN_ID>/checkpoints/`.
+
+---
+
+## Workspace Maintenance & Cleanup Utility
+
+Over time, training multiple runs will accumulate large model checkpoint files (`.pt`) and logs in the `runs/` directory. You can use the clean-up utility to safely reclaim disk space:
+
+```bash
+# 1. Show space targetable for cleanup (Dry-run)
+python -m scripts.cleanup_runs
+
+# 2. Delete all intermediate checkpoints (e.g. last.pt, epoch_*.pt), keeping only best.pt
+python -m scripts.cleanup_runs --keep_only_best
+```
