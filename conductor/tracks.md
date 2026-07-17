@@ -71,7 +71,11 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [x] **Track: Training Speed & Memory Optimization**
 *Link: [./tracks/training_speed_optimization_20260615/](./tracks/training_speed_optimization_20260615/)*
-*Summary: All 5 phases implemented (GQA, mmap, BucketBatchSampler, CUDA device priority, SDPA path). Benchmark shows MPS batch=4 is dispatch-bound — optimizations benefit RAM/params, not throughput at this scale. CUDA batch≥32 expected to show ≥1.5× speedup.*
+*Summary: All 5 phases implemented (GQA, mmap, BucketBatchSampler, CUDA device priority, SDPA path). The July 2026 MPS benchmark superseded the earlier batch-4 result: batch 8 with accumulation 16, AMP, checkpointing off, standard MHA, and 8 buckets reached about 5.5k useful tokens/second (about 2.0x the original baseline). Scientific quality parity remains to be established in the follow-up validation track.*
+
+- [ ] **Track: Optimized Training Quality Validation & Context Ablation (Stage 2.6)**
+*Link: [./tracks/optimized_training_validation_20260717/](./tracks/optimized_training_validation_20260717/)*
+*Summary: Validate the measured MPS throughput winner with paired equal-token training runs, then compare 128-, 256-, and 512-token contexts using lossless chunking and token-budgeted updates before promoting new production defaults.*
 
 - [x] **Track: CodonLM Trainer Refactor**
 *Link: [./tracks/codonlm_trainer_refactor_20260622/](./tracks/codonlm_trainer_refactor_20260622/)*
