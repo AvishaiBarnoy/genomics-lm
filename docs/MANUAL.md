@@ -502,6 +502,11 @@ By default, the client will start a local server (typically at `http://localhost
 
 ## SOTA Benchmarking & Compute Footprint Profiling
 
+> **Legacy protocol:** Existing Stage 2.6 reports were produced before mandatory
+> global genome-aware splitting and corrected causal embedding extraction. The
+> commands below reproduce historical tooling; their output is not a controlled
+> cross-model comparison. See issue #92 for the replacement protocol.
+
 To evaluate our model against published SOTA prokaryotic models (Evo 1, GenSLM) on aligned prokaryotic benchmarks:
 
 1.  **Prepare mock/synthetic benchmark datasets:**
@@ -608,7 +613,7 @@ The repository uses two output directory conventions due to a historical migrati
 | `outputs/checkpoints/` | **Legacy** — Stage 1 checkpoints from before the `runs/` layout | ⚠️ Safe to archive |
 | `outputs/reports/` | Downstream probe outputs (EC, AMR, k-mer classifiers) | ✅ Current |
 | `outputs/scores/` | Legacy benchmark scores | ⚠️ Historical |
-| `conference/` | Publication assets — figures, SOTA table, abstracts, slides | ✅ Current |
+| `conference/` | Historical figures, benchmark table, abstracts, and slides | ⚠️ Legacy protocol |
 
 > **Why is `outputs/` so large?**
 > `outputs/checkpoints/` (~4.4 GB) contains 31 old Stage 1 and early Stage 2 model checkpoints that predate the migration to the `runs/` layout. They are not used by any current script and can be safely deleted or moved to cold storage:

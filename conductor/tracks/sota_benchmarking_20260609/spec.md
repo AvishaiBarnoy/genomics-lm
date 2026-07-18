@@ -3,6 +3,10 @@
 ## 1. Overview
 This track defines the benchmarking framework to evaluate our models (CodonLM and ProteinLM/Critic) exclusively against State-of-the-Art (SOTA) **prokaryotic foundation models** (such as Evo 1 and GenSLM). Since our models are trained and designed for prokaryotic genomic sequence tasks, comparing against eukaryotic-focused models is omitted to ensure scientific alignment.
 
+> **Historical specification:** The implemented comparisons used different tasks,
+> datasets, and validation protocols across models. Resulting density ratios are
+> descriptive and must not be interpreted as controlled efficiency rankings.
+
 ---
 
 ## 2. Baseline SOTA Prokaryotic Models
@@ -55,4 +59,4 @@ Our models are evaluated against the specific prokaryotic benchmarks established
 ## 5. Evaluation Plan for our CodonLM & ProteinLM
 1.  **Zero-Shot Likelihood Scoring:** Compute sequence perplexity/log-likelihoods for the wild-type and mutated variants of *E. coli* 5S rRNA and prokaryotic proteins. Compare rank correlation (Spearman's $\rho$) against Evo 1 and GenSLM results.
 2.  **Downstream Probes:** Extract mean-pooled sequence embeddings from our backbones, train simple linear classifiers for lambda phage gene essentiality, and compare prediction F1 scores against SOTA.
-3.  **Compute Efficiency Density Ratio:** Evaluate accuracy / parameter count and accuracy / training-hours to show our M2 Mac optimized density performance.
+3.  **Compute Footprint Description:** Record accuracy, parameter count, and training-hours while explicitly avoiding rankings across non-equivalent tasks.

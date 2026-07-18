@@ -4,6 +4,10 @@
 **Priority:** Medium (conference readiness)
 **Depends on:** Stage 2.6 checkpoint (✅ done), EC probe pipeline (✅ done)
 
+> **Historical specification:** Results produced by this track are legacy-protocol
+> artifacts. Annotation-family grouping is not a protein-homology holdout, and the
+> embeddings predate corrected causal extraction. See issues #89 and #92.
+
 ---
 
 ## Objective
@@ -12,7 +16,7 @@ Benchmark the CodonLM Stage 2.6 embeddings on **Antimicrobial Resistance (AMR) g
 
 This is the natural companion to the EC probe:
 - **EC** tests *enzymatic function* separability
-- **AMR** tests *resistance phenotype* separability — clinically significant and highly publishable
+- **AMR** tests annotation-label separability under the selected split protocol
 
 ---
 
@@ -23,7 +27,7 @@ AMR is one of the most critical public health challenges globally. A language mo
 Expected result range based on EC results:
 - LogReg/SVM accuracy: **50–70%** (fewer classes than EC, more biologically coherent)
 - If < 40%: embeddings do not capture AMR signal → negative result worth reporting
-- If ≥ 60%: strong positive result, publishable finding
+- If ≥ 60%: positive result under this protocol, requiring homology-controlled validation
 
 ---
 
