@@ -299,6 +299,22 @@ def test_global_split_and_baselines_end_to_end(tmp_path):
 
 def test_main_dry_run_uses_global_builder(tmp_path):
     repo_root = Path(__file__).resolve().parents[1]
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_conda = fake_bin / "conda"
+    fake_conda.write_text(
+        "#!/bin/sh\n"
+        "if [ \"$1 $2\" = \"env list\" ]; then\n"
+        "  printf '# conda environments:\\nbase /opt/conda\\n'\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [ \"$1 $2\" = \"shell.bash hook\" ]; then\n"
+        "  printf 'export PATH=/missing-python\\n'\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 1\n"
+    )
+    fake_conda.chmod(0o755)
     config = tmp_path / "config.yaml"
     config.write_text(
         yaml.safe_dump(
@@ -318,6 +334,7 @@ def test_main_dry_run_uses_global_builder(tmp_path):
         cwd=tmp_path,
         env={
             **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
             "PYTHONPATH": str(repo_root),
             "RUN_ID": "test-global-dry-run",
         },

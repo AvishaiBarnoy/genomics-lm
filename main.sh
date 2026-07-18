@@ -4,8 +4,22 @@
 # It does NOT handle downstream sequence generation/inference. For sequence
 # generation, use scripts/generative_design_loop.py.
 
-eval "$(conda shell.bash hook)" || true
-conda activate codonlm || true
+activate_codonlm_conda() {
+  if [[ "${CODONLM_SKIP_CONDA:-0}" == "1" ]]; then
+    return
+  fi
+  if ! command -v conda >/dev/null 2>&1; then
+    return
+  fi
+  if ! conda env list 2>/dev/null | awk '$1 == "codonlm" { found=1 } END { exit !found }'; then
+    echo "[info] conda environment 'codonlm' not found; using current Python environment" >&2
+    return
+  fi
+  eval "$(conda shell.bash hook)"
+  conda activate codonlm
+}
+
+activate_codonlm_conda
 
 set -euo pipefail
 
