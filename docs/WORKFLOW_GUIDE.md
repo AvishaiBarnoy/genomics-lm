@@ -11,10 +11,16 @@ This guide establishes the mandatory scientific and engineering workflow for dev
 
 ### Mandatory Workflow
 1. Define your dataset sources in a YAML config (e.g. `configs/tiny_mps.yaml`).
-2. Run [`build_global_manifest.py`](file:///Users/User/github/genomics-lm/scripts/build_global_manifest.py) to extract CDS records, group them globally by organism or taxonomy genus, and partition them into train/val/test splits:
+2. Run [`build_global_manifest.py`](../scripts/build_global_manifest.py) to extract CDS records, resolve stable accessions, group records globally by genome or genus, and partition groups before packing. This is also the default preparation route used by `main.sh`:
    ```bash
    python -m scripts.build_global_manifest --config configs/tiny_mps.yaml --run-id <RUN_ID> --run-dir runs/<RUN_ID> --group-by genome
    ```
+
+   Scientific preparation fails when fewer than three groups are available.
+   `--allow-sequence-split` is an explicit development-only escape hatch and marks
+   the resulting manifest as non-scientific. The older
+   `scripts.pipeline_prepare` route is disabled unless
+   `--allow-legacy-per-dataset-split` is supplied for historical reproduction.
 3. Verify that the output splits contain mutually exclusive genome sets by inspecting the generated `data/processed/global/<RUN_ID>/cds_meta.tsv`.
 
 ---

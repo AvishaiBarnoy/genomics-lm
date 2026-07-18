@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Prepare datasets for the training pipeline.
+Legacy per-dataset preparation pipeline.
 
 Responsibilities:
   * read YAML config + optional CLI dataset overrides
@@ -10,7 +10,9 @@ Responsibilities:
   * concatenate NPZs across datasets into a combined manifest scoped to the run id
   * emit a small JSON summary in runs/<RUN_ID>/pipeline_prepare.json
 
-The shell wrapper calls this module instead of embedding large Python blocks.
+This route splits each configured dataset independently before stacking. It is
+retained only for reproducibility of historical runs. New scientific runs must use
+``scripts.build_global_manifest``.
 """
 
 from __future__ import annotations
@@ -253,9 +255,21 @@ def main() -> None:
     ap.add_argument("--run-dir", required=True)
     ap.add_argument("--force", action="store_true")
     ap.add_argument(
+        "--allow-legacy-per-dataset-split",
+        action="store_true",
+        help="Explicitly opt into the legacy, non-scientific per-dataset split route.",
+    )
+    ap.add_argument(
         "--extra-dataset", action="append", default=[], help="NAME,GBFF[,MIN_LEN]"
     )
     args = ap.parse_args()
+
+    if not args.allow_legacy_per_dataset_split:
+        raise SystemExit(
+            "[error] scripts.pipeline_prepare uses legacy per-dataset splitting. "
+            "Use scripts.build_global_manifest for scientific runs, or pass "
+            "--allow-legacy-per-dataset-split only to reproduce a historical run."
+        )
 
     config_path = Path(args.config)
     run_dir = Path(args.run_dir)
