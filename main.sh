@@ -173,7 +173,7 @@ sed 's/^/[config] /' "$CONF" | tee -a "$LOG"
 echo "[info] extra_datasets_cli=${EXTRA_DATASETS[*]:-none}" | tee -a "$LOG"
 
 # Config fingerprint (sha256) and git commit
-python - <<'PY' "$CONF" | tee -a "$LOG"
+python - "$CONF" <<'PY' | tee -a "$LOG"
 import hashlib, sys, pathlib, subprocess
 conf_path = pathlib.Path(sys.argv[1])
 try:
@@ -248,19 +248,19 @@ print(cfg.get('test_npz') or data.get('test_npz', ''))
       fi
 
       eval "$(
-      python - <<'PY' "$PREP_JSON"
-      import json, shlex, sys
-      info = json.load(open(sys.argv[1]))
-      mapping = {
-          "TRAIN_NPZ": info["train_npz"],
-          "VAL_NPZ": info["val_npz"],
-          "TEST_NPZ": info["test_npz"],
-          "PRIMARY_DNA": info["primary_dna"],
-          "COMBINED_MANIFEST": info["combined_manifest"],
-      }
-      for key, value in mapping.items():
-          print(f'{key}={shlex.quote(str(value))}')
-      PY
+      python - "$PREP_JSON" <<'PY'
+import json, shlex, sys
+info = json.load(open(sys.argv[1]))
+mapping = {
+    "TRAIN_NPZ": info["train_npz"],
+    "VAL_NPZ": info["val_npz"],
+    "TEST_NPZ": info["test_npz"],
+    "PRIMARY_DNA": info["primary_dna"],
+    "COMBINED_MANIFEST": info["combined_manifest"],
+}
+for key, value in mapping.items():
+    print(f'{key}={shlex.quote(str(value))}')
+PY
       )"
     fi
   fi
@@ -325,7 +325,7 @@ if [[ "$TRAINER" == "codon_lm" ]]; then
 
   # Fingerprint combined manifest contents
   if [[ $DRY_RUN -eq 0 ]]; then
-    python - <<'PY' "$COMBINED_MANIFEST" | tee -a "$LOG"
+    python - "$COMBINED_MANIFEST" <<'PY' | tee -a "$LOG"
 import hashlib, sys, pathlib
 p = pathlib.Path(sys.argv[1])
 try:
