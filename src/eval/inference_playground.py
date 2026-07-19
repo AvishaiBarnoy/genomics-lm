@@ -2,7 +2,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import torch
 
 from src.codonlm.model_tiny_gpt import TinyGPT
@@ -553,4 +553,3 @@ def get_attention_weights(
         # Restore SDPA settings
         for blk, val in zip(model.blocks, original_sdpa):
             blk.attn.use_sdpa = val
-
