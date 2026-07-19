@@ -77,6 +77,10 @@ This file tracks all major tracks for the project. Each track has its own detail
 *Link: [./tracks/optimized_training_validation_20260717/](./tracks/optimized_training_validation_20260717/)*
 *Summary: Validate the measured MPS throughput winner with paired equal-token training runs, then compare 128-, 256-, and 512-token contexts using lossless chunking and token-budgeted updates before promoting new production defaults.*
 
+- [ ] **Track: Leakage-Controlled CodonLM Revalidation**
+*Link: [./tracks/leakage_controlled_revalidation_20260719/](./tracks/leakage_controlled_revalidation_20260719/)*
+*Summary: Correct tokenization, packing, leakage gates, trainer semantics, and evaluation provenance; freeze versioned genome/genus-held-out datasets; then retrain from scratch once and publish corrected intrinsic and downstream results separately from legacy Stage 2.6.*
+
 - [x] **Track: CodonLM Trainer Refactor**
 *Link: [./tracks/codonlm_trainer_refactor_20260622/](./tracks/codonlm_trainer_refactor_20260622/)*
 *Summary: Completed. Refactored the monolithic 1,200-line `train_codon_lm.py` script into a modular `src/codonlm/training/` subpackage (separating config, checkpoints, objectives, and training loop) while preserving CLI backwards compatibility and mid-epoch resume semantics. Updated all import locations across scripts and tests.*
