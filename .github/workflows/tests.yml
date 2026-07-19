@@ -35,9 +35,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    env:
-      COVERAGE_FILE: ${{ runner.temp }}/.coverage
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -54,6 +51,8 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Run core tests with coverage
+        env:
+          COVERAGE_FILE: ${{ runner.temp }}/.coverage
         run: >-
           pytest -q
           -m "not slow and not external and not mps"
@@ -63,6 +62,8 @@ jobs:
           --cov-report=xml:${{ runner.temp }}/coverage.xml
 
       - name: Publish coverage summary
+        env:
+          COVERAGE_FILE: ${{ runner.temp }}/.coverage
         run: |
           {
             echo '### Python 3.11 coverage'
