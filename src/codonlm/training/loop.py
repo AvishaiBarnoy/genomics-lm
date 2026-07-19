@@ -121,7 +121,7 @@ def run_training(cfg: dict, args) -> None:
     val_audit = dataset_length_audit(val_ds, int(cfg["block_size"]))
     cfg["dataset_audit"] = {"train": train_audit, "val": val_audit}
     cfg["whole_gene_status"] = (
-        "whole-or-truncated"
+        "whole-or-chunked"
         if train_audit["at_block_size"] or val_audit["at_block_size"]
         else "whole-under-block-size"
     )

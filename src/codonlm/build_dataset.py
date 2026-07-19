@@ -14,7 +14,14 @@ import argparse
 import csv
 import numpy as np
 import random
-from typing import List
+
+from src.codonlm.lossless_packing import (
+    PACKING_METADATA_FIELDS,
+    chunk_record,
+    pack_chunks,
+    packed_arrays,
+    packing_metadata_rows,
+)
 
 def load_lines(path):
     """Loads whitespace-separated integers from each line of a file."""
@@ -43,6 +50,7 @@ def main():
     seqs = list(load_lines(args.ids))
     # load groups
     groups = []
+    metadata_rows = []
     with open(args.group_meta, newline="") as f:
         reader = csv.DictReader(f, delimiter="\t")
         if reader.fieldnames is None:
@@ -56,6 +64,7 @@ def main():
             )
         for row in reader:
             groups.append(row[group_col])
+            metadata_rows.append(row)
     assert len(groups)==len(seqs), "meta and ids must align"
 
     # split by unique groups (fallback to sequence-level split if too few groups)
@@ -63,6 +72,27 @@ def main():
     rng.shuffle(uniq)
 
     buckets = {"train": [], "val": [], "test": []}
+
+    def add_record(index: int, split: str) -> None:
+        row = metadata_rows[index]
+        tokens = seqs[index]
+        codon_start = int(row.get("codon_start") or 0)
+        codon_end = int(row.get("codon_end") or (codon_start + len(tokens) - 2))
+        buckets[split].append(
+            {
+                "tokens": tokens,
+                "source_id": row.get("source_id")
+                or row.get("locus_tag")
+                or row.get("record_id")
+                or f"line:{index}",
+                "source_line_idx": int(row.get("source_line_idx") or index),
+                "fragment_line_idx": int(row.get("fragment_line_idx") or index),
+                "fragment_index": int(row.get("fragment_index") or 0),
+                "fragment_codon_start": codon_start,
+                "fragment_codon_end": codon_end,
+                "split": split,
+            }
+        )
 
     if len(uniq) < 3:
         # fallback to sequence-level split
@@ -74,9 +104,9 @@ def main():
         test_idx = set(indices[:n_test])
         val_idx = set(indices[n_test:n_test + n_val])
 
-        for i, arr in enumerate(seqs):
+        for i, _arr in enumerate(seqs):
             key = "val" if i in val_idx else "test" if i in test_idx else "train"
-            buckets[key].append(arr)
+            add_record(i, key)
     else:
         n_test = max(1, int(len(uniq) * args.test_frac))
         n_val = max(1, int(len(uniq) * args.val_frac))
@@ -90,156 +120,40 @@ def main():
         val_groups = set(uniq[n_test:n_test + n_val])
         train_groups = set(uniq[n_test + n_val:])
 
-        for arr, g in zip(seqs, groups):
+        for index, g in enumerate(groups):
             key = "train" if g in train_groups else "val" if g in val_groups else "test"
-            buckets[key].append(arr)
+            add_record(index, key)
 
-    Path(args.out_dir).mkdir(parents=True, exist_ok=True)
-    def pack_multi(name, subset):
-        """
-        Pack multiple CDS into windows up to block_size with <SEP> separators to prevent cross-ORF leakage.
-
-        Policy:
-          - Each CDS already includes <BOS_CDS> and <EOS_CDS> from tokenization.
-          - Insert <SEP> (id=3) between CDS segments when space permits.
-          - If a CDS overflows the remaining space, truncate and carry remainder to the next window.
-        """
-        print(f"[build] packing multi: {name} (subset size={len(subset)})")
-        SEP_ID = 3  # matches codon_tokenize.py SPECIALS order
-        PAD_ID = 0
-
-        # Prepare per-sequence offsets to resume when truncated
-        seqs = [arr for arr in subset if len(arr) > 2]
-        if not seqs:
-            X = np.zeros((0, args.block_size), dtype=np.int32)
-            Y = np.zeros((0, args.block_size), dtype=np.int32)
-            out = Path(args.out_dir) / f"{name}_bs{args.block_size}.npz"
-            np.savez_compressed(out, X=X, Y=Y)
-            print(f"[build] {name}: {X.shape} → {out}")
-            return
-
-        # Number of windows: keep similar scale as before but cap by available tokens
-        windows_goal = max(1, args.windows_per_seq * len(seqs))
-        Xs, Ys = [], []
-
-        # Create an index queue we can shuffle each pass
-        indices = list(range(len(seqs)))
-        offsets = [0] * len(seqs)
-
-        made = 0
-        for _ in range(windows_goal):
-            rng.shuffle(indices)
-            buf: List[int] = []
-            # Fill window up to block_size
-            for idx in indices:
-                if len(buf) >= args.block_size:
-                    break
-                arr = seqs[idx]
-                off = offsets[idx]
-                if off >= len(arr):
-                    continue
-                # How many tokens can we copy from this CDS
-                room = args.block_size - len(buf)
-                take = min(room, len(arr) - off)
-                if take <= 0:
-                    continue
-                buf.extend(arr[off : off + take])
-                offsets[idx] += take
-                # If CDS ended and we still have room, place a SEP
-                if offsets[idx] >= len(arr) and len(buf) < args.block_size:
-                    buf.append(SEP_ID)
-            # If we couldn't place at least two tokens, stop to avoid empty/pad-only windows
-            if len(buf) < 2:
-                break
-            # Build x/y with padding
-            x = buf[:-1]
-            y = buf[1:]
-            # Ensure length
-            if len(x) < args.block_size:
-                pad_n = args.block_size - len(x)
-                x = x + [PAD_ID] * pad_n
-                y = y + [PAD_ID] * pad_n
-            else:
-                x = x[: args.block_size]
-                y = y[: args.block_size]
-            Xs.append(x)
-            Ys.append(y)
-            made += 1
-
-            # If total remaining unconsumed tokens across all sequences is tiny, stop early
-            remaining = 0
-            for i, arr in enumerate(seqs):
-                r = max(0, len(arr) - offsets[i])
-                remaining += r
-            if remaining < 2:
-                break
-
-        X = np.array(Xs, dtype=np.int32)
-        Y = np.array(Ys, dtype=np.int32)
-        out = Path(args.out_dir) / f"{name}_bs{args.block_size}.npz"
-        np.savez_compressed(out, X=X, Y=Y)
-        # packing stats
-        total_tokens = int(X.size)
-        sep_pct = float((X == 3).sum()) / total_tokens if total_tokens else 0.0
-        pad_pct = float((X == 0).sum()) / total_tokens if total_tokens else 0.0
-        cds_per_win = (X == 3).sum(axis=1) + 1 if X.shape[0] else np.array([0])
-        avg_cds = float(np.mean(cds_per_win)) if X.shape[0] else 0.0
-        print(f"[build] {name}: {X.shape} (windows={made}) → {out}")
-        print(f"[pack-stats] {name}: avg_cds_per_window={avg_cds:.2f} sep_pct={sep_pct:.3f} pad_pct={pad_pct:.3f}")
-
-    def pack_single(name, subset):
-        """Packs each sequence independently into windows (one CDS per window, padded or cropped)."""
-        Xs, Ys = [], []
-        for arr in subset:
-            if len(arr) <= 2:
-                continue
-            for _ in range(args.windows_per_seq):
-                if len(arr) <= args.block_size + 1:
-                    x = arr[:-1]
-                    y = arr[1:]
-                    pad = [0] * max(0, args.block_size - len(x))
-                    x = (x + pad)[: args.block_size]
-                    y = (y + pad)[: args.block_size]
-                else:
-                    i = rng.randrange(0, len(arr) - args.block_size - 1)
-                    x = arr[i : i + args.block_size]
-                    y = arr[i + 1 : i + 1 + args.block_size]
-                Xs.append(x)
-                Ys.append(y)
-        X = np.array(Xs, dtype=np.int32)
-        Y = np.array(Ys, dtype=np.int32)
-        out = Path(args.out_dir) / f"{name}_bs{args.block_size}.npz"
-        np.savez_compressed(out, X=X, Y=Y)
-        print(f"[build] {name}: {X.shape} → {out}")
-
-    def pack_dynamic(name, subset):
-        """Packs each sequence independently without padding. Concatenates them into a flat array and saves lengths to avoid pickle."""
-        filtered = []
-        for arr in subset:
-            if len(arr) <= 2:
-                continue
-            if len(arr) > args.block_size:
-                arr = arr[-args.block_size:]
-            filtered.append(arr)
-
-        if not filtered:
-            flat_X = np.zeros((0,), dtype=np.int32)
-            lengths = np.zeros((0,), dtype=np.int32)
-        else:
-            flat_X = np.concatenate([np.array(x, dtype=np.int32) for x in filtered])
-            lengths = np.array([len(x) for x in filtered], dtype=np.int32)
-
-        out = Path(args.out_dir) / f"{name}_bs{args.block_size}.npz"
-        np.savez_compressed(out, X=flat_X, lengths=lengths)
-        print(f"[build] {name} (dynamic): {len(filtered)} sequences → {out}")
-
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if args.windows_per_seq != 1:
+        print(
+            f"[build] ignoring legacy windows_per_seq={args.windows_per_seq}; "
+            "lossless packing emits every source transition once"
+        )
     for name in ("train", "val", "test"):
-        if args.pack_mode == "single":
-            pack_single(name, buckets[name])
-        elif args.pack_mode == "dynamic":
-            pack_dynamic(name, buckets[name])
-        else:
-            pack_multi(name, buckets[name])
+        chunks = []
+        for record in buckets[name]:
+            chunks.extend(chunk_record(record, block_size=args.block_size))
+        windows = pack_chunks(
+            chunks, block_size=args.block_size, mode=args.pack_mode, sep_id=3
+        )
+        arrays = packed_arrays(
+            windows, block_size=args.block_size, mode=args.pack_mode
+        )
+        out = out_dir / f"{name}_bs{args.block_size}.npz"
+        np.savez_compressed(out, **arrays)
+        metadata_path = out_dir / f"{name}_packing.tsv"
+        with open(metadata_path, "w", newline="") as handle:
+            writer = csv.DictWriter(
+                handle, fieldnames=PACKING_METADATA_FIELDS, delimiter="\t"
+            )
+            writer.writeheader()
+            writer.writerows(packing_metadata_rows(name, windows))
+        print(
+            f"[build] {name}: {len(chunks)} chunks in {len(windows)} windows "
+            f"→ {out} (metadata {metadata_path})"
+        )
 
 if __name__ == "__main__":
     main()

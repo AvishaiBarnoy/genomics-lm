@@ -32,8 +32,20 @@ def test_stack_npz_dynamic(tmp_path: Path):
     X2 = np.array([5, 6, 7], dtype=np.int32)
     len2 = np.array([1, 2], dtype=np.int32)
 
-    np.savez_compressed(a, X=X1, lengths=len1)
-    np.savez_compressed(b, X=X2, lengths=len2)
+    np.savez_compressed(
+        a,
+        X=X1,
+        lengths=len1,
+        segment_ids=np.array([0, 0, 1, 1], dtype=np.int32),
+        source_positions=np.array([0, 1, 0, 1], dtype=np.int32),
+    )
+    np.savez_compressed(
+        b,
+        X=X2,
+        lengths=len2,
+        segment_ids=np.array([2, 3, 3], dtype=np.int32),
+        source_positions=np.array([0, 0, 1], dtype=np.int32),
+    )
 
     out = tmp_path / "out.npz"
     _stack_npz([str(a), str(b)], out)
@@ -41,6 +53,10 @@ def test_stack_npz_dynamic(tmp_path: Path):
     with np.load(out, allow_pickle=False) as blob:
         X = blob["X"]
         lengths = blob["lengths"]
+        segment_ids = blob["segment_ids"]
+        source_positions = blob["source_positions"]
 
     assert np.array_equal(X, np.array([1, 2, 3, 4, 5, 6, 7], dtype=np.int32))
     assert np.array_equal(lengths, np.array([2, 2, 1, 2], dtype=np.int32))
+    assert np.array_equal(segment_ids, np.array([0, 0, 1, 1, 2, 3, 3]))
+    assert np.array_equal(source_positions, np.array([0, 1, 0, 1, 0, 0, 1]))
