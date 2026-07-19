@@ -31,11 +31,13 @@ termination_bucket_edges: [0, 3, 10, 30]
 termination_n_classes: 5
 
 use_shape_guidance: true
+unfreeze_encoder: true
 
 batch_size: 8
 grad_accum_steps: 32 
 epochs: 3
 lr: 0.000005
+lr_embedding: 0.0001
 min_lr: 0.0000005
 weight_decay: 0.05
 warmup_steps: 50
@@ -50,8 +52,8 @@ n_buckets: 8
 num_workers: 0
 pin_memory: false
 
-out_dir: "runs/2026-07-15_physical_termination_shape_guided_e3/checkpoints"
-scores_dir: "runs/2026-07-15_physical_termination_shape_guided_e3/scores"
+out_dir: "runs/2026-07-17_physical_termination_shape_guided_unfrozen/checkpoints"
+scores_dir: "runs/2026-07-17_physical_termination_shape_guided_unfrozen/scores"
 
 batch_optimizer:
   enabled: true

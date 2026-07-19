@@ -108,7 +108,7 @@ def ids_to_codons(ids: List[int], itos: List[str]) -> List[str]:
     return [itos[i] if 0 <= i < len(itos) else f"<{i}>" for i in ids]
 
 
-def build_model_from_state(state_dict: Dict, cfg: Dict) -> TinyGPT:
+def build_model_from_state(state_dict: Dict, cfg: Dict, checkpoint: Optional[Dict] = None) -> TinyGPT:
     model = build_codon_model_from_cfg(cfg)
     model.load_state_dict(state_dict, strict=False)
     model.eval()
@@ -118,9 +118,20 @@ def build_model_from_state(state_dict: Dict, cfg: Dict) -> TinyGPT:
         from scripts.train_biophysics_fusion import build_one_hot_lookup
         
         encoder = NucleotideEncoder(d_shape=3)
-        enc_ckpt = Path("runs/biophysics_encoder.pt")
-        if enc_ckpt.exists():
-            encoder.load_state_dict(torch.load(enc_ckpt, map_location="cpu"))
+        loaded = False
+        if checkpoint is not None and isinstance(checkpoint, dict) and "encoder" in checkpoint:
+            print("[biophysics] Loading NucleotideEncoder weights directly from training checkpoint.")
+            encoder.load_state_dict(checkpoint["encoder"])
+            loaded = True
+        else:
+            enc_ckpt = Path("runs/biophysics_encoder.pt")
+            if enc_ckpt.exists():
+                encoder.load_state_dict(torch.load(enc_ckpt, map_location="cpu"))
+                loaded = True
+                
+        if not loaded:
+            print("[warn] No biophysics encoder checkpoint or runs/biophysics_encoder.pt found.")
+            
         encoder.eval()
         
         # Load vocabulary

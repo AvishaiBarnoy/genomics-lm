@@ -608,7 +608,7 @@ def main() -> None:
     ckpt = torch.load(weights_path, map_location=device)
     state_dict = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
     spec = _model_spec_from(meta, ckpt)
-    model = Q.build_model_from_state(state_dict, spec)
+    model = Q.build_model_from_state(state_dict, spec, checkpoint=ckpt)
     cfg = _cfg_from(meta, ckpt)
     itos, stoi = _load_vocab_for_run(run_dir, repo, cfg)
 

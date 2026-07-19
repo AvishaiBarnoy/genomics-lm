@@ -407,7 +407,56 @@ def run_training(cfg: dict, args) -> None:
                 frozen_count += 1
         print(f"[freeze] Backbone frozen: {frozen_count} tensors frozen, {trainable_count} tensors trainable (offset_projs and termination_head)")
 
-    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    # 1. Unfreeze encoder parameters if configured
+    unfreeze_encoder = bool(cfg.get("unfreeze_encoder", False))
+    if use_shape_guidance and encoder is not None:
+        if unfreeze_encoder:
+            print("[biophysics] Unfreezing NucleotideEncoder parameters for joint training.")
+            for p in encoder.parameters():
+                p.requires_grad = True
+        else:
+            print("[biophysics] Keeping NucleotideEncoder parameters frozen.")
+            for p in encoder.parameters():
+                p.requires_grad = False
+
+    # 2. Gather model parameters and partition into learning rate groups
+    embedding_params = []
+    backbone_params = []
+    
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        # Put embeddings, shape projections, and heads in the fast group
+        if "transformer.wte" in name or "shape_proj" in name or "offset_projs" in name or "termination_head" in name:
+            embedding_params.append(param)
+        else:
+            backbone_params.append(param)
+
+    # 3. Add encoder parameters to backbone params (slow learning rate group)
+    if use_shape_guidance and encoder is not None and unfreeze_encoder:
+        backbone_params.extend([p for p in encoder.parameters() if p.requires_grad])
+
+    trainable_params = embedding_params + backbone_params
+
+    # 4. Formulate optimizer parameter groups
+    lr_base = float(cfg.get("lr", 5e-6))
+    lr_embed = float(cfg.get("lr_embedding", lr_base))
+    
+    param_groups = []
+    if embedding_params:
+        param_groups.append({
+            "params": embedding_params,
+            "lr": lr_embed,
+            "weight_decay": 0.0
+        })
+        print(f"[optim] Group 1 (Fast LR: {lr_embed:.1e}): {len(embedding_params)} tensors (embeddings & projections)")
+    if backbone_params:
+        param_groups.append({
+            "params": backbone_params,
+            "lr": lr_base,
+            "weight_decay": float(cfg.get("weight_decay", 0.05))
+        })
+        print(f"[optim] Group 2 (Base LR: {lr_base:.1e}): {len(backbone_params)} tensors (backbone & encoder)")
 
     if cfg.get("optimizer", "adamw").lower() == "adafactor":
         try:
@@ -415,14 +464,12 @@ def run_training(cfg: dict, args) -> None:
         except Exception:
             raise RuntimeError("transformers not installed; pip install transformers to use Adafactor")
         optim = Adafactor(
-            trainable_params,
-            lr=cfg.get("lr", 3e-4),
+            param_groups,
             scale_parameter=False,
             relative_step=False,
-            weight_decay=cfg.get("weight_decay", 0.05),
         )
     else:
-        optim = torch.optim.AdamW(trainable_params, lr=cfg["lr"], weight_decay=cfg["weight_decay"])
+        optim = torch.optim.AdamW(param_groups)
 
     scheduler_name = str(cfg.get("scheduler", "cosine")).lower()
     if scheduler_name not in {"cosine", "plateau"}:
@@ -512,6 +559,12 @@ def run_training(cfg: dict, args) -> None:
             print(f"[resume] loading {resume_path}")
             ckpt_resume = torch.load(resume_path, map_location=device)
             model.load_state_dict(ckpt_resume["model"])
+            if use_shape_guidance and encoder is not None and "encoder" in ckpt_resume:
+                try:
+                    print("[resume] Loading NucleotideEncoder weights directly from training checkpoint.")
+                    encoder.load_state_dict(ckpt_resume["encoder"])
+                except Exception as exc:
+                    print(f"[resume] NucleotideEncoder weights load failed: {exc}")
             if "optimizer" in ckpt_resume:
                 try:
                     optim.load_state_dict(ckpt_resume["optimizer"])
@@ -566,7 +619,7 @@ def run_training(cfg: dict, args) -> None:
             val_term_loss: float | None = None,
             train_replay_term_loss: float | None = None,
         ) -> dict:
-            return {
+            payload = {
                 "model": model.state_dict(),
                 "optimizer": optim.state_dict(),
                 "scheduler": scheduler.state_dict() if scheduler is not None else None,
@@ -592,6 +645,9 @@ def run_training(cfg: dict, args) -> None:
                 "train_examples": int(len(train_ds)),
                 "train_batches": int(len(train_loader)),
             }
+            if use_shape_guidance and encoder is not None:
+                payload["encoder"] = encoder.state_dict()
+            return payload
 
         def save_last_checkpoint(epoch_idx: int, reason: str, **metrics) -> None:
             payload = make_checkpoint_payload(epoch_idx, **metrics)
