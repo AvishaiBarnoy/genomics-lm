@@ -9,9 +9,13 @@ from pathlib import Path
 import argparse
 from Bio import SeqIO
 
+from src.codonlm.codon_tokenize import IUPAC_DNA_BASES
+
 def reverse_complement(s):
     """Computes the reverse complement of a nucleotide sequence."""
-    comp = str.maketrans("ACGTacgtnN","TGCAtgcann")
+    upper = "ACGTRYSWKMBDHVN"
+    complement = "TGCAYRSWMKVHDBN"
+    comp = str.maketrans(upper + upper.lower(), complement + complement.lower())
     return s.translate(comp)[::-1]
 
 
@@ -60,7 +64,7 @@ def main():
                     cds = seq[s:e]
                     if strand == -1:
                         cds = reverse_complement(cds)
-                    if len(cds) >= args.min_len and set(cds) <= set("ACGTN"):
+                    if len(cds) >= args.min_len and set(cds) <= IUPAC_DNA_BASES:
                         ft.write(cds+"\n")
                         meta = [
                             str(idx),

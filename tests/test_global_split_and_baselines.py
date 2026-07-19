@@ -14,6 +14,7 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from scripts.build_global_manifest import resolve_genome_identity
+from src.codonlm.extract_cds_from_genbank import reverse_complement
 
 
 def create_mock_genome(
@@ -23,16 +24,18 @@ def create_mock_genome(
     *,
     record_id: str | None = None,
     cds_count: int = 1,
+    cds_sequence: str | None = None,
 ):
     # Generates a mock genome with a coding sequence
-    seq = "A" * 60 + "ATG" + "GCT" * 40 + "TAA" + "C" * 80
+    cds_sequence = cds_sequence or ("ATG" + "GCT" * 40 + "TAA")
+    seq = "A" * 60 + cds_sequence + "C" * 80
     record = SeqRecord(
         Seq(seq), id=record_id or f"record_{genome_id}", name="test", description="mock"
     )
     record.annotations["molecule_type"] = "DNA"
     record.annotations["organism"] = organism
     cds_start = 60
-    cds_end = 60 + 3 + (40 * 3) + 3
+    cds_end = 60 + len(cds_sequence)
     for cds_idx in range(cds_count):
         record.features.append(
             SeqFeature(
@@ -97,6 +100,10 @@ def test_resolve_genome_identity_prefers_explicit_config(tmp_path):
 
     assert genome_id == "GCF_123456789.1"
     assert source == "config.genome_id"
+
+
+def test_reverse_complement_supports_iupac_ambiguity():
+    assert reverse_complement("ARYN") == "NRYT"
 
 
 def test_resolve_genome_identity_uses_parent_accession_for_generic_filename(tmp_path):
@@ -172,6 +179,58 @@ def test_global_packing_is_deterministic_for_same_seed(tmp_path):
     second_manifest = json.loads(Path(outputs[1]["combined_manifest"]).read_text())
     for key in ("seed", "split_policy", "genome_sources", "packing"):
         assert first_manifest[key] == second_manifest[key]
+
+
+def test_global_builder_fragments_ambiguity_after_source_split(tmp_path):
+    genomes = [tmp_path / f"GCF_00000000{i}.1.gbff" for i in range(3)]
+    create_mock_genome(
+        genomes[0],
+        "0",
+        "Genus0 species",
+        cds_sequence="ATG" + "GCT" * 20 + "NNN" + "GAA" * 20 + "TAA",
+    )
+    for idx, genome in enumerate(genomes[1:], start=1):
+        create_mock_genome(genome, str(idx), f"Genus{idx} species")
+    config = tmp_path / "config.yaml"
+    _write_config(config, genomes, min_fragment_codons=2)
+    run_dir = tmp_path / "run"
+    output_dir = tmp_path / "processed"
+
+    result = _run_global_builder(config, run_dir, output_dir)
+
+    assert result.returncode == 0, result.stderr
+    manifest = json.loads((output_dir / "manifest.json").read_text())
+    policy = manifest["tokenization"]["ambiguous_codon_policy"]
+    assert policy["name"] == "split"
+    assert policy["min_fragment_codons"] == 2
+    assert policy["ambiguous_codons"] == 1
+    assert policy["source_records_with_ambiguity"] == 1
+    assert policy["retained_fragments"] == 4
+    assert policy["discarded_fragments"] == 0
+
+    source_splits = {}
+    with open(output_dir / "cds_meta.tsv") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            source_splits[row["source_id"]] = row["split"]
+
+    with open(output_dir / "cds_fragments.tsv") as handle:
+        fragments = list(csv.DictReader(handle, delimiter="\t"))
+    assert len(fragments) == 4
+    assert all(row["split"] == source_splits[row["source_id"]] for row in fragments)
+    fragment_counts = {
+        source_id: sum(row["source_id"] == source_id for row in fragments)
+        for source_id in source_splits
+    }
+    ambiguous_source = next(
+        source_id for source_id, count in fragment_counts.items() if count == 2
+    )
+    ambiguous_fragments = [
+        row for row in fragments if row["source_id"] == ambiguous_source
+    ]
+    assert [(int(row["codon_start"]), int(row["codon_end"])) for row in ambiguous_fragments] == [
+        (0, 21),
+        (22, 43),
+    ]
 
 
 def test_global_builder_rejects_identity_collisions_across_files(tmp_path):
