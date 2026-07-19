@@ -21,6 +21,21 @@ python -m scripts.query_model <RUN_ID> --mode next --dna ATGAAACCC --topk 5
 streamlit run scripts/web_dashboard.py                # interactive dashboard
 ```
 
+## Development Checks
+
+Run the same core checks required by GitHub Actions:
+
+```bash
+ruff check . --select E9,F63,F7,F82
+pytest -q -m "not slow and not external and not mps" --cov=src --cov=scripts --cov-report=term
+git status --short
+```
+
+The required CPU suite runs on the supported Python 3.11 environment. Tests marked `slow`,
+`external`, or `mps` are opt-in and must not be used to claim CPU CI coverage.
+MPS performance benchmarks must be run manually on Apple Silicon using the
+documented benchmark commands.
+
 ## Downstream Evaluation
 
 ```bash

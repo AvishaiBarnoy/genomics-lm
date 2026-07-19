@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import sys
 import pandas as pd
+import torch
 from pathlib import Path
 
 # Add project root to sys.path to resolve 'src' when running directly with streamlit
@@ -939,7 +940,6 @@ def main():
                         opt_normalize = st.checkbox("Normalize Gradients", value=True)
 
                         if st.button("Optimize Sequence"):
-                            import torch
                             from src.protein_lm.ebm import ProteinLatentEBM
                             from src.protein_lm.sampler import latent_langevin_sample
                             from scripts.generative_design_loop import load_critic, score_with_critic
