@@ -11,7 +11,7 @@ Planned. Full retraining is blocked until Phase 3 is complete.
 - [ ] Keep this plan and issue #92 synchronized when a gate changes status.
 
 ## Phase 2: Correct the Dataset Representation
-- [ ] Split CDS records at ambiguous codons without creating false adjacency; retain
+- [x] Split CDS records at ambiguous codons without creating false adjacency; retain
   source IDs and oriented codon coordinates; report fragment statistics (#80).
 - [ ] Replace suffix truncation with lossless chunks and expose record, chunk,
   coordinate, boundary, and continuation metadata (#78).

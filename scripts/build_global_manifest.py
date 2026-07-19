@@ -29,7 +29,12 @@ import numpy as np
 import yaml
 from Bio import SeqIO
 
-from src.codonlm.codon_tokenize import to_ids, stoi, itos
+from src.codonlm.codon_tokenize import (
+    IUPAC_DNA_BASES,
+    itos,
+    stoi,
+    tokenize_cds_fragments,
+)
 from src.codonlm.extract_cds_from_genbank import reverse_complement, _first_qualifier, _join_qualifier
 
 
@@ -179,6 +184,9 @@ def main() -> None:
     pack_mode = cfg.get("pack_mode", "multi")
     windows_per_seq = int(float(cfg.get("windows_per_seq", 2)))
     min_len = int(cfg.get("min_len", 90))
+    min_fragment_codons = int(cfg.get("min_fragment_codons", 10))
+    if min_fragment_codons < 1:
+        raise SystemExit("[error] min_fragment_codons must be at least 1")
     requested_group_by = args.group_by or str(cfg.get("split_group_by", "genome"))
     if requested_group_by not in {"genome", "genus", "sequence"}:
         raise SystemExit(
@@ -233,7 +241,7 @@ def main() -> None:
             seq = str(rec.seq).upper()
             genus = extract_genus(rec)
             
-            for feat in rec.features:
+            for feature_index, feat in enumerate(rec.features):
                 if feat.type != "CDS":
                     continue
                 s, e = int(feat.location.start), int(feat.location.end)
@@ -242,9 +250,13 @@ def main() -> None:
                 if strand == -1:
                     cds_seq = reverse_complement(cds_seq)
                 
-                if len(cds_seq) >= dataset_min_len and set(cds_seq) <= set("ACGTN"):
+                if len(cds_seq) >= dataset_min_len and set(cds_seq) <= IUPAC_DNA_BASES:
+                    source_id = (
+                        f"{genome_id}:{rec.id}:cds:{s}-{e}:{strand}:{feature_index}"
+                    )
                     all_records.append({
                         "sequence": cds_seq,
+                        "source_id": source_id,
                         "genome": genome_id,
                         "genome_identity_source": identity_source,
                         "genus": genus,
@@ -330,10 +342,53 @@ def main() -> None:
 
     # 4. Tokenization phase
     print("[global-prep] Tokenizing sequences...")
+    fragment_records: List[dict] = []
     token_ids_list: List[List[int]] = []
-    for rec in all_records:
-        tids = to_ids(rec["sequence"])
-        token_ids_list.append(tids)
+    tokenization_counts = {
+        "ambiguous_codons": 0,
+        "source_records_with_ambiguity": 0,
+        "retained_fragments": 0,
+        "discarded_fragments": 0,
+        "partial_trailing_bases": 0,
+    }
+    per_split_counts = {
+        split: {key: 0 for key in tokenization_counts}
+        for split in ("train", "val", "test")
+    }
+    for source_line_idx, rec in enumerate(all_records):
+        result = tokenize_cds_fragments(
+            rec["sequence"],
+            source_id=rec["source_id"],
+            min_fragment_codons=min_fragment_codons,
+        )
+        split_counts = per_split_counts[rec["split"]]
+        tokenization_counts["ambiguous_codons"] += result.ambiguous_codons
+        split_counts["ambiguous_codons"] += result.ambiguous_codons
+        tokenization_counts["discarded_fragments"] += result.discarded_fragments
+        split_counts["discarded_fragments"] += result.discarded_fragments
+        tokenization_counts["partial_trailing_bases"] += result.partial_trailing_bases
+        split_counts["partial_trailing_bases"] += result.partial_trailing_bases
+        if result.source_had_ambiguity:
+            tokenization_counts["source_records_with_ambiguity"] += 1
+            split_counts["source_records_with_ambiguity"] += 1
+        for fragment in result.fragments:
+            token_ids_list.append(fragment.ids)
+            tokenization_counts["retained_fragments"] += 1
+            split_counts["retained_fragments"] += 1
+            fragment_records.append(
+                {
+                    "fragment_line_idx": len(fragment_records),
+                    "source_line_idx": source_line_idx,
+                    "source_id": rec["source_id"],
+                    "split": rec["split"],
+                    "fragment_index": fragment.fragment_index,
+                    "codon_start": fragment.codon_start,
+                    "codon_end": fragment.codon_end,
+                    "base_start": fragment.base_start,
+                    "base_end": fragment.base_end,
+                    "codon_count": fragment.codon_end - fragment.codon_start,
+                }
+            )
 
     # Save global codon ids
     ids_path = out_dir / "codon_ids.txt"
@@ -341,10 +396,28 @@ def main() -> None:
         for tids in token_ids_list:
             f.write(" ".join(str(i) for i in tids) + "\n")
 
+    fragments_path = out_dir / "cds_fragments.tsv"
+    fragment_fields = [
+        "fragment_line_idx",
+        "source_line_idx",
+        "source_id",
+        "split",
+        "fragment_index",
+        "codon_start",
+        "codon_end",
+        "base_start",
+        "base_end",
+        "codon_count",
+    ]
+    with open(fragments_path, "w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fragment_fields, delimiter="\t")
+        writer.writeheader()
+        writer.writerows(fragment_records)
+
     # 5. Packing phase
     splits = {"train": [], "val": [], "test": []}
-    for idx, rec in enumerate(all_records):
-        splits[rec["split"]].append(token_ids_list[idx])
+    for fragment, token_ids in zip(fragment_records, token_ids_list):
+        splits[fragment["split"]].append(token_ids)
 
     def pack_multi(name: str, subset: List[List[int]]) -> Tuple[np.ndarray, np.ndarray]:
         SEP_ID = 3
@@ -495,6 +568,15 @@ def main() -> None:
             "groups_by_split": groups_by_split,
         },
         "genome_sources": genome_sources,
+        "tokenization": {
+            "fragment_metadata": str(fragments_path),
+            "ambiguous_codon_policy": {
+                "name": "split",
+                "min_fragment_codons": min_fragment_codons,
+                **tokenization_counts,
+                "per_split": per_split_counts,
+            },
+        },
         "packing": {
             "mode": pack_mode,
             "block_size": block_size,

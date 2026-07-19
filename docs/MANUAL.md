@@ -51,6 +51,7 @@ You can configure training runs using YAML files under `configs/`. Complete temp
     *   `tie_embeddings`: Share weights between token and output embeddings.
 *   **Data Packing & Masking:**
     *   `pack_mode`: Dataset format, either `single` (one CDS per window) or `multi` (sequences packed).
+    *   `min_fragment_codons`: Minimum retained length for an unambiguous CDS fragment (default `10`). Global preparation splits each source CDS at any full codon containing an IUPAC ambiguous base, assigns every retained fragment the source record's existing split, and records oriented CDS coordinates plus retained/discarded counts in `cds_fragments.tsv` and `manifest.json`. Trailing partial codons are excluded and counted. The single-sequence `to_ids()` API rejects ambiguity instead of deleting it.
     *   `sep_mask_enabled`: Enable attention masking across `<SEP>` boundaries in packed mode.
 *   **Transfer Learning / Resumption / Freezing:**
     *   `transfer_from`: Path to pre-trained weights `.pt` file to initialize model parameters while discarding optimizer state.
