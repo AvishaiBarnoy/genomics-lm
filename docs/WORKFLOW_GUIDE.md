@@ -101,6 +101,22 @@ For every test evaluation, calculate and compare model performance against Unifo
 **Always control for token-identity decodability in shape and classification probes.**
 
 ### Mandatory Workflow
+Regenerate embeddings from the corrected checkpoint before running any probe:
+
+```bash
+python -m scripts.extract_embeddings \
+  --run_dir runs/<RUN_ID> \
+  --fasta data/frozen/test_cds.fasta \
+  --out runs/<RUN_ID>/embeddings/test_causal.npz
+```
+
+Extraction requires the canonical causal `forward_hidden()` model API and the
+run-resolved vocabulary. Shape-guided checkpoints must contain their trained
+shape encoder. The adjacent `.npz.metadata.json` sidecar records checkpoint,
+vocabulary, input, masking, pooling, truncation, and code provenance. Embedding
+files without this sidecar are legacy/unverified and must not be used for
+corrected headline results.
+
 When training linear probes (e.g. for DNA-shape or EC level classification), compare your pretrained embeddings against:
 1. **One-Hot Codon Identity vectors** (proves learning beyond local codon lookup).
 2. **Randomly Initialized Model Embeddings** (proves that the pretraining phase, and not just the neural architecture, is responsible for the representation quality).

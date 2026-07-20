@@ -50,7 +50,7 @@ audits pass. Any later semantic change creates a new dataset version.
 
 ## Phase 5: Freeze Evaluation Instruments
 - [x] Make perplexity baselines storage-format independent and vocabulary safe (#82).
-- [ ] Remove unsafe embedding fallbacks and record causal extraction provenance (#86).
+- [x] Remove unsafe embedding fallbacks and record causal extraction provenance (#86).
 - [ ] Add gene/genome-grouped DNA-shape folds plus one-hot, random-model, 5-mer, and
   7-mer controls (#88).
 - [ ] Add protein-cluster-held-out AMR splits, class reporting, stratified bootstrap,

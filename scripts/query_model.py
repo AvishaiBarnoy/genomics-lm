@@ -108,12 +108,18 @@ def ids_to_codons(ids: List[int], itos: List[str]) -> List[str]:
     return [itos[i] if 0 <= i < len(itos) else f"<{i}>" for i in ids]
 
 
-def build_model_from_state(state_dict: Dict, cfg: Dict, checkpoint: Optional[Dict] = None) -> TinyGPT:
+def build_model_from_state(
+    state_dict: Dict,
+    cfg: Dict,
+    checkpoint: Optional[Dict] = None,
+    *,
+    setup_shape_runtime: bool = True,
+) -> TinyGPT:
     model = build_codon_model_from_cfg(cfg)
     model.load_state_dict(state_dict, strict=False)
     model.eval()
     
-    if getattr(model, "use_shape_guidance", False):
+    if getattr(model, "use_shape_guidance", False) and setup_shape_runtime:
         from src.codonlm.biophysics import NucleotideEncoder
         from scripts.train_biophysics_fusion import build_one_hot_lookup
         
