@@ -24,7 +24,7 @@ import json
 import random
 import re
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List
 import numpy as np
 import yaml
 from Bio import SeqIO
@@ -44,6 +44,7 @@ from src.codonlm.lossless_packing import (
     packed_arrays,
     packing_metadata_rows,
 )
+from src.codonlm.leakage_audit import LeakageAuditError, audit_source_records
 
 
 ASSEMBLY_ACCESSION_RE = re.compile(
@@ -175,6 +176,22 @@ def main() -> None:
         help="Prepared dataset directory (default: data/processed/global/<run-id>).",
     )
     ap.add_argument("--seed", type=int, default=1337)
+    ap.add_argument(
+        "--skip-homology-audit",
+        action="store_true",
+        help="NON-SCIENTIFIC: skip the required MMseqs2 protein-homology audit.",
+    )
+    ap.add_argument(
+        "--allow-cross-split-exact-duplicates",
+        action="store_true",
+        help="NON-SCIENTIFIC: report but do not block cross-split exact CDS duplicates.",
+    )
+    ap.add_argument(
+        "--mmseqs-executable",
+        default="mmseqs",
+        help="MMseqs2 executable used for clustering and nearest-neighbor searches.",
+    )
+    ap.add_argument("--audit-threads", type=int, default=1)
     ap.add_argument("--force", action="store_true", help="Force rebuild")
     args = ap.parse_args()
 
@@ -193,8 +210,14 @@ def main() -> None:
     windows_per_seq = int(float(cfg.get("windows_per_seq", 1)))
     min_len = int(cfg.get("min_len", 90))
     min_fragment_codons = int(cfg.get("min_fragment_codons", 10))
+    min_protein_identity = float(cfg.get("max_cross_split_protein_identity", 0.3))
+    min_homology_coverage = float(cfg.get("min_homology_coverage", 0.8))
     if min_fragment_codons < 1:
         raise SystemExit("[error] min_fragment_codons must be at least 1")
+    if not (0.0 < min_protein_identity <= 1.0):
+        raise SystemExit("[error] max_cross_split_protein_identity must be in (0, 1]")
+    if not (0.0 < min_homology_coverage <= 1.0):
+        raise SystemExit("[error] min_homology_coverage must be in (0, 1]")
     requested_group_by = args.group_by or str(cfg.get("split_group_by", "genome"))
     if requested_group_by not in {"genome", "genus", "sequence"}:
         raise SystemExit(
@@ -323,6 +346,30 @@ def main() -> None:
         else Path("data/processed/global") / args.run_id
     )
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    audit_path = out_dir / "leakage_audit.json"
+    if args.skip_homology_audit:
+        print(
+            "[global-prep] NON-SCIENTIFIC: MMseqs2 protein-homology audit was explicitly skipped."
+        )
+    if args.allow_cross_split_exact_duplicates:
+        print(
+            "[global-prep] NON-SCIENTIFIC: cross-split exact CDS duplicates are allowed."
+        )
+    try:
+        leakage_report = audit_source_records(
+            all_records,
+            audit_path,
+            min_protein_identity=min_protein_identity,
+            min_coverage=min_homology_coverage,
+            threads=args.audit_threads,
+            executable=args.mmseqs_executable,
+            skip_homology=args.skip_homology_audit,
+            allow_exact_duplicates=args.allow_cross_split_exact_duplicates,
+        )
+    except LeakageAuditError as exc:
+        raise SystemExit(f"[error] {exc}; see {audit_path}") from exc
+    print(f"[global-prep] Leakage audit passed: {audit_path}")
     
     meta_path = out_dir / "cds_meta.tsv"
     dna_path = out_dir / "cds_dna.txt"
@@ -522,7 +569,11 @@ def main() -> None:
             "requested_group_by": requested_group_by,
             "effective_group_by": effective_group_by,
             "allow_sequence_split": bool(args.allow_sequence_split),
-            "scientific_valid": effective_group_by != "sequence",
+            "scientific_valid": (
+                effective_group_by != "sequence"
+                and not args.skip_homology_audit
+                and not args.allow_cross_split_exact_duplicates
+            ),
             "requested_fractions": {"val": val_frac, "test": test_frac},
             "achieved_record_fractions": achieved_fractions,
             "record_counts": counts,
@@ -530,6 +581,13 @@ def main() -> None:
             "groups_by_split": groups_by_split,
         },
         "genome_sources": genome_sources,
+        "leakage_audit": {
+            "report": str(audit_path),
+            "status": leakage_report["status"],
+            "homology_audit_skipped": args.skip_homology_audit,
+            "exact_duplicate_override": args.allow_cross_split_exact_duplicates,
+            "thresholds": leakage_report["thresholds"],
+        },
         "tokenization": {
             "fragment_metadata": str(fragments_path),
             "ambiguous_codon_policy": {

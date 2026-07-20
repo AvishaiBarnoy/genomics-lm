@@ -9,6 +9,7 @@ from scripts.eval_generation_prefix import (
     _ngram_repeat_ratio,
     _score_stop_behavior,
     _select_device,
+    _training_match_coverage,
 )
 
 
@@ -17,6 +18,13 @@ def test_ngram_repeat_ratio_simple():
     r = _ngram_repeat_ratio(seq, n=3)
     # two 3-grams repeated once each over 4 total grams: uniq=2, total=4 => repeat ratio=1-2/4=0.5
     assert abs(r - 0.5) < 1e-6
+
+
+def test_training_match_coverage_counts_covered_positions():
+    tokens = [1, 2, 3, 4, 5, 6]
+    training = {(1, 2, 3), (3, 4, 5)}
+
+    assert _training_match_coverage(tokens, 3, training) == 5 / 6
 
 
 def test_codon_to_aa_mapping():
@@ -197,4 +205,3 @@ def test_eval_generation_prefix_end_to_end(tmp_path):
     finally:
         if test_run_dir.exists():
             shutil.rmtree(test_run_dir)
-

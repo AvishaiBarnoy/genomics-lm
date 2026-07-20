@@ -16,12 +16,40 @@ This guide establishes the mandatory scientific and engineering workflow for dev
    python -m scripts.build_global_manifest --config configs/tiny_mps.yaml --run-id <RUN_ID> --run-dir runs/<RUN_ID> --group-by genome
    ```
 
-   Scientific preparation fails when fewer than three groups are available.
+   Scientific preparation requires MMseqs2 on `PATH`. Before tokenization or
+   packing, the builder hashes normalized full CDS records, clusters translated
+   proteins, and searches validation/test records against training at both the
+   nucleotide and protein levels. It writes commands, the MMseqs2 version,
+   thresholds, identity summaries, and offending source IDs to
+   `leakage_audit.json`. Cross-split exact CDS duplicates or protein clusters are
+   fatal.
+
+   The default protein-cluster gate uses 30% sequence identity and 80% coverage.
+   Override those recorded thresholds with `max_cross_split_protein_identity` and
+   `min_homology_coverage` in the run config. `--skip-homology-audit` and
+   `--allow-cross-split-exact-duplicates` exist only for fixtures and legacy
+   reproduction; either marks the resulting manifest as non-scientific.
+
+   Scientific preparation also fails when fewer than three groups are available.
    `--allow-sequence-split` is an explicit development-only escape hatch and marks
    the resulting manifest as non-scientific. The older
    `scripts.pipeline_prepare` route is disabled unless
    `--allow-legacy-per-dataset-split` is supplied for historical reproduction.
 3. Verify that the output splits contain mutually exclusive genome sets by inspecting the generated `data/processed/global/<RUN_ID>/cds_meta.tsv`.
+
+Generated CDS claims require a separate novelty report against the frozen training
+source records:
+
+```bash
+python -m scripts.audit_generated_sequences \
+  --train-fasta data/frozen/train_cds.fasta \
+  --generated-fasta runs/<RUN_ID>/generated.fasta \
+  --output runs/<RUN_ID>/scores/generated_leakage_audit.json
+```
+
+This records the nearest nucleotide and protein training neighbor for every
+generated sequence and reports position coverage by exact 30-nt and 10-aa
+training substrings.
 
 ---
 

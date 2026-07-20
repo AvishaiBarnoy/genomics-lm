@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import os
 import subprocess
@@ -29,7 +30,13 @@ def create_mock_genome(
     cds_sequence: str | None = None,
 ):
     # Generates a mock genome with a coding sequence
-    cds_sequence = cds_sequence or ("ATG" + "GCT" * 40 + "TAA")
+    if cds_sequence is None:
+        digest = hashlib.sha256(genome_id.encode()).digest()
+        alanine_codons = ("GCT", "GCC", "GCA", "GCG")
+        cds_sequence = "ATG" + "".join(
+            alanine_codons[digest[index % len(digest)] % len(alanine_codons)]
+            for index in range(40)
+        ) + "TAA"
     seq = "A" * 60 + cds_sequence + "C" * 80
     record = SeqRecord(
         Seq(seq), id=record_id or f"record_{genome_id}", name="test", description="mock"
@@ -54,7 +61,9 @@ def _run_global_builder(
     run_dir: Path,
     output_dir: Path,
     *extra_args: str,
+    skip_homology: bool = True,
 ) -> subprocess.CompletedProcess[str]:
+    audit_args = ["--skip-homology-audit"] if skip_homology else []
     return subprocess.run(
         [
             "python",
@@ -70,6 +79,7 @@ def _run_global_builder(
             str(output_dir),
             "--group-by",
             "genome",
+            *audit_args,
             *extra_args,
         ],
         capture_output=True,
@@ -146,6 +156,7 @@ def test_sequence_fallback_requires_explicit_flag_and_is_marked_non_scientific(t
         run_dir,
         tmp_path / "processed",
         "--allow-sequence-split",
+        "--allow-cross-split-exact-duplicates",
     )
 
     assert result.returncode == 0, result.stderr
@@ -263,12 +274,19 @@ def test_global_dynamic_packing_keeps_starts_ends_and_all_transitions(tmp_path):
     result = _run_global_builder(config, run_dir, output_dir)
 
     assert result.returncode == 0, result.stderr
-    expected = to_ids("ATG" + "GCT" * 40 + "TAA")
+    sequences_by_split = {}
+    with open(output_dir / "cds_meta.tsv") as metadata, open(
+        output_dir / "cds_dna.txt"
+    ) as dna:
+        for row, sequence in zip(csv.DictReader(metadata, delimiter="\t"), dna):
+            sequences_by_split[row["split"]] = to_ids(sequence.strip())
     for split in ("train", "val", "test"):
         chunks = _dynamic_sequences(output_dir / f"{split}_bs8.npz")
         assert chunks[0][0] == stoi["<BOS_CDS>"]
         assert chunks[-1][-1] == stoi["<EOS_CDS>"]
-        assert _transition_counts(chunks) == _transition_counts([expected])
+        assert _transition_counts(chunks) == _transition_counts(
+            [sequences_by_split[split]]
+        )
         with open(output_dir / f"{split}_packing.tsv") as handle:
             spans = list(csv.DictReader(handle, delimiter="\t"))
         assert spans[0]["continues_from_previous"] == "0"
@@ -321,6 +339,65 @@ def test_global_builder_rejects_identity_collisions_across_files(tmp_path):
 
     assert result.returncode != 0
     assert "Genome identity collision" in (result.stderr + result.stdout)
+
+
+def test_global_builder_blocks_cross_split_exact_cds(tmp_path):
+    genomes = [tmp_path / f"GCF_00000000{i}.1.gbff" for i in range(3)]
+    duplicate = "ATG" + "GCT" * 40 + "TAA"
+    create_mock_genome(genomes[0], "0", "Genus0 species", cds_sequence=duplicate)
+    create_mock_genome(genomes[1], "1", "Genus1 species", cds_sequence=duplicate)
+    create_mock_genome(
+        genomes[2],
+        "2",
+        "Genus2 species",
+        cds_sequence="ATG" + "AAA" * 40 + "TAA",
+    )
+    config = tmp_path / "config.yaml"
+    _write_config(config, genomes)
+    output_dir = tmp_path / "processed"
+
+    result = _run_global_builder(config, tmp_path / "run", output_dir)
+
+    assert result.returncode != 0
+    report = json.loads((output_dir / "leakage_audit.json").read_text())
+    assert report["status"] == "failed"
+    assert report["exact_duplicates"]["count"] == 1
+    assert report["blocking_reasons"] == ["cross_split_exact_duplicates"]
+
+
+def test_global_builder_blocks_cross_split_protein_clusters(tmp_path):
+    from tests.test_leakage_audit import _write_fake_mmseqs
+
+    genomes = [tmp_path / f"GCF_00000000{i}.1.gbff" for i in range(3)]
+    create_mock_genome(
+        genomes[0], "0", "Genus0 species", cds_sequence="ATG" + "GCT" * 40 + "TAA"
+    )
+    create_mock_genome(
+        genomes[1], "1", "Genus1 species", cds_sequence="ATG" + "GCC" * 40 + "TAA"
+    )
+    create_mock_genome(
+        genomes[2], "2", "Genus2 species", cds_sequence="ATG" + "AAA" * 40 + "TAA"
+    )
+    config = tmp_path / "config.yaml"
+    _write_config(config, genomes)
+    executable = tmp_path / "mmseqs"
+    _write_fake_mmseqs(executable)
+    output_dir = tmp_path / "processed"
+
+    result = _run_global_builder(
+        config,
+        tmp_path / "run",
+        output_dir,
+        "--mmseqs-executable",
+        str(executable),
+        skip_homology=False,
+    )
+
+    assert result.returncode != 0
+    report = json.loads((output_dir / "leakage_audit.json").read_text())
+    assert report["status"] == "failed"
+    assert report["protein_homology"]["cross_split_cluster_count"] == 1
+    assert report["protein_homology"]["tool"]["version"] == "fake-mmseqs-1.0"
 
 def test_global_split_and_baselines_end_to_end(tmp_path):
     # Create 3 distinct genomes/gbff files

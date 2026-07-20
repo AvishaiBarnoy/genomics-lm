@@ -8,6 +8,7 @@ dependencies:
   - pandas
   - numpy<2
   - biopython
+  - mmseqs2
   - scikit-learn
   - pyyaml
   - tqdm
