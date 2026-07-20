@@ -65,6 +65,7 @@ warmup_steps: 100           # Number of linear warmup steps for the learning rat
 # ---------------------------------------------------------------------
 batch_size: 4               # Physical batch size per GPU/device step
 grad_accum_steps: 16        # Gradient accumulation steps (Simulates Batch Size = batch_size * grad_accum_steps)
+max_nonfinite_accumulation_groups: 3 # Abort corrupt groups; fail when more than this many have occurred (0 = immediate, -1 = unlimited)
 epochs: 10                  # Total training epochs
 early_stop_patience: 3      # Stop training if validation loss does not improve for this many epochs
 max_time_minutes: 360       # Bounded wall-time limit. Saves checkpoint and exits gracefully if limit is reached mid-epoch

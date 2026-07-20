@@ -67,6 +67,7 @@ You can configure training runs using YAML files under `configs/`. Complete temp
 *   **Training Loops:**
     *   `batch_size`: Physical batch size per device step.
     *   `grad_accum_steps`: Accumulate gradients over this many steps to simulate large batch sizes.
+    *   `max_nonfinite_accumulation_groups`: Maximum number of training accumulation groups that may be aborted after a non-finite loss (default `3`). `0` fails on the first group; `-1` explicitly disables the limit. An abort clears all active gradients, discards the incomplete group, does not advance optimizer or scheduler steps, and is recorded in checkpoints and run metrics.
     *   `early_stop_patience`: Stop training after this many epochs without validation loss improvements.
     *   `max_time_minutes`: Limit training run duration. Saves checkpoint and exits gracefully if exceeded.
     *   `batch_optimizer`: Optional section for benchmarking `batch_size` / `grad_accum_steps` candidates before a long run.
