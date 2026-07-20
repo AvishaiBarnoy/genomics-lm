@@ -37,6 +37,15 @@ This guide establishes the mandatory scientific and engineering workflow for dev
    `--allow-legacy-per-dataset-split` is supplied for historical reproduction.
 3. Verify that the output splits contain mutually exclusive genome sets by inspecting the generated `data/processed/global/<RUN_ID>/cds_meta.tsv`.
 
+4. Validate the content-addressed dataset contract before any scientific run:
+   ```bash
+   python -m scripts.validate_dataset_manifest \
+     data/processed/global/<RUN_ID>/manifest.json
+   ```
+   See [`DATASET_MANIFEST.md`](DATASET_MANIFEST.md) for schema and compatibility
+   rules. A missing manifest is legacy/unverified; a present but invalid manifest
+   is fatal.
+
 Generated CDS claims require a separate novelty report against the frozen training
 source records:
 
@@ -128,7 +137,8 @@ folds, and centered local-sequence controls:
 python -m scripts.eval_shape_baselines \
   --run_dir runs/<RUN_ID> --ckpt best.pt \
   --test_npz data/processed/global/<DATASET_ID>/test_bs256.npz \
-  --packing-metadata data/processed/global/<DATASET_ID>/test_packing_metadata.tsv \
+  --manifest data/processed/global/<DATASET_ID>/manifest.json \
+  --packing-metadata data/processed/global/<DATASET_ID>/test_packing.tsv \
   --cds-metadata data/processed/global/<DATASET_ID>/cds_meta.tsv \
   --group-by genome --output-prefix runs/<RUN_ID>/scores/shape_genome_grouped
 ```

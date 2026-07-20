@@ -190,6 +190,7 @@ def test_global_packing_is_deterministic_for_same_seed(tmp_path):
 
     first_manifest = json.loads(Path(outputs[0]["combined_manifest"]).read_text())
     second_manifest = json.loads(Path(outputs[1]["combined_manifest"]).read_text())
+    assert first_manifest["dataset"]["id"] == second_manifest["dataset"]["id"]
     for key in ("seed", "split_policy", "genome_sources", "packing"):
         assert first_manifest[key] == second_manifest[key]
 
@@ -213,6 +214,12 @@ def test_global_builder_fragments_ambiguity_after_source_split(tmp_path):
 
     assert result.returncode == 0, result.stderr
     manifest = json.loads((output_dir / "manifest.json").read_text())
+    assert manifest["schema"] == {"name": "codonlm_dataset_manifest", "version": 1}
+    assert len(manifest["dataset"]["id"]) == 64
+    assert manifest["dataset"]["scientific_valid"] is False
+    assert set(manifest["artifacts"]) >= {
+        "train_tokens", "val_tokens", "test_tokens", "vocabulary", "leakage_audit"
+    }
     policy = manifest["tokenization"]["ambiguous_codon_policy"]
     assert policy["name"] == "split"
     assert policy["min_fragment_codons"] == 2
@@ -464,6 +471,8 @@ def test_global_split_and_baselines_end_to_end(tmp_path):
         str(train_npz),
         "--test_npz",
         str(test_npz),
+        "--manifest",
+        str(output_dir / "manifest.json"),
     ]
     
     res_baselines = subprocess.run(cmd_baselines, capture_output=True, text=True)

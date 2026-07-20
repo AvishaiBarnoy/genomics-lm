@@ -13,6 +13,11 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from src.codonlm.model_tiny_gpt import TinyGPT
+from src.codonlm.dataset_manifest import (
+    discover_manifest,
+    load_dataset_manifest,
+    manifest_artifact_path,
+)
 from src.codonlm.data_loading import (
     build_codon_lm_dataloaders,
     build_codon_lm_datasets,
@@ -144,6 +149,40 @@ def run_training(cfg: dict, args) -> None:
     cfg["train_npz"] = train_paths
     cfg["val_npz"] = val_paths
     cfg["test_npz"] = test_paths
+
+    manifest_value = cfg.get("dataset_manifest")
+    if isinstance(manifest_value, dict):
+        manifest_value = manifest_value.get("path")
+    manifest_path = (
+        Path(manifest_value).expanduser().resolve()
+        if manifest_value
+        else discover_manifest([*train_paths, *val_paths, *test_paths])
+    )
+    if manifest_path is not None:
+        dataset_manifest = load_dataset_manifest(manifest_path)
+        for split, selected in (
+            ("train", train_paths), ("val", val_paths), ("test", test_paths)
+        ):
+            declared = manifest_artifact_path(
+                dataset_manifest, manifest_path, f"{split}_tokens"
+            ).resolve()
+            resolved_selected = [Path(path).expanduser().resolve() for path in selected]
+            if resolved_selected != [declared]:
+                raise ValueError(
+                    f"{split} dataset paths do not match manifest {manifest_path}: "
+                    f"selected={resolved_selected}, declared={declared}"
+                )
+        cfg["dataset_manifest"] = {
+            "path": str(manifest_path),
+            "dataset_id": dataset_manifest["dataset"]["id"],
+            "scientific_valid": dataset_manifest["dataset"]["scientific_valid"],
+            "schema": dataset_manifest["schema"],
+        }
+    else:
+        cfg["dataset_manifest"] = {
+            "status": "legacy_unverified",
+            "scientific_valid": False,
+        }
 
     configured_vocab_size = cfg.get("vocab_size")
     vocabulary_contract = resolve_vocabulary_contract(

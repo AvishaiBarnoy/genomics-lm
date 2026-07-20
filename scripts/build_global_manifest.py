@@ -45,6 +45,14 @@ from src.codonlm.lossless_packing import (
     packed_arrays,
     packing_metadata_rows,
 )
+from src.codonlm.dataset_manifest import (
+    SCHEMA_NAME,
+    SCHEMA_VERSION,
+    artifact_entry,
+    file_sha256,
+    finalize_manifest,
+    validate_dataset_manifest,
+)
 from src.codonlm.leakage_audit import LeakageAuditError, audit_source_records
 
 
@@ -262,7 +270,12 @@ def main() -> None:
                 )
             genome_sources.setdefault(
                 genome_id,
-                {"gbff": resolved_path, "identity_source": identity_source},
+                {
+                    "gbff": resolved_path,
+                    "identity_source": identity_source,
+                    "sha256": file_sha256(gbff_path),
+                    "bytes": gbff_path.stat().st_size,
+                },
             )
             if genome_id not in announced_genomes:
                 print(
@@ -560,7 +573,35 @@ def main() -> None:
             split: len(groups) for split, groups in split_groups.items()
         }
 
+    scientific_valid = (
+        effective_group_by != "sequence"
+        and not args.skip_homology_audit
+        and not args.allow_cross_split_exact_duplicates
+    )
+    artifacts = {
+        "train_tokens": artifact_entry(out_paths["train"], out_dir, "train_tokens"),
+        "val_tokens": artifact_entry(out_paths["val"], out_dir, "val_tokens"),
+        "test_tokens": artifact_entry(out_paths["test"], out_dir, "test_tokens"),
+        "vocabulary": artifact_entry(itos_path, out_dir, "vocabulary"),
+        "vocabulary_map": artifact_entry(vocab_path, out_dir, "vocabulary_map"),
+        "source_metadata": artifact_entry(meta_path, out_dir, "source_metadata"),
+        "source_dna": artifact_entry(dna_path, out_dir, "source_dna"),
+        "token_ids": artifact_entry(ids_path, out_dir, "token_ids"),
+        "fragment_metadata": artifact_entry(fragments_path, out_dir, "fragment_metadata"),
+        "leakage_audit": artifact_entry(audit_path, out_dir, "leakage_audit"),
+    }
+    for split in ("train", "val", "test"):
+        artifacts[f"{split}_packing_metadata"] = artifact_entry(
+            out_dir / packing_metadata_paths[split], out_dir, f"{split}_packing_metadata"
+        )
+
     manifest = {
+        "schema": {"name": SCHEMA_NAME, "version": SCHEMA_VERSION},
+        "dataset": {
+            "id": "pending",
+            "scientific_valid": scientific_valid,
+            "source_record_count": total_seqs,
+        },
         "train": str(out_paths["train"]),
         "val": str(out_paths["val"]),
         "test": str(out_paths["test"]),
@@ -582,22 +623,35 @@ def main() -> None:
             "groups_by_split": groups_by_split,
         },
         "genome_sources": genome_sources,
+        "sources": {
+            genome: {
+                "path": source["gbff"],
+                "sha256": source["sha256"],
+                "bytes": source["bytes"],
+                "identity_source": source["identity_source"],
+            }
+            for genome, source in sorted(genome_sources.items())
+        },
         "vocabulary": {
             "schema_version": 1,
             "itos_path": str(itos_path),
             "sha256": hashlib.sha256(itos_path.read_bytes()).hexdigest(),
             "size": len(itos),
             "token_ids_contiguous": sorted(itos) == list(range(len(itos))),
+            "special_tokens": {
+                token: stoi[token]
+                for token in ("<PAD>", "<BOS_CDS>", "<EOS_CDS>", "<SEP>")
+            },
         },
         "leakage_audit": {
-            "report": str(audit_path),
+            "artifact": "leakage_audit",
             "status": leakage_report["status"],
             "homology_audit_skipped": args.skip_homology_audit,
             "exact_duplicate_override": args.allow_cross_split_exact_duplicates,
             "thresholds": leakage_report["thresholds"],
         },
         "tokenization": {
-            "fragment_metadata": str(fragments_path),
+            "fragment_metadata_artifact": "fragment_metadata",
             "ambiguous_codon_policy": {
                 "name": "split",
                 "min_fragment_codons": min_fragment_codons,
@@ -614,17 +668,31 @@ def main() -> None:
             "transition_policy": "exactly_once",
             "legacy_windows_per_seq_ignored": windows_per_seq,
             "seed": args.seed,
-            "metadata": packing_metadata_paths,
+            "metadata": {
+                split: f"{split}_packing_metadata" for split in ("train", "val", "test")
+            },
             "window_counts": packed_window_counts,
             "chunk_counts": packed_chunk_counts,
         },
+        "artifacts": artifacts,
+        "reproducibility": {
+            "split_seed": args.seed,
+            "packing_seed": args.seed,
+            "deterministic_packing": True,
+        },
     }
-    
+    manifest = finalize_manifest(manifest)
     manifest_json_path = out_dir / "manifest.json"
+    validate_dataset_manifest(manifest, manifest_json_path, verify_artifacts=True)
     manifest_json_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))
-    (run_dir / "combined_manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True)
-    )
+    run_manifest = json.loads(json.dumps(manifest))
+    for entry in run_manifest["artifacts"].values():
+        artifact_path = Path(entry["path"])
+        if not artifact_path.is_absolute():
+            entry["path"] = str((out_dir / artifact_path).resolve())
+    run_manifest_path = run_dir / "combined_manifest.json"
+    validate_dataset_manifest(run_manifest, run_manifest_path, verify_artifacts=True)
+    run_manifest_path.write_text(json.dumps(run_manifest, indent=2, sort_keys=True))
     
     pipeline_prepare_json = {
         "train_npz": str(out_paths["train"]),
@@ -633,6 +701,8 @@ def main() -> None:
         "primary_dna": str(dna_path),
         "combined_manifest": str(manifest_json_path),
         "itos_path": str(itos_path),
+        "dataset_id": manifest["dataset"]["id"],
+        "dataset_schema": manifest["schema"],
     }
     
     result_path = run_dir / "pipeline_prepare.json"

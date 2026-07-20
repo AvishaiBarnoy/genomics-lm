@@ -19,6 +19,7 @@ from sklearn.metrics import r2_score
 
 from scripts._shared import build_model, load_model, load_token_list, resolve_run
 from scripts.probe_structural_awareness import get_theoretical_shape
+from src.codonlm.dataset_manifest import load_dataset_manifest, manifest_artifact_path
 
 PROPERTIES = (
     "MGW", "Roll", "EP", "ProT", "HelT", "Slide", "Rise", "Shift", "Tilt",
@@ -200,6 +201,7 @@ def main():
     parser.add_argument("--run_dir")
     parser.add_argument("--ckpt", default="best.pt")
     parser.add_argument("--test_npz", required=True)
+    parser.add_argument("--manifest", type=Path)
     parser.add_argument("--packing-metadata", required=True, type=Path)
     parser.add_argument("--cds-metadata", type=Path)
     parser.add_argument("--group-by", choices=("window", "gene", "genome"), default="gene")
@@ -211,6 +213,29 @@ def main():
     if args.group_by == "genome" and args.cds_metadata is None:
         parser.error("--cds-metadata is required for --group-by genome")
     run_id, run_dir = resolve_run(args.run_id, args.run_dir)
+    manifest_provenance = {"status": "legacy_unverified"}
+    if args.manifest is not None:
+        manifest = load_dataset_manifest(args.manifest)
+        expected = {
+            "test_tokens": Path(args.test_npz),
+            "test_packing_metadata": args.packing_metadata,
+        }
+        if args.cds_metadata is not None:
+            expected["source_metadata"] = args.cds_metadata
+        for artifact_name, selected in expected.items():
+            declared = manifest_artifact_path(
+                manifest, args.manifest.resolve(), artifact_name
+            ).resolve()
+            if selected.resolve() != declared:
+                raise ValueError(
+                    f"{artifact_name} {selected.resolve()} does not match manifest {declared}"
+                )
+        manifest_provenance = {
+            "path": str(args.manifest.resolve()),
+            "dataset_id": manifest["dataset"]["id"],
+            "scientific_valid": manifest["dataset"]["scientific_valid"],
+            "schema": manifest["schema"],
+        }
     tokens = load_token_list(run_dir)
     pretrained, spec = load_model(run_dir, ckpt_name=args.ckpt)
     random_model = build_model(spec).eval()
@@ -228,6 +253,7 @@ def main():
     results, aggregate, paired = evaluate(features, targets, folds)
     report = {
         "schema_version": 1, "run_id": run_id, "seed": args.seed,
+        "dataset_manifest": manifest_provenance,
         "group_by": args.group_by, "n_splits": args.n_splits,
         "dataset": {"path": str(test_path.resolve()), "sha256": _sha256(test_path)},
         "checkpoint": {"path": str(checkpoint_path.resolve()), "sha256": _sha256(checkpoint_path)},

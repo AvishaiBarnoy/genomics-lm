@@ -13,6 +13,7 @@ from pathlib import Path
 import numpy as np
 
 from src.codonlm.data_loading import MmapPackedDataset
+from src.codonlm.dataset_manifest import load_dataset_manifest, manifest_artifact_path
 from src.codonlm.training.vocabulary import resolve_vocabulary_contract
 
 PAD_ID = 0
@@ -140,6 +141,23 @@ def main() -> None:
     parser.add_argument("--output-prefix", type=Path)
     args = parser.parse_args()
     train, test = Path(args.train), Path(args.test)
+    manifest_provenance = {"status": "legacy_unverified"}
+    if args.manifest is not None:
+        manifest = load_dataset_manifest(args.manifest)
+        for split, selected in (("train", train), ("test", test)):
+            declared = manifest_artifact_path(
+                manifest, args.manifest.resolve(), f"{split}_tokens"
+            ).resolve()
+            if selected.resolve() != declared:
+                raise ValueError(
+                    f"{split} dataset {selected.resolve()} does not match manifest artifact {declared}"
+                )
+        manifest_provenance = {
+            "path": str(args.manifest.resolve()),
+            "dataset_id": manifest["dataset"]["id"],
+            "scientific_valid": manifest["dataset"]["scientific_valid"],
+            "schema": manifest["schema"],
+        }
     contract = resolve_vocabulary_contract(
         [train, test], configured_path=args.itos, configured_size=None
     )
@@ -155,6 +173,7 @@ def main() -> None:
             for name, path in (("manifest", args.manifest), ("config", args.config))
             if path is not None
         },
+        "dataset_manifest": manifest_provenance,
         "vocabulary": contract.provenance(),
         "smoothing": {"method": "additive", "alpha": args.alpha},
         "evaluated_tokens": tokens,
