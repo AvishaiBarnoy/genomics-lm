@@ -2,7 +2,8 @@
 # Minimal toy config for NoProp CPU verification
 
 # Model Architecture
-vocab_size: 69
+vocab_size: 68
+itos_path: "data/processed/itos_codon.txt"
 block_size: 512
 n_layer: 2
 n_head: 2

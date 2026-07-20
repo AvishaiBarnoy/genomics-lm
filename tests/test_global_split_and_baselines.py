@@ -16,7 +16,7 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from scripts.build_global_manifest import resolve_genome_identity
-from src.codonlm.codon_tokenize import stoi, to_ids
+from src.codonlm.codon_tokenize import itos, stoi, to_ids
 from src.codonlm.extract_cds_from_genbank import reverse_complement
 
 
@@ -428,10 +428,14 @@ def test_global_split_and_baselines_end_to_end(tmp_path):
     train_npz = Path(pipeline_data["train_npz"])
     val_npz = Path(pipeline_data["val_npz"])
     test_npz = Path(pipeline_data["test_npz"])
+    assert Path(pipeline_data["itos_path"]) == output_dir / "itos.txt"
     
     assert train_npz.exists()
     assert val_npz.exists()
     assert test_npz.exists()
+    manifest = json.loads((output_dir / "manifest.json").read_text())
+    assert manifest["vocabulary"]["size"] == len(itos)
+    assert manifest["vocabulary"]["token_ids_contiguous"] is True
     
     # Verify metadata and ensure zero genomic leakage (each split must have mutually exclusive genomes)
     meta_tsv = output_dir / "cds_meta.tsv"

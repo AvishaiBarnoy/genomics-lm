@@ -1,7 +1,7 @@
 # Configuration for the Non-Linear Offset MLP Heads with Backbone Freezing.
 # Freezes the pre-trained transformer layers and next-token head, and trains 2-layer MLP projections.
 
-vocab_size: 69
+vocab_size: 68
 block_size: 512
 n_layer: 10
 n_head: 8

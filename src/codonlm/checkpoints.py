@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Mapping
+import hashlib
 
 import torch
 
@@ -61,15 +62,47 @@ def load_codon_model(
     ckpt_name: str = "best.pt",
 ) -> tuple[TinyGPT, dict, Path]:
     state_dict, cfg, ckpt_path = load_codon_checkpoint(run_dir, ckpt_name=ckpt_name)
-    # Dynamically resolve vocabulary size to prevent configuration mismatches
+    configured_size = cfg.get("vocab_size")
+    itos_path = Path(run_dir) / "itos.txt"
+    artifact_tokens = (
+        [line.strip() for line in itos_path.read_text().splitlines()]
+        if itos_path.exists()
+        else []
+    )
+    artifact_size = len(artifact_tokens) if artifact_tokens else None
+    embedding_rows = None
     if "tok_emb.weight" in state_dict:
-        cfg["vocab_size"] = state_dict["tok_emb.weight"].shape[0]
-    else:
-        itos_path = Path(run_dir) / "itos.txt"
-        if itos_path.exists():
-            tokens = [line.strip() for line in itos_path.read_text().splitlines() if line.strip()]
-            if tokens:
-                cfg["vocab_size"] = len(tokens)
+        embedding_rows = int(state_dict["tok_emb.weight"].shape[0])
+        cfg["vocab_size"] = embedding_rows
+    elif artifact_size is not None:
+        cfg["vocab_size"] = artifact_size
+    output_rows = (
+        int(state_dict["head.weight"].shape[0])
+        if "head.weight" in state_dict
+        else None
+    )
+    if embedding_rows is not None and output_rows is not None and embedding_rows != output_rows:
+        raise RuntimeError(
+            f"Legacy checkpoint has incompatible embedding rows={embedding_rows} "
+            f"and output rows={output_rows}: {ckpt_path}"
+        )
+    cfg["vocabulary_compatibility"] = {
+        "mode": "legacy_checkpoint_inference",
+        "configured_size": configured_size,
+        "embedding_rows": embedding_rows,
+        "output_rows": output_rows,
+        "artifact_path": str(itos_path) if itos_path.exists() else None,
+        "artifact_size": artifact_size,
+        "artifact_sha256": (
+            hashlib.sha256(itos_path.read_bytes()).hexdigest()
+            if itos_path.exists()
+            else None
+        ),
+        "legacy_adaptation": any(
+            value is not None and value != cfg["vocab_size"]
+            for value in (configured_size, artifact_size)
+        ),
+    }
     model = build_codon_model_from_cfg(cfg)
     model.load_state_dict(state_dict, strict=False)
     model.to(device)

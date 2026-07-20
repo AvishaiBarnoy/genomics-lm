@@ -40,6 +40,9 @@ def _config(tmp_path, *, max_nonfinite_groups: int) -> dict:
 
 
 def _write_inputs(tmp_path, config: dict):
+    itos_path = tmp_path / "itos.txt"
+    itos_path.write_text("\n".join(f"token_{index}" for index in range(69)) + "\n")
+    config["itos_path"] = str(itos_path)
     config_path = tmp_path / "config.yaml"
     config_path.write_text(yaml.safe_dump(config))
     x_train = np.ones((5, 4), dtype=np.int32)
@@ -106,6 +109,10 @@ def test_nonfinite_abort_checkpoint_and_resume_preserve_step_counters(
         "aborted_groups": 1,
         "discarded_finite_microbatches": 1,
     }
+    assert checkpoint["cfg"]["vocabulary"]["size"] == 69
+    assert checkpoint["cfg"]["vocabulary"]["legacy_adaptation"] is False
+    assert (tmp_path / "runs/nonfinite-resume/itos.txt").exists()
+    assert (tmp_path / "runs/nonfinite-resume/vocabulary.json").exists()
 
     monkeypatch.setattr(TinyGPT, "forward", original_forward)
     resume_args = _args(

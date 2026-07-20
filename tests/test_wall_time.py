@@ -34,6 +34,9 @@ def test_train_codon_lm_wall_time_limit(tmp_path):
     }
     
     config_file = tmp_path / "config.yaml"
+    itos_path = tmp_path / "itos.txt"
+    itos_path.write_text("\n".join(f"token_{index}" for index in range(69)) + "\n")
+    config_data["itos_path"] = str(itos_path)
     with open(config_file, "w") as f:
         yaml.safe_dump(config_data, f)
         

@@ -2,7 +2,7 @@
 # Optimized for M2/8GB RAM (Turbo Attention enabled)
 
 # Model Architecture
-vocab_size: 69
+vocab_size: 68
 block_size: 512
 n_layer: 6
 n_head: 4

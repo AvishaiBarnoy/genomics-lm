@@ -27,7 +27,7 @@ is lost or duplicated, and every derived fragment/chunk retains its source split
 - [x] Abort and clear an accumulation group after any non-finite loss, preserving
   correct optimizer/scheduler/resume counters (#83).
 - [x] Apply configured attention dropout consistently in SDPA and manual paths (#81).
-- [ ] Resolve new-run vocabulary exclusively from the tokenizer artifact and fail on
+- [x] Resolve new-run vocabulary exclusively from the tokenizer artifact and fail on
   dataset, config, or checkpoint mismatch (#84).
 - [ ] Run CPU integration tests and MPS smoke train/save/resume tests on the corrected
   representation.

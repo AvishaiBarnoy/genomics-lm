@@ -1,6 +1,6 @@
 # Generated-prefix replay correction for the 69-token MLP priors model (d512 upscaled).
 
-vocab_size: 69
+vocab_size: 68
 block_size: 512
 n_layer: 10
 n_head: 8

@@ -2,7 +2,7 @@
 # Fine-tuning from Enterobacteriaceae pre-trained weights
 
 # Model Architecture (must match pre-trained weights)
-vocab_size: 69
+vocab_size: 68
 block_size: 256
 n_layer: 4
 n_head: 2

@@ -38,7 +38,8 @@ A compact codon‑level GPT‑style LM with a reproducible training + analysis p
 You can configure training runs using YAML files under `configs/`. Complete template configurations are available at [codon_lm_example.yaml](file:///Users/User/github/genomics-lm/configs/codon_lm_example.yaml) and [protein_lm_example.yaml](file:///Users/User/github/genomics-lm/configs/protein_lm_example.yaml). Supported keys include:
 
 *   **Model Architecture:**
-    *   `vocab_size`: Size of vocabulary (usually 69 for CodonLM, containing 64 codons and 5 specials).
+    *   `vocab_size`: Declared vocabulary size. It must match the tokenizer artifact exactly; the base CodonLM vocabulary has 68 entries (64 codons plus PAD, BOS, EOS, and SEP).
+    *   `itos_path`: Tokenizer vocabulary artifact for legacy/non-global datasets. Global datasets use their adjacent `itos.txt` as the primary source. Fresh training validates unique contiguous entries, config size, fixed/dynamic dataset token bounds, and strict resume-checkpoint dimensions before model construction. Each run snapshots `itos.txt` and records its SHA-256 contract in `vocabulary.json` and checkpoints. Vocabulary changes require `transfer_from`; strict `resume` rejects them.
     *   `block_size`: Maximum sequence length receptive window (e.g., 512).
     *   `n_layer`: Number of transformer blocks (e.g., 6 or 10).
     *   `n_head`: Number of self-attention heads (must divide `n_embd`).
@@ -56,7 +57,7 @@ You can configure training runs using YAML files under `configs/`. Complete temp
     *   Packing provenance: every split NPZ includes aligned integer `segment_ids`, `source_positions`, and `chunk_ids`. `<SEP>` and padding positions use `-1`. `<split>_packing.tsv` maps windows and spans to source records, fragments, oriented codon coordinates, chunk indices, gene boundaries, and continuation flags. The global manifest records the packing schema version and sidecar filenames.
     *   `sep_mask_enabled`: Enable attention masking across `<SEP>` boundaries in packed mode.
 *   **Transfer Learning / Resumption / Freezing:**
-    *   `transfer_from`: Path to pre-trained weights `.pt` file to initialize model parameters while discarding optimizer state.
+    *   `transfer_from`: Path to pre-trained weights `.pt` file to initialize model parameters while discarding optimizer state. Legacy vocabulary rows are mapped by token name when artifacts are available; discarded/new rows and source/target sizes are recorded as an explicit legacy adaptation.
     *   `freeze_backbone`: Set to `true` to freeze all transformer layers and standard prediction heads, training only the auxiliary projection heads.
 *   **Optimizer & Scheduler:**
     *   `optimizer`: Select `"adamw"` or `"adafactor"` (reduces memory footprint).

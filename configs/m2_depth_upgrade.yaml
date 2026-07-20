@@ -1,4 +1,5 @@
 vocab_size: 68
+itos_path: "data/processed/itos_codon.txt"
 
 # Model depth/width
 n_layer: 16
@@ -41,4 +42,3 @@ out_dir: outputs/checkpoints
 scores_dir: outputs/scores
 log_csv: curves.csv
 seed: 1337
-

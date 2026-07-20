@@ -1,7 +1,7 @@
 # Stage 2.5: Extended Master Genomic Architect
 # Deep Polishing: Lower LR, Extended Patience
 
-vocab_size: 69
+vocab_size: 68
 block_size: 512
 n_layer: 6
 n_head: 4

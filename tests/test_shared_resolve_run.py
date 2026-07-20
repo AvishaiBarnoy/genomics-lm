@@ -107,11 +107,18 @@ def test_load_codon_model_dynamic_vocab(tmp_path):
         "cfg": cfg
     }
     torch.save(state, run_dir / "best.pt")
+    (run_dir / "itos.txt").write_text(
+        "\n".join(f"token_{index}" for index in range(7)) + "\n"
+    )
     
     from src.codonlm.checkpoints import load_codon_model
     loaded_model, loaded_cfg, _ = load_codon_model(run_dir, device="cpu")
     assert loaded_model is not None
     assert loaded_cfg["vocab_size"] == 8
-
+    compatibility = loaded_cfg["vocabulary_compatibility"]
+    assert compatibility["legacy_adaptation"] is True
+    assert compatibility["configured_size"] == 15
+    assert compatibility["embedding_rows"] == 8
+    assert compatibility["artifact_size"] == 7
 
 

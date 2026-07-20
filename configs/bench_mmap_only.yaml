@@ -1,5 +1,5 @@
 # Isolate: only mmap dataset, all else same as baseline
-vocab_size: 69
+vocab_size: 68
 block_size: 512
 n_layer: 10
 n_head: 8

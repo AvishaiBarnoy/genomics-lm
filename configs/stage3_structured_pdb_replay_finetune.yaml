@@ -1,7 +1,7 @@
 # Stage 3 — PDB-Filtered Structural Fine-Tuning with MLP Prior + Replay.
 # Fine-tunes the latest best 69-token model on the high-confidence bacteria structural subset.
 
-vocab_size: 69
+vocab_size: 68
 block_size: 512
 n_layer: 10
 n_head: 8

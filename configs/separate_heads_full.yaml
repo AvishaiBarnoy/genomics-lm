@@ -1,7 +1,7 @@
 # Configuration for the Full Separate Heads Multi-Offset CodonLM run.
 # Transfers from the Stage 2.6 checkpoint and trains the projection heads over 2 epochs.
 
-vocab_size: 69
+vocab_size: 68
 block_size: 512
 n_layer: 10
 n_head: 8

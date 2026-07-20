@@ -51,3 +51,24 @@ def test_transfer_state_dict_expands_vocab_by_token_name():
     assert torch.allclose(target.head.weight[4], torch.full((8,), 23.0))
     assert torch.allclose(target.tok_emb.weight[2], torch.full((8,), -1.0))
     assert torch.allclose(target.tok_emb.weight[5], torch.full((8,), -1.0))
+
+
+def test_transfer_state_dict_remaps_equal_size_reordered_vocab():
+    source_itos = ["<PAD>", "AAA", "TAA"]
+    target_itos = ["<PAD>", "TAA", "AAA"]
+    source = TinyGPT(3, 4, n_layer=1, n_head=1, n_embd=4, dropout=0.0)
+    target = TinyGPT(3, 4, n_layer=1, n_head=1, n_embd=4, dropout=0.0)
+    with torch.no_grad():
+        source.tok_emb.weight[1].fill_(11.0)
+        source.tok_emb.weight[2].fill_(22.0)
+
+    report = _load_transfer_state_dict(
+        target,
+        source.state_dict(),
+        source_itos=source_itos,
+        target_itos=target_itos,
+    )
+
+    assert "tok_emb.weight:3" in report["loaded_rows"]
+    assert torch.allclose(target.tok_emb.weight[1], torch.full((4,), 22.0))
+    assert torch.allclose(target.tok_emb.weight[2], torch.full((4,), 11.0))
