@@ -36,6 +36,19 @@ def _one_hot(y: np.ndarray, n_classes: int) -> np.ndarray:
     return out
 
 
+def _stratified_bootstrap_indices(
+    y_true: np.ndarray, rng: np.random.Generator
+) -> np.ndarray:
+    """Resample within each observed class, preserving its sample count."""
+    sampled = []
+    for label in np.unique(y_true):
+        class_indices = np.flatnonzero(y_true == label)
+        sampled.append(rng.choice(class_indices, size=len(class_indices), replace=True))
+    indices = np.concatenate(sampled)
+    rng.shuffle(indices)
+    return indices
+
+
 def compute_metrics(
     y_true: np.ndarray,
     y_pred: np.ndarray,
@@ -79,7 +92,7 @@ def compute_metrics(
         rng = np.random.default_rng(seed)
         bootstrap_runs = []
         for _ in range(n_resamples):
-            indices = rng.choice(len(y_true), size=len(y_true), replace=True)
+            indices = _stratified_bootstrap_indices(y_true, rng)
             y_true_b = y_true[indices]
             y_pred_b = y_pred[indices]
             y_proba_b = y_proba[indices] if y_proba is not None else None
