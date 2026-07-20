@@ -1,178 +1,173 @@
 #!/usr/bin/env python3
-"""
-scripts/eval_ppl_baselines.py — Perplexity and Cross-Entropy Baselines Evaluator
-
-This script calculates baseline metrics (Uniform, Unigram, 1st-order Markov, 2nd-order Markov)
-on a given test/val dataset to contextualize language model performance.
-
-Usage:
-  python -m scripts.eval_ppl_baselines --train_npz data/processed/train_bs256.npz --test_npz data/processed/test_bs256.npz --vocab_size 69
-"""
+"""Evaluate uniform and count-based next-token baselines."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import math
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
+
 import numpy as np
 
-def fit_baselines(train_npz_path: Path, vocab_size: int, alpha: float = 0.01):
-    print(f"[baselines] Fitting baselines on {train_npz_path}...")
-    with np.load(train_npz_path) as data:
-        X = data["X"]
-        if "Y" in data:
-            Y = data["Y"]
-        else:
-            Y = np.zeros_like(X)
-            Y[:, :-1] = X[:, 1:]
-            
-    unigram_counts = np.zeros(vocab_size)
-    bigram_counts = defaultdict(lambda: np.zeros(vocab_size))
-    trigram_counts = defaultdict(lambda: np.zeros(vocab_size))
-    
-    N, T = Y.shape
-    for i in range(N):
-        for t in range(T):
-            target = Y[i, t]
-            if target == 0:  # Ignore PAD
-                continue
-            
-            unigram_counts[target] += 1
-            
-            prev1 = X[i, t]
-            bigram_counts[prev1][target] += 1
-            
-            if t > 0:
-                prev2 = X[i, t-1]
-                trigram_counts[(prev2, prev1)][target] += 1
-            else:
-                trigram_counts[(0, prev1)][target] += 1
-                
-    # Normalize with Laplace smoothing alpha
-    unigram_probs = (unigram_counts + alpha) / (np.sum(unigram_counts[1:]) + alpha * (vocab_size - 1))
-    unigram_probs[0] = 0.0
-    
-    bigram_probs = {}
-    for prev, counts in bigram_counts.items():
-        total = np.sum(counts[1:])
-        probs = (counts + alpha) / (total + alpha * (vocab_size - 1))
-        probs[0] = 0.0
-        bigram_probs[prev] = probs
-        
-    trigram_probs = {}
-    for context, counts in trigram_counts.items():
-        total = np.sum(counts[1:])
-        probs = (counts + alpha) / (total + alpha * (vocab_size - 1))
-        probs[0] = 0.0
-        trigram_probs[context] = probs
-        
-    return unigram_probs, bigram_probs, trigram_probs
+from src.codonlm.data_loading import MmapPackedDataset
+from src.codonlm.training.vocabulary import resolve_vocabulary_contract
 
-def evaluate_baselines(test_npz_path: Path, unigram_probs, bigram_probs, trigram_probs, vocab_size: int, alpha: float = 0.01):
-    print(f"[baselines] Evaluating baselines on {test_npz_path}...")
-    with np.load(test_npz_path) as data:
-        X = data["X"]
-        if "Y" in data:
-            Y = data["Y"]
+PAD_ID = 0
+MODEL_NAMES = ("Uniform", "Unigram", "Bigram", "Trigram")
+
+
+def _examples(path: Path):
+    """Yield (inputs, targets) using the same target construction as training."""
+    dataset = MmapPackedDataset(path)
+    for index in range(len(dataset)):
+        item = dataset[index]
+        if dataset.is_dynamic:
+            sequence = np.asarray(item)
+            yield sequence[:-1], sequence[1:]
         else:
-            Y = np.zeros_like(X)
-            Y[:, :-1] = X[:, 1:]
-            
-    total_tokens = 0
-    uniform_nll = 0.0
-    unigram_nll = 0.0
-    bigram_nll = 0.0
-    trigram_nll = 0.0
-    
-    default_probs = (np.zeros(vocab_size) + alpha) / (alpha * (vocab_size - 1))
-    default_probs[0] = 0.0
-    
-    N, T = Y.shape
-    for i in range(N):
-        for t in range(T):
-            target = Y[i, t]
-            if target == 0:
+            x, y = item
+            yield np.asarray(x), np.asarray(y)
+
+
+def _hash(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _artifact_hashes(path: Path) -> dict[str, str]:
+    files = [path]
+    files.extend(
+        candidate
+        for suffix in ("_X.npy", "_Y.npy", "_lengths.npy")
+        if (candidate := path.with_name(path.stem + suffix)).exists()
+    )
+    return {str(file.resolve()): _hash(file) for file in files if file.exists()}
+
+
+def fit_baselines(train_path: Path, vocab_size: int, alpha: float = 0.01):
+    if alpha <= 0:
+        raise ValueError("alpha must be positive")
+    unigram = np.zeros(vocab_size, dtype=np.int64)
+    bigram = defaultdict(lambda: np.zeros(vocab_size, dtype=np.int64))
+    trigram = defaultdict(lambda: np.zeros(vocab_size, dtype=np.int64))
+    for x, y in _examples(train_path):
+        for position, (previous, target) in enumerate(zip(x, y)):
+            previous, target = int(previous), int(target)
+            if target == PAD_ID:
                 continue
-                
-            total_tokens += 1
-            
-            # Uniform over active classes (excluding PAD)
-            uniform_nll += -math.log(1.0 / (vocab_size - 1))
-            
-            # Unigram
-            unigram_nll += -math.log(max(1e-15, unigram_probs[target]))
-            
-            # Bigram (1st-order Markov)
-            prev1 = X[i, t]
-            if prev1 in bigram_probs:
-                p_bigram = bigram_probs[prev1][target]
-            else:
-                p_bigram = default_probs[target]
-            bigram_nll += -math.log(max(1e-15, p_bigram))
-            
-            # Trigram (2nd-order Markov)
-            if t > 0:
-                prev2 = X[i, t-1]
-                context = (prev2, prev1)
-            else:
-                context = (0, prev1)
-                
-            if context in trigram_probs:
-                p_trigram = trigram_probs[context][target]
-            elif prev1 in bigram_probs:
-                p_trigram = bigram_probs[prev1][target]
-            else:
-                p_trigram = default_probs[target]
-            trigram_nll += -math.log(max(1e-15, p_trigram))
-            
-    results = {
-        "Uniform": {
-            "loss": uniform_nll / total_tokens,
-            "ppl": math.exp(uniform_nll / total_tokens)
-        },
-        "Unigram": {
-            "loss": unigram_nll / total_tokens,
-            "ppl": math.exp(unigram_nll / total_tokens)
-        },
-        "Bigram (1st-order Markov)": {
-            "loss": bigram_nll / total_tokens,
-            "ppl": math.exp(bigram_nll / total_tokens)
-        },
-        "Trigram (2nd-order Markov)": {
-            "loss": trigram_nll / total_tokens,
-            "ppl": math.exp(trigram_nll / total_tokens)
+            unigram[target] += 1
+            bigram[previous][target] += 1
+            previous2 = int(x[position - 1]) if position else PAD_ID
+            trigram[(previous2, previous)][target] += 1
+    if int(unigram.sum()) == 0:
+        raise ValueError(f"training dataset has no evaluable non-PAD targets: {train_path}")
+    return unigram, dict(bigram), dict(trigram)
+
+
+def _probability(counts, target: int, alpha: float, active_size: int) -> float:
+    total = float(np.asarray(counts)[1:].sum()) if counts is not None else 0.0
+    count = float(counts[target]) if counts is not None else 0.0
+    return (count + alpha) / (total + alpha * active_size)
+
+
+def evaluate_baselines(test_path, counts, vocab_size: int, alpha: float = 0.01):
+    unigram, bigram, trigram = counts
+    active_size = vocab_size - 1
+    nll = {name: 0.0 for name in MODEL_NAMES}
+    tokens = 0
+    for x, y in _examples(test_path):
+        for position, (previous, target) in enumerate(zip(x, y)):
+            previous, target = int(previous), int(target)
+            if target == PAD_ID:
+                continue
+            tokens += 1
+            previous2 = int(x[position - 1]) if position else PAD_ID
+            nll["Uniform"] += math.log(active_size)
+            nll["Unigram"] -= math.log(_probability(unigram, target, alpha, active_size))
+            nll["Bigram"] -= math.log(
+                _probability(bigram.get(previous), target, alpha, active_size)
+            )
+            tri_counts = trigram.get((previous2, previous))
+            if tri_counts is None:
+                tri_counts = bigram.get(previous)
+            nll["Trigram"] -= math.log(
+                _probability(tri_counts, target, alpha, active_size)
+            )
+    if tokens == 0:
+        raise ValueError(f"test dataset has no evaluable non-PAD targets: {test_path}")
+    results = {}
+    for name in MODEL_NAMES:
+        loss = nll[name] / tokens
+        results[name] = {
+            "cross_entropy_nats": loss,
+            "perplexity": math.exp(loss),
+            "bits_per_codon": loss / math.log(2),
         }
-    }
-    return results, total_tokens
+    best_name = min((name for name in MODEL_NAMES if name != "Uniform"), key=lambda n: results[n]["cross_entropy_nats"])
+    best = results[best_name]["cross_entropy_nats"]
+    for metrics in results.values():
+        metrics["cross_entropy_improvement_over_best_simple"] = best - metrics["cross_entropy_nats"]
+    return results, tokens, best_name
+
+
+def _markdown(report: dict) -> str:
+    lines = [
+        "| Model | Cross-entropy (nats) | Perplexity | Bits/codon | Improvement over best simple (nats) |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for name, metrics in report["results"].items():
+        lines.append(
+            f"| {name} | {metrics['cross_entropy_nats']:.6f} | {metrics['perplexity']:.6f} | "
+            f"{metrics['bits_per_codon']:.6f} | {metrics['cross_entropy_improvement_over_best_simple']:.6f} |"
+        )
+    return "\n".join(lines) + "\n"
+
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--train_npz", required=True, help="Path to train NPZ")
-    ap.add_argument("--test_npz", required=True, help="Path to test NPZ")
-    ap.add_argument("--vocab_size", type=int, default=69, help="Vocabulary size (excluding PAD)")
-    ap.add_argument("--alpha", type=float, default=0.01, help="Laplace smoothing alpha")
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--train", "--train_npz", dest="train", required=True)
+    parser.add_argument("--test", "--test_npz", dest="test", required=True)
+    parser.add_argument("--itos", help="Vocabulary artifact; defaults to dataset-adjacent itos.txt")
+    parser.add_argument("--manifest", type=Path, help="Dataset manifest to hash into provenance")
+    parser.add_argument("--config", type=Path, help="Evaluation/run config to hash into provenance")
+    parser.add_argument("--alpha", type=float, default=0.01)
+    parser.add_argument("--output-prefix", type=Path)
+    args = parser.parse_args()
+    train, test = Path(args.train), Path(args.test)
+    contract = resolve_vocabulary_contract(
+        [train, test], configured_path=args.itos, configured_size=None
+    )
+    counts = fit_baselines(train, contract.size, args.alpha)
+    results, tokens, best = evaluate_baselines(test, counts, contract.size, args.alpha)
+    report = {
+        "schema_version": 1,
+        "train": str(train.resolve()),
+        "test": str(test.resolve()),
+        "dataset_sha256": {**_artifact_hashes(train), **_artifact_hashes(test)},
+        "input_provenance": {
+            name: {"path": str(path.resolve()), "sha256": _hash(path)}
+            for name, path in (("manifest", args.manifest), ("config", args.config))
+            if path is not None
+        },
+        "vocabulary": contract.provenance(),
+        "smoothing": {"method": "additive", "alpha": args.alpha},
+        "evaluated_tokens": tokens,
+        "best_simple_baseline": best,
+        "results": results,
+    }
+    markdown = _markdown(report)
+    print(f"Baseline Perplexity Comparison ({tokens} tokens)\n{markdown}")
+    prefix = args.output_prefix or test.with_name(test.stem + "_ppl_baselines")
+    prefix.parent.mkdir(parents=True, exist_ok=True)
+    prefix.with_suffix(".json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    prefix.with_suffix(".md").write_text(markdown)
 
-    train_path = Path(args.train_npz)
-    test_path = Path(args.test_npz)
-    
-    if not train_path.exists():
-        raise FileNotFoundError(f"Train NPZ not found: {train_path}")
-    if not test_path.exists():
-        raise FileNotFoundError(f"Test NPZ not found: {test_path}")
-
-    unigram_p, bigram_p, trigram_p = fit_baselines(train_path, args.vocab_size, args.alpha)
-    results, tokens = evaluate_baselines(test_path, unigram_p, bigram_p, trigram_p, args.vocab_size, args.alpha)
-    
-    print("\n" + "=" * 55)
-    print(f" Baseline Perplexity Comparison (Evaluated on {tokens} tokens)")
-    print("=" * 55)
-    print(f"{'Baseline Model':<30} | {'Cross-Entropy':<10} | {'Perplexity':<10}")
-    print("-" * 55)
-    for model_name, metrics in results.items():
-        print(f"{model_name:<30} | {metrics['loss']:<10.4f} | {metrics['ppl']:<10.2f}")
-    print("=" * 55 + "\n")
 
 if __name__ == "__main__":
     main()

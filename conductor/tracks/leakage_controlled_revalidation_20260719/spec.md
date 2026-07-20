@@ -49,7 +49,7 @@ freeze gate passes.
 - [x] #81: correct attention-dropout behavior in all attention paths.
 - [x] #84: tokenizer artifact as the vocabulary source of truth.
 - [ ] #86: causal embedding extraction provenance and unsafe-fallback removal.
-- [ ] #82: format-aware, vocabulary-safe perplexity baselines.
+- [x] #82: format-aware, vocabulary-safe perplexity baselines.
 - [ ] #88: grouped DNA-shape controls and local-sequence baselines.
 - [ ] #89: protein-cluster-held-out AMR evaluation and robust class reporting.
 
