@@ -1,193 +1,258 @@
 #!/usr/bin/env python3
-"""
-scripts/eval_shape_baselines.py — DNA-Shape Probing Control Suite
+"""Leakage-controlled DNA-shape representation controls."""
 
-This script evaluates and compares Ridge regression prediction performance (R^2 scores)
-using three representation spaces:
-  1. Pretrained Model Embeddings (Genomics-LM)
-  2. Randomly Initialized Model Embeddings (structural baseline)
-  3. Raw One-Hot Codon Representations (sequence-identity baseline)
-
-It runs 5-fold cross-validation over sense codons in the test set to determine
-if pretraining provides a statistically significant improvement.
-"""
+from __future__ import annotations
 
 import argparse
+import csv
+import hashlib
+import json
+from collections import defaultdict
 from pathlib import Path
+
 import numpy as np
 import torch
+from scipy import stats
+from sklearn.feature_extraction import DictVectorizer
 from sklearn.linear_model import Ridge
-from sklearn.model_selection import KFold
 from sklearn.metrics import r2_score
 
-from scripts._shared import load_model, build_model, resolve_run, load_token_list, stoi
+from scripts._shared import build_model, load_model, load_token_list, resolve_run
 from scripts.probe_structural_awareness import get_theoretical_shape
 
-def extract_hidden_states(model, input_ids):
-    with torch.no_grad():
-        if hasattr(model, "forward_hidden"):
-            # Exposes causal & segment-masked states
-            h = model.forward_hidden(input_ids)
-        else:
-            x = model.tok_emb(input_ids)
-            if not getattr(model, "use_rope", False):
-                x = x + model.pos_emb(torch.arange(input_ids.size(1), device=input_ids.device).unsqueeze(0))
-            x = model.drop(x)
-            for block in model.blocks:
-                x = block(x)
-            h = x
-        return h.squeeze(0).cpu().numpy()  # (T, D)
+PROPERTIES = (
+    "MGW", "Roll", "EP", "ProT", "HelT", "Slide", "Rise", "Shift", "Tilt",
+    "Buckle", "Opening", "Shear", "Stagger", "Stretch",
+)
+METHODS = ("one_hot", "local_5mer", "local_7mer", "random", "pretrained")
 
-def evaluate_features_r2(X, Y, n_splits=5):
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
-    scores = []
-    for train_idx, test_idx in kf.split(X):
-        X_train, X_test = X[train_idx], X[test_idx]
-        Y_train, Y_test = Y[train_idx], Y[test_idx]
-        
-        reg = Ridge(alpha=1.0)
-        reg.fit(X_train, Y_train)
-        preds = reg.predict(X_test)
-        scores.append(r2_score(Y_test, preds))
-    return np.mean(scores)
+
+def extract_hidden_states(model, input_ids):
+    forward_hidden = getattr(model, "forward_hidden", None)
+    if not callable(forward_hidden):
+        raise TypeError(f"{type(model).__name__} lacks the verified forward_hidden API")
+    if getattr(model, "use_shape_guidance", False):
+        raise RuntimeError("shape-guided models require the dedicated artifact-aware extractor")
+    with torch.no_grad():
+        return forward_hidden(input_ids).squeeze(0).cpu().numpy()
+
+
+def make_group_folds(groups: np.ndarray, n_splits: int, seed: int):
+    unique, counts = np.unique(groups, return_counts=True)
+    if len(unique) < n_splits:
+        raise ValueError(f"need at least {n_splits} groups, found {len(unique)}")
+    rng = np.random.default_rng(seed)
+    order = rng.permutation(len(unique))
+    order = order[np.argsort(-counts[order], kind="stable")]
+    fold_sizes = np.zeros(n_splits, dtype=np.int64)
+    assignment = {}
+    for group_index in order:
+        fold = int(np.argmin(fold_sizes))
+        assignment[str(unique[group_index])] = fold
+        fold_sizes[fold] += counts[group_index]
+    folds = []
+    for fold in range(n_splits):
+        test = np.array([assignment[str(group)] == fold for group in groups])
+        train_idx, test_idx = np.flatnonzero(~test), np.flatnonzero(test)
+        if not len(train_idx) or not len(test_idx):
+            raise ValueError(f"fold {fold} is empty")
+        folds.append((train_idx, test_idx))
+    return folds, assignment
+
+
+def _local_mer(dna: str, codon_index: int, size: int) -> str:
+    center = codon_index * 3 + 1
+    radius = size // 2
+    padded = "N" * radius + dna + "N" * radius
+    center += radius
+    return padded[center - radius : center + radius + 1]
+
+
+def _load_windows(path: Path):
+    with np.load(path, allow_pickle=False) as data:
+        x = np.asarray(data["X"])
+        if "lengths" not in data:
+            return [row for row in x]
+        lengths = np.asarray(data["lengths"])
+    offsets = np.concatenate([[0], np.cumsum(lengths[:-1])])
+    return [x[int(start) : int(start + length)] for start, length in zip(offsets, lengths)]
+
+
+def _read_spans(path: Path):
+    by_window = defaultdict(list)
+    with path.open(newline="") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            by_window[int(row["window_index"])].append(row)
+    return by_window
+
+
+def _read_genomes(path: Path | None):
+    if path is None:
+        return {}
+    with path.open(newline="") as handle:
+        return {
+            row["source_id"]: row["genome"]
+            for row in csv.DictReader(handle, delimiter="\t")
+        }
+
+
+def collect_features(
+    windows, spans, genomes, tokens, pretrained, random_model, group_by, max_windows
+):
+    pretrained_rows, random_rows, token_rows = [], [], []
+    mer5_rows, mer7_rows, groups, sample_ids = [], [], [], []
+    targets = {name: [] for name in PROPERTIES}
+    for window_index, sequence in enumerate(windows[:max_windows]):
+        input_ids = torch.as_tensor(sequence, dtype=torch.long).unsqueeze(0)
+        hidden_pre = extract_hidden_states(pretrained, input_ids)
+        hidden_random = extract_hidden_states(random_model, input_ids)
+        for span_index, span in enumerate(spans.get(window_index, [])):
+            start, end = int(span["window_token_start"]), int(span["window_token_end"])
+            positions = [pos for pos in range(start, min(end, len(sequence))) if int(sequence[pos]) >= 4]
+            if not positions:
+                continue
+            codons = [tokens[int(sequence[pos])] for pos in positions]
+            if any(len(codon) != 3 or set(codon) - set("ACGT") for codon in codons):
+                raise ValueError(f"non-canonical sense token in window {window_index}, span {span_index}")
+            dna = "".join(codons)
+            shape = get_theoretical_shape(dna)
+            source = span["source_id"]
+            if group_by == "genome":
+                if source not in genomes:
+                    raise ValueError(f"missing genome for source_id={source}")
+                group = genomes[source]
+            elif group_by == "gene":
+                group = source
+            else:
+                group = f"window:{window_index}"
+            for codon_index, position in enumerate(positions):
+                pretrained_rows.append(hidden_pre[position])
+                random_rows.append(hidden_random[position])
+                token_rows.append(int(sequence[position]))
+                mer5_rows.append({_local_mer(dna, codon_index, 5): 1.0})
+                mer7_rows.append({_local_mer(dna, codon_index, 7): 1.0})
+                groups.append(group)
+                sample_ids.append(f"{window_index}:{source}:{position}")
+                for name in PROPERTIES:
+                    values = shape[name][codon_index * 3 : codon_index * 3 + 3]
+                    targets[name].append(float(np.mean(values)))
+    if not groups:
+        raise ValueError("no evaluable codon positions")
+    one_hot = np.zeros((len(token_rows), len(tokens)), dtype=np.float32)
+    one_hot[np.arange(len(token_rows)), token_rows] = 1.0
+    vectorizer5, vectorizer7 = DictVectorizer(sparse=True), DictVectorizer(sparse=True)
+    features = {
+        "one_hot": one_hot,
+        "local_5mer": vectorizer5.fit_transform(mer5_rows),
+        "local_7mer": vectorizer7.fit_transform(mer7_rows),
+        "random": np.asarray(random_rows),
+        "pretrained": np.asarray(pretrained_rows),
+    }
+    return features, {key: np.asarray(value) for key, value in targets.items()}, np.asarray(groups), sample_ids
+
+
+def _summary(values):
+    values = np.asarray(values, dtype=float)
+    if not np.all(np.isfinite(values)):
+        raise ValueError("non-finite fold score; increase held-out group/sample counts")
+    mean = float(np.mean(values))
+    if len(values) < 2:
+        return {"mean": mean, "ci95": [mean, mean]}
+    margin = float(stats.t.ppf(0.975, len(values) - 1) * stats.sem(values))
+    return {"mean": mean, "ci95": [mean - margin, mean + margin]}
+
+
+def evaluate(features, targets, folds):
+    results = {name: {} for name in METHODS}
+    for method in METHODS:
+        for prop, y in targets.items():
+            scores = []
+            for train_idx, test_idx in folds:
+                model = Ridge(alpha=1.0)
+                model.fit(features[method][train_idx], y[train_idx])
+                scores.append(float(r2_score(y[test_idx], model.predict(features[method][test_idx]))))
+            results[method][prop] = {"fold_scores": scores, **_summary(scores)}
+    aggregate = {}
+    for method in METHODS:
+        fold_scores = [
+            float(np.mean([results[method][prop]["fold_scores"][fold] for prop in PROPERTIES]))
+            for fold in range(len(folds))
+        ]
+        aggregate[method] = {"fold_scores": fold_scores, **_summary(fold_scores)}
+    paired = {}
+    pretrained = np.asarray(aggregate["pretrained"]["fold_scores"])
+    for baseline in METHODS[:-1]:
+        differences = pretrained - np.asarray(aggregate[baseline]["fold_scores"])
+        comparison = _summary(differences)
+        pvalue = float(stats.ttest_rel(pretrained, aggregate[baseline]["fold_scores"]).pvalue)
+        comparison["pvalue_paired_t"] = pvalue if np.isfinite(pvalue) else None
+        paired[baseline] = comparison
+    return results, aggregate, paired
+
+
+def _sha256(path: Path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("run_id", nargs="?")
-    ap.add_argument("--run_dir", help="Path to runs/<RUN_ID>")
-    ap.add_argument("--ckpt", default="best.pt")
-    ap.add_argument("--test_npz", help="Path to test NPZ dataset")
-    ap.add_argument("--max_seqs", type=int, default=50, help="Max sequences to process")
-    args = ap.parse_args()
-
+    parser = argparse.ArgumentParser()
+    parser.add_argument("run_id", nargs="?")
+    parser.add_argument("--run_dir")
+    parser.add_argument("--ckpt", default="best.pt")
+    parser.add_argument("--test_npz", required=True)
+    parser.add_argument("--packing-metadata", required=True, type=Path)
+    parser.add_argument("--cds-metadata", type=Path)
+    parser.add_argument("--group-by", choices=("window", "gene", "genome"), default="gene")
+    parser.add_argument("--n-splits", type=int, default=5)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--max-seqs", "--max_seqs", dest="max_seqs", type=int, default=50)
+    parser.add_argument("--output-prefix", required=True, type=Path)
+    args = parser.parse_args()
+    if args.group_by == "genome" and args.cds_metadata is None:
+        parser.error("--cds-metadata is required for --group-by genome")
     run_id, run_dir = resolve_run(args.run_id, args.run_dir)
     tokens = load_token_list(run_dir)
-    itos = {i: t for i, t in enumerate(tokens)}
-    vocab_size = len(tokens)
+    pretrained, spec = load_model(run_dir, ckpt_name=args.ckpt)
+    random_model = build_model(spec).eval()
+    checkpoint_path = run_dir / "checkpoints" / args.ckpt
+    if not checkpoint_path.exists():
+        checkpoint_path = run_dir / args.ckpt
+    vocabulary_path = run_dir / "itos.txt"
+    test_path = Path(args.test_npz)
+    features, targets, groups, sample_ids = collect_features(
+        _load_windows(test_path), _read_spans(args.packing_metadata),
+        _read_genomes(args.cds_metadata), tokens, pretrained, random_model,
+        args.group_by, args.max_seqs,
+    )
+    folds, assignments = make_group_folds(groups, args.n_splits, args.seed)
+    results, aggregate, paired = evaluate(features, targets, folds)
+    report = {
+        "schema_version": 1, "run_id": run_id, "seed": args.seed,
+        "group_by": args.group_by, "n_splits": args.n_splits,
+        "dataset": {"path": str(test_path.resolve()), "sha256": _sha256(test_path)},
+        "checkpoint": {"path": str(checkpoint_path.resolve()), "sha256": _sha256(checkpoint_path)},
+        "vocabulary": {"path": str(vocabulary_path.resolve()), "sha256": _sha256(vocabulary_path), "size": len(tokens)},
+        "packing_metadata": {"path": str(args.packing_metadata.resolve()), "sha256": _sha256(args.packing_metadata)},
+        "cds_metadata": ({"path": str(args.cds_metadata.resolve()), "sha256": _sha256(args.cds_metadata)} if args.cds_metadata else None),
+        "n_positions": len(groups), "group_assignments": assignments,
+        "feature_context": {"local_5mer": "centered", "local_7mer": "centered"},
+        "ridge_alpha": 1.0,
+        "results": results, "aggregate": aggregate, "paired_vs_pretrained": paired,
+    }
+    args.output_prefix.parent.mkdir(parents=True, exist_ok=True)
+    args.output_prefix.with_suffix(".json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    with args.output_prefix.with_suffix(".folds.tsv").open("w", newline="") as handle:
+        writer = csv.writer(handle, delimiter="\t")
+        writer.writerow(["sample_id", "group_id", "fold"])
+        for sample_id, group in zip(sample_ids, groups):
+            writer.writerow([sample_id, group, assignments[str(group)]])
+    lines = ["| Representation | Mean R2 | 95% CI |", "|---|---:|---:|"]
+    for method in METHODS:
+        summary = aggregate[method]
+        lines.append(f"| {method} | {summary['mean']:.4f} | [{summary['ci95'][0]:.4f}, {summary['ci95'][1]:.4f}] |")
+    args.output_prefix.with_suffix(".md").write_text("\n".join(lines) + "\n")
+    print("\n".join(lines))
 
-    # 1. Load Pretrained and Random Models
-    print(f"[baselines] Loading pretrained model from {run_dir}...")
-    pretrained_model, spec = load_model(run_dir, ckpt_name=args.ckpt)
-    
-    print("[baselines] Initializing random model with identical architecture...")
-    random_model = build_model(spec)
-
-    # 2. Locate Test Set
-    test_path = args.test_npz
-    if not test_path:
-        # Try to find test NPZ inside the global manifest run dir or processed dir
-        global_test = run_dir / "test_bs256.npz"
-        if global_test.exists():
-            test_path = global_test
-        else:
-            # Fallback to standard processed path
-            test_path = Path("data/processed/test_bs256.npz")
-            if not test_path.exists():
-                # Search for any test NPZ in data/processed
-                paths = list(Path("data/processed").glob("**/test*.npz"))
-                if paths:
-                    test_path = paths[0]
-                else:
-                    raise FileNotFoundError("Could not find test NPZ file. Please specify --test_npz.")
-
-    test_path = Path(test_path)
-    print(f"[baselines] Loading test sequences from {test_path}...")
-    with np.load(test_path) as data:
-        X_test = data["X"]
-
-    # Limit sequence count for performance
-    n_seqs = min(len(X_test), args.max_seqs)
-    X_test = X_test[:n_seqs]
-    print(f"[baselines] Processing {n_seqs} test sequences...")
-
-    # 3. Extract Representations and DNA-Shape Targets
-    all_pretrained = []
-    all_random = []
-    all_one_hot = []
-    
-    # Store lists of target values for all 14 properties
-    properties = [
-        "MGW", "Roll", "EP", "ProT", "HelT",
-        "Slide", "Rise", "Shift", "Tilt",
-        "Buckle", "Opening", "Shear", "Stagger", "Stretch"
-    ]
-    all_targets = {p: [] for p in properties}
-
-    for idx in range(n_seqs):
-        seq_ids = X_test[idx]
-        
-        # Filter out special tokens (0: PAD, 1: BOS, 2: EOS, 3: SEP)
-        sense_indices = [i for i, val in enumerate(seq_ids) if val >= 4]
-        if not sense_indices:
-            continue
-            
-        sense_ids = seq_ids[sense_indices]
-        
-        # Build contiguous DNA sequence from sense codons
-        dna_seq = "".join(itos[val] for val in sense_ids)
-        
-        # Calculate theoretical shape targets (base-pair level)
-        shape_targets = get_theoretical_shape(dna_seq)
-        
-        # Pool targets per codon (average over 3 bases)
-        pooled_targets = {}
-        for prop_name, values in shape_targets.items():
-            codon_values = []
-            for i in range(0, len(values) - 2, 3):
-                codon_values.append(values[i : i + 3].mean())
-            pooled_targets[prop_name] = np.array(codon_values[:len(sense_ids)])
-
-        # Run forward pass on both models for this sequence
-        input_tensor = torch.tensor([seq_ids]).long()
-        h_pretrained = extract_hidden_states(pretrained_model, input_tensor)[sense_indices]
-        h_random = extract_hidden_states(random_model, input_tensor)[sense_indices]
-
-        # One-hot representation of sense codons
-        one_hot = np.zeros((len(sense_ids), vocab_size), dtype=np.float32)
-        one_hot[np.arange(len(sense_ids)), sense_ids] = 1.0
-
-        all_pretrained.append(h_pretrained)
-        all_random.append(h_random)
-        all_one_hot.append(one_hot)
-
-        for prop_name in properties:
-            all_targets[prop_name].append(pooled_targets[prop_name])
-
-    # Stack all codon representations
-    X_pretrained = np.vstack(all_pretrained)
-    X_random = np.vstack(all_random)
-    X_one_hot = np.vstack(all_one_hot)
-
-    for prop_name in properties:
-        all_targets[prop_name] = np.concatenate(all_targets[prop_name])
-
-    print(f"[baselines] Features extracted for {X_pretrained.shape[0]} sense codons.")
-    print(f"  Pretrained feature dim: {X_pretrained.shape[1]}")
-    print(f"  One-hot feature dim:    {X_one_hot.shape[1]}")
-
-    # 4. Fit Ridge Regression and Compare R^2
-    print("\n| DNA-Shape Property | One-Hot R^2 | Random Model R^2 | Pretrained Model R^2 | Delta (Pretrained - One-Hot) |")
-    print("| :--- | :---: | :---: | :---: | :---: |")
-    
-    r2_pretrained_list = []
-    r2_onehot_list = []
-
-    for prop_name in properties:
-        Y = all_targets[prop_name]
-        
-        r2_one_hot = evaluate_features_r2(X_one_hot, Y)
-        r2_random = evaluate_features_r2(X_random, Y)
-        r2_pretrained = evaluate_features_r2(X_pretrained, Y)
-        
-        delta = r2_pretrained - r2_one_hot
-        print(f"| {prop_name:18s} | {r2_one_hot:10.4f} | {r2_random:16.4f} | {r2_pretrained:20.4f} | {delta:28.4f} |")
-        
-        r2_pretrained_list.append(r2_pretrained)
-        r2_onehot_list.append(r2_one_hot)
-
-    mean_pre = np.mean(r2_pretrained_list)
-    mean_oh = np.mean(r2_onehot_list)
-    print(f"| {'Mean':18s} | {mean_oh:10.4f} | {'N/A':16s} | {mean_pre:20.4f} | {mean_pre - mean_oh:28.4f} |")
 
 if __name__ == "__main__":
     main()
