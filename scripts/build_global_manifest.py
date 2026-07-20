@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import random
 import re
@@ -581,6 +582,13 @@ def main() -> None:
             "groups_by_split": groups_by_split,
         },
         "genome_sources": genome_sources,
+        "vocabulary": {
+            "schema_version": 1,
+            "itos_path": str(itos_path),
+            "sha256": hashlib.sha256(itos_path.read_bytes()).hexdigest(),
+            "size": len(itos),
+            "token_ids_contiguous": sorted(itos) == list(range(len(itos))),
+        },
         "leakage_audit": {
             "report": str(audit_path),
             "status": leakage_report["status"],
@@ -624,6 +632,7 @@ def main() -> None:
         "test_npz": str(out_paths["test"]),
         "primary_dna": str(dna_path),
         "combined_manifest": str(manifest_json_path),
+        "itos_path": str(itos_path),
     }
     
     result_path = run_dir / "pipeline_prepare.json"

@@ -1,5 +1,5 @@
 # Config for Small CodonLM control training (absolute position embeddings + standard GELU FFN)
-vocab_size: 69
+vocab_size: 68
 block_size: 512
 n_layer: 4
 n_head: 2

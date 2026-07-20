@@ -42,6 +42,12 @@ from src.codonlm.training.objectives import (
     termination_distance_bucket_labels,
     termination_aux_loss,
 )
+from src.codonlm.training.vocabulary import (
+    resolve_vocabulary_contract,
+    snapshot_vocabulary,
+    validate_resume_checkpoint,
+    write_vocabulary_manifest,
+)
 
 RUN_ID_ENV = "RUN_ID"
 PAD_ID = 0
@@ -139,8 +145,18 @@ def run_training(cfg: dict, args) -> None:
     cfg["val_npz"] = val_paths
     cfg["test_npz"] = test_paths
 
+    configured_vocab_size = cfg.get("vocab_size")
+    vocabulary_contract = resolve_vocabulary_contract(
+        [*train_paths, *val_paths, *test_paths],
+        configured_path=cfg.get("itos_path"),
+        configured_size=configured_vocab_size,
+    )
+    cfg["vocab_size"] = vocabulary_contract.size
+
     if resume_path and not os.path.isfile(resume_path):
         raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
+    if resume_path:
+        validate_resume_checkpoint(resume_path, vocabulary_contract)
 
     transfer_path = None if resume_path else (args.transfer_from or cfg.pop("transfer_from", None))
     if transfer_path and not os.path.isfile(transfer_path):
@@ -263,6 +279,16 @@ def run_training(cfg: dict, args) -> None:
     ckpt_dir, scores_dir = _prepare_output_dirs(outdir, scores_base, run_id)
     accumulation_health = AccumulationHealth()
 
+    vocabulary_snapshot = snapshot_vocabulary(
+        vocabulary_contract, ckpt_dir.parent / "itos.txt"
+    )
+    vocabulary_provenance = vocabulary_contract.provenance(vocabulary_snapshot)
+    cfg["itos_path"] = str(vocabulary_snapshot)
+    cfg["vocabulary"] = vocabulary_provenance
+    write_vocabulary_manifest(
+        vocabulary_provenance, ckpt_dir.parent / "vocabulary.json"
+    )
+
     shutil.copy2(args.config, ckpt_dir / "config.yaml")
     run_logger = RunLogger(ckpt_dir.parent / "logs" / "train.log")
     run_logger.__enter__()
@@ -384,6 +410,10 @@ def run_training(cfg: dict, args) -> None:
         use_rope=bool(cfg.get("use_rope", False)),
         use_shape_guidance=use_shape_guidance,
     ).to(device)
+    if model.tok_emb.num_embeddings != vocabulary_contract.size:
+        raise RuntimeError("model token embedding rows do not match resolved vocabulary")
+    if model.head.out_features != vocabulary_contract.size:
+        raise RuntimeError("model output rows do not match resolved vocabulary")
 
     replay_loader = None
     replay_iter = None
@@ -602,12 +632,43 @@ def run_training(cfg: dict, args) -> None:
             sd = ckpt_transfer["model"] if isinstance(ckpt_transfer, dict) and "model" in ckpt_transfer else ckpt_transfer
             transfer_cfg = ckpt_transfer.get("cfg", {}) if isinstance(ckpt_transfer, dict) else {}
             source_itos = _read_itos(transfer_cfg.get("itos_path"), Path.cwd())
-            target_itos = _read_itos(cfg.get("itos_path"), Path.cwd())
+            if source_itos is None:
+                transfer_checkpoint_path = Path(transfer_path).resolve()
+                for candidate in (
+                    transfer_checkpoint_path.parent / "itos.txt",
+                    transfer_checkpoint_path.parent.parent / "itos.txt",
+                ):
+                    source_itos = _read_itos(str(candidate))
+                    if source_itos is not None:
+                        break
             transfer_report = _load_transfer_state_dict(
                 model,
                 sd,
                 source_itos=source_itos,
-                target_itos=target_itos,
+                target_itos=list(vocabulary_contract.tokens),
+            )
+            source_embedding_rows = (
+                int(sd["tok_emb.weight"].shape[0])
+                if "tok_emb.weight" in sd
+                else None
+            )
+            vocabulary_provenance["legacy_adaptation"] = bool(
+                source_embedding_rows != vocabulary_contract.size
+                or transfer_report["loaded_rows"]
+            )
+            vocabulary_provenance["transfer"] = {
+                "checkpoint": str(transfer_path),
+                "source_embedding_rows": source_embedding_rows,
+                "source_tokenizer_entries": (
+                    len(source_itos) if source_itos is not None else None
+                ),
+                "target_vocab_size": vocabulary_contract.size,
+                "loaded_rows": transfer_report["loaded_rows"],
+                "skipped": transfer_report["skipped"],
+            }
+            cfg["vocabulary"] = vocabulary_provenance
+            write_vocabulary_manifest(
+                vocabulary_provenance, ckpt_dir.parent / "vocabulary.json"
             )
             print(
                 "[transfer] loaded_exact="

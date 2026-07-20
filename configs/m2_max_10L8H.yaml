@@ -3,7 +3,7 @@
 # To be deployed ONLY if Stage 2.5 Master fails the Termination Benchmark.
 
 # Model Architecture (Scale-up)
-vocab_size: 69
+vocab_size: 68
 block_size: 512
 n_layer: 10       # Increased from 6
 n_head: 8         # Increased from 4

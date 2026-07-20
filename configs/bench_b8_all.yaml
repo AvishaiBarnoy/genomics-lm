@@ -21,6 +21,6 @@ use_checkpoint: true
 use_mmap: true
 use_sdpa: true
 val_npz: data/processed/stage2.6_large_master_pack/val_bs512.npz
-vocab_size: 69
+vocab_size: 68
 warmup_steps: 100
 weight_decay: 0.05

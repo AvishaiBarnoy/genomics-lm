@@ -2,7 +2,7 @@
 # Transfers weights from 4L2H_d384 to preserve learned biological features (e.g. positive synonymous gap)
 
 # Model Architecture
-vocab_size: 69
+vocab_size: 68
 block_size: 512
 n_layer: 6
 n_head: 4

@@ -2,7 +2,7 @@
 # Starts from the latest backed-up Stage 2.6 checkpoint and adds a supervised
 # distance-to-stop signal while keeping the main CodonLM objective intact.
 
-vocab_size: 69
+vocab_size: 68
 block_size: 512
 n_layer: 10
 n_head: 8

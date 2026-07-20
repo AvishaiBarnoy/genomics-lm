@@ -2,7 +2,8 @@
 # Optimized for 16GB Unified Memory (e.g. M4 Chip)
 
 # Model Architecture
-vocab_size: 69
+vocab_size: 68
+itos_path: "data/processed/itos_codon.txt"
 block_size: 2048  # 4x increase; captures full operons + promoters
 n_layer: 12       # 2x depth
 n_head: 8         # 2x attention heads

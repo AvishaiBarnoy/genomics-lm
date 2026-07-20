@@ -3,7 +3,7 @@
 # Uses n_embd=256 to allow direct parameter alignment for transfer learning from 6L4H_d256.
 
 # Model Architecture
-vocab_size: 69
+vocab_size: 68
 block_size: 512
 n_layer: 10
 n_head: 8

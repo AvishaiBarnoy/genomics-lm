@@ -1,7 +1,7 @@
 # Training configuration to pre-train the termination head on the 69-token codon-only model.
 # Transfers weights from our best MLP prior checkpoint and trains the new termination auxiliary head.
 
-vocab_size: 69
+vocab_size: 68
 block_size: 512
 n_layer: 10
 n_head: 8

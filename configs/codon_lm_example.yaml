@@ -7,7 +7,7 @@
 # ---------------------------------------------------------------------
 # Model Architecture Configuration
 # ---------------------------------------------------------------------
-vocab_size: 69              # Vocabulary size (64 codons + 5 special tokens: PAD, BOS, EOS, SEP, etc.)
+vocab_size: 68              # Must match itos_path: 64 codons + PAD, BOS, EOS, and SEP
 block_size: 512             # Context window receptive field length (number of codons)
 n_layer: 10                 # Number of transformer decoder blocks/layers
 n_head: 8                   # Number of self-attention heads (must divide n_embd)

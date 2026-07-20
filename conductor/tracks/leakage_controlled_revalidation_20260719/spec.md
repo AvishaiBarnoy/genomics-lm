@@ -47,7 +47,7 @@ freeze gate passes.
 - [x] #77: preventive exact-duplicate and protein-homology leakage audits.
 - [x] #83: abort and clear non-finite gradient-accumulation groups.
 - [x] #81: correct attention-dropout behavior in all attention paths.
-- [ ] #84: tokenizer artifact as the vocabulary source of truth.
+- [x] #84: tokenizer artifact as the vocabulary source of truth.
 - [ ] #86: causal embedding extraction provenance and unsafe-fallback removal.
 - [ ] #82: format-aware, vocabulary-safe perplexity baselines.
 - [ ] #88: grouped DNA-shape controls and local-sequence baselines.

@@ -5,7 +5,7 @@
 # the subset first with scripts/filter_cds_by_pdb.py, then tokenize/pack it with
 # the existing codon_tokenize.py and build_dataset.py utilities.
 
-vocab_size: 69
+vocab_size: 68
 block_size: 512
 n_layer: 10
 n_head: 8

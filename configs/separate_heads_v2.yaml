@@ -1,7 +1,7 @@
 # Configuration for the x=[2, 8, 16, 32] Separate Heads run.
 # Transfers from the 2-epoch separate heads run checkpoint and introduces the x=2 strand target.
 
-vocab_size: 69
+vocab_size: 68
 block_size: 512
 n_layer: 10
 n_head: 8

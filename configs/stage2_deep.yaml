@@ -2,7 +2,7 @@
 # 6 Layers for higher capacity on diverse bacterial taxa
 
 # Model Architecture
-vocab_size: 69
+vocab_size: 68
 block_size: 256
 n_layer: 6       # Increased from 4
 n_head: 4        # Increased from 2

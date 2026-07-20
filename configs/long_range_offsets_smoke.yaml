@@ -2,7 +2,7 @@
 # Uses the existing Stage 2.6 dynamic master pack and a small d384-compatible
 # run shape. For full runs, start from the latest backed-up Stage 2.6 checkpoint.
 
-vocab_size: 69
+vocab_size: 68
 block_size: 512
 n_layer: 10
 n_head: 8

@@ -29,13 +29,20 @@ def _load_transfer_state_dict(
 
     source_index = {tok: i for i, tok in enumerate(source_itos or [])}
     target_index = {tok: i for i, tok in enumerate(target_itos or [])}
+    vocab_row_names = {"tok_emb.weight", "head.weight", "loss_weights"}
 
     for name, target_tensor in target_state.items():
         source_tensor = source_state.get(name)
         if source_tensor is None:
             skipped.append(name)
             continue
-        if tuple(source_tensor.shape) == tuple(target_tensor.shape):
+        requires_token_remap = (
+            name in vocab_row_names
+            and source_index
+            and target_index
+            and list(source_itos or []) != list(target_itos or [])
+        )
+        if tuple(source_tensor.shape) == tuple(target_tensor.shape) and not requires_token_remap:
             adapted[name] = source_tensor
             loaded_exact.append(name)
             continue
@@ -43,7 +50,10 @@ def _load_transfer_state_dict(
             source_tensor.ndim >= 1
             and target_tensor.ndim >= 1
             and tuple(source_tensor.shape[1:]) == tuple(target_tensor.shape[1:])
-            and source_tensor.shape[0] != target_tensor.shape[0]
+            and (
+                source_tensor.shape[0] != target_tensor.shape[0]
+                or requires_token_remap
+            )
         ):
             merged = target_tensor.detach().clone()
             copied = 0

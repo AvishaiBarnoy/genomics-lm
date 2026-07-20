@@ -19,6 +19,11 @@ from .model_tiny_gpt import NoPropTinyGPT
 from .data_loading import PackedDataset, dynamic_lm_collate_fn
 from .train_codon_lm import _ensure_path_list, _normalize_run_id, _auto_run_id, _prepare_output_dirs
 from src.training.runtime import save_checkpoint_atomic
+from .training.vocabulary import (
+    resolve_vocabulary_contract,
+    snapshot_vocabulary,
+    write_vocabulary_manifest,
+)
 
 def main():
     ap = argparse.ArgumentParser()
@@ -46,6 +51,18 @@ def main():
     # Load datasets
     train_paths = _ensure_path_list(None, cfg.get("train_npz"), "train_npz")
     val_paths = _ensure_path_list(None, cfg.get("val_npz"), "val_npz")
+    contract = resolve_vocabulary_contract(
+        [*train_paths, *val_paths],
+        configured_path=cfg.get("itos_path"),
+        configured_size=cfg.get("vocab_size"),
+    )
+    cfg["vocab_size"] = contract.size
+    vocabulary_snapshot = snapshot_vocabulary(contract, ckpt_root.parent / "itos.txt")
+    cfg["itos_path"] = str(vocabulary_snapshot)
+    cfg["vocabulary"] = contract.provenance(vocabulary_snapshot)
+    write_vocabulary_manifest(
+        cfg["vocabulary"], ckpt_root.parent / "vocabulary.json"
+    )
     train_ds = PackedDataset(train_paths)
     val_ds = PackedDataset(val_paths)
 

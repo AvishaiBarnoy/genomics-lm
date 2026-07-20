@@ -3,7 +3,7 @@
 # Can be used as a transfer learning source for 8L4H_d256 later.
 
 # Model Architecture
-vocab_size: 69
+vocab_size: 68
 block_size: 512
 n_layer: 6
 n_head: 4
