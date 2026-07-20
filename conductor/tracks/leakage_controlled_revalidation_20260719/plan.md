@@ -15,7 +15,7 @@ Planned. Full retraining is blocked until Phase 3 is complete.
   source IDs and oriented codon coordinates; report fragment statistics (#80).
 - [x] Replace suffix truncation with lossless chunks and expose record, chunk,
   coordinate, boundary, and continuation metadata (#78).
-- [ ] Define and test a versioned dataset manifest schema covering sources, splits,
+- [x] Define and test a versioned dataset manifest schema covering sources, splits,
   fragments, chunks, packing, vocabulary, seeds, and artifact hashes.
 
 Exit gate: fixtures prove that no transition crosses ambiguity, no source transition

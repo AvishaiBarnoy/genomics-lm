@@ -595,5 +595,58 @@ These ratios are descriptive arithmetic only. Because the numerator metrics and 
 *   **Run Cleanup Script (`cleanup_runs.py`)**: Created a command-line cleanup utility supporting dry-run auditing, intermediate checkpoint purging (keeping only protected files like `best.pt`), and directory removal for runs older than N days.
 *   **Unit Testing**: Added a test suite `tests/test_cleanup_runs.py` verifying correct targeted item removal and preservation rules.
 
+## 29. Stage 29: Leakage-Controlled Revalidation Infrastructure
+**Goal:** Correct the data, training, and evaluation defects identified in the
+Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks.
+
+*   **Legacy Claims and Governance (issues #87, #91, epic #92):**
+    *   Relabeled historical Stage 2.6 results as legacy/preliminary and removed
+        unsupported validation language in PR #94.
+    *   Made core CPU tests, fatal scoped lint, coverage artifacts, and clean-checkout
+        verification required CI gates in PR #96.
+    *   Added the dependency-ordered leakage-controlled revalidation conductor track
+        in PR #97. The track explicitly blocks retraining until its engineering and
+        dataset-freeze gates pass.
+*   **Global Splitting and Dataset Semantics (issues #79, #80, #78):**
+    *   Made global genome/genus grouping the default scientific preparation route,
+        removed implicit sequence-level fallback, and hardened genome accession
+        resolution in PR #95.
+    *   Replaced silent ambiguous-codon deletion with explicit fragment boundaries and
+        oriented source coordinates in PR #98. This prevents fabricated adjacency
+        across ambiguous regions.
+    *   Replaced suffix-only truncation and implicit mid-CDS continuation with lossless,
+        overlap-aware chunks and explicit packing spans in PR #99. Every retained
+        next-token transition is represented exactly once.
+*   **Preventive Leakage and Trainer Correctness (issues #77, #83, #81, #84):**
+    *   Added fatal exact-CDS duplicate and MMseqs2 protein-homology gates, generated
+        sequence nearest-neighbor audits, thresholds, commands, and tool provenance in
+        PR #100.
+    *   Corrected incomplete accumulation-group scaling, aborts and clears groups after
+        non-finite losses, and preserves optimizer/scheduler/resume counters in PR #101.
+    *   Applied configured attention dropout consistently in SDPA and manual attention
+        paths in PR #102.
+    *   Made the ordered tokenizer artifact the vocabulary source of truth, validated
+        dataset/checkpoint token spaces, and retained explicit legacy transfer mapping
+        in PR #103.
+*   **Controlled Evaluation Instruments (issues #82, #86, #88, #89):**
+    *   Rebuilt perplexity baselines for fixed NPZ, dynamic NPZ, and NPY memmap storage;
+        added vocabulary validation, bits/codon, best-simple-baseline comparison, hashes,
+        JSON, and Markdown outputs in PR #104.
+    *   Removed noncausal hidden-state reconstruction and working-directory vocabulary
+        fallbacks; required trained shape encoders and wrote causal embedding provenance
+        sidecars in PR #105.
+    *   Replaced position-level DNA-shape K-fold leakage with deterministic window,
+        gene, or genome grouping; separated packed CDS spans; and added random-model,
+        codon one-hot, centered 5-mer, and centered 7-mer controls in PR #106.
+    *   Separated CARD annotation-family and MMseqs2 protein-cluster AMR protocols,
+        reported achieved class/group balance, added class-stratified bootstrap, and
+        isolated all outputs and tests from research data in PR #107.
+*   **Validation Status:** These PRs build and validate the corrected instruments; they
+    do not retroactively validate Stage 2.6. No corrected headline perplexity, AMR, EC,
+    essentiality, or DNA-shape values have been published yet. The next blocking work is
+    the versioned dataset-manifest contract, CPU/MPS train-save-resume preflight, and
+    immutable genome/genus-held-out dataset freeze. Only then should models be retrained
+    from random initialization and the controlled evaluations rerun.
+
 ---
 *End of Log*

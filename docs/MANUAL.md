@@ -310,7 +310,7 @@ python -m scripts.generate_synonymous_controls --test_npz data/processed/test_bs
 python -m scripts.eval_shape_baselines \
   --run_dir runs/<RUN_ID> --ckpt best.pt \
   --test_npz data/processed/global/<DATASET_ID>/test_bs256.npz \
-  --packing-metadata data/processed/global/<DATASET_ID>/test_packing_metadata.tsv \
+  --packing-metadata data/processed/global/<DATASET_ID>/test_packing.tsv \
   --cds-metadata data/processed/global/<DATASET_ID>/cds_meta.tsv \
   --group-by genome --output-prefix runs/<RUN_ID>/scores/shape_genome_grouped
 
