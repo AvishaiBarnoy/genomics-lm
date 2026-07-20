@@ -1,7 +1,8 @@
 # Leakage-Controlled CodonLM Revalidation Plan
 
 ## Status
-Planned. Full retraining is blocked until Phase 3 is complete.
+In progress. Engineering gates are complete; full retraining remains blocked on
+the corrected dataset freeze.
 
 ## Phase 1: Governance and CI
 - [x] Relabel legacy results and unsupported claims (#87).
@@ -29,7 +30,7 @@ is lost or duplicated, and every derived fragment/chunk retains its source split
 - [x] Apply configured attention dropout consistently in SDPA and manual paths (#81).
 - [x] Resolve new-run vocabulary exclusively from the tokenizer artifact and fail on
   dataset, config, or checkpoint mismatch (#84).
-- [ ] Run CPU integration tests and MPS smoke train/save/resume tests on the corrected
+- [x] Run CPU integration tests and MPS smoke train/save/resume tests on the corrected
   representation.
 
 Exit gate: all blocking data and trainer PRs are merged, CI is green, and an MPS

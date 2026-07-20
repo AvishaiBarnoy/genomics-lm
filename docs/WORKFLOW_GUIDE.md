@@ -151,6 +151,11 @@ gene-grouped results only when genome metadata is unavailable.
 
 ## 5. Performance and Architectural Ablations
 
+Before freezing data or starting corrected training, run the lifecycle preflight on
+CPU and the target Apple Silicon host as documented in
+[`TRAINING_PREFLIGHT.md`](TRAINING_PREFLIGHT.md). The MPS command must report
+`actual_device: mps`; CPU fallback is not a pass.
+
 Before merging changes that modify attention kernels (e.g., GQA, SDPA) or data loader structures:
 1. Run the throughput benchmark to record step rates:
    ```bash
