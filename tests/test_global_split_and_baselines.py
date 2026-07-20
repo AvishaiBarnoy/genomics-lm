@@ -464,8 +464,6 @@ def test_global_split_and_baselines_end_to_end(tmp_path):
         str(train_npz),
         "--test_npz",
         str(test_npz),
-        "--vocab_size",
-        "69",
     ]
     
     res_baselines = subprocess.run(cmd_baselines, capture_output=True, text=True)

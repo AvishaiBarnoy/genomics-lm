@@ -301,7 +301,7 @@ python -m scripts.audit_duplicates --train_npz data/processed/train_bs256.npz --
 python -m scripts.audit_generated_sequences --train-fasta data/frozen/train_cds.fasta --generated-fasta runs/<RUN_ID>/generated.fasta --output runs/<RUN_ID>/scores/generated_leakage_audit.json
 
 # Calculate baseline perplexities (Uniform, Unigram, Bigram, Trigram Markov baselines)
-python -m scripts.eval_ppl_baselines --test_npz data/processed/test_bs256.npz --train_npz data/processed/train_bs256.npz
+python -m scripts.eval_ppl_baselines --test data/processed/test_bs256.npz --train data/processed/train_bs256.npz
 
 # Generate synonymous recoding and shuffled sequence controls for perplexity evaluation
 python -m scripts.generate_synonymous_controls --test_npz data/processed/test_bs256.npz --out_dir data/processed/controls

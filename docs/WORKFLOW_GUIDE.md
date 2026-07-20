@@ -62,8 +62,16 @@ training substrings.
 For every test evaluation, calculate and compare model performance against Uniform and Markov baselines:
 1. Run [`eval_ppl_baselines.py`](file:///Users/User/github/genomics-lm/scripts/eval_ppl_baselines.py) using the train and test splits:
    ```bash
-   python -m scripts.eval_ppl_baselines --train_npz data/processed/global/<RUN_ID>/train_bs256.npz --test_npz data/processed/global/<RUN_ID>/test_bs256.npz --vocab_size 68
+   python -m scripts.eval_ppl_baselines \
+     --train data/processed/global/<RUN_ID>/train_bs256.npz \
+     --test data/processed/global/<RUN_ID>/test_bs256.npz \
+     --manifest data/processed/global/<RUN_ID>/manifest.json \
+     --config configs/tiny_mps.yaml \
+     --output-prefix runs/<RUN_ID>/scores/genome_holdout_ppl_baselines
    ```
+   The evaluator resolves the dataset-adjacent `itos.txt`, validates every token
+   ID, and writes both JSON provenance and a Markdown table. Repeat with the
+   genus-held-out dataset and a distinct output prefix.
 2. Report the **excess bits per codon** ($\Delta H$) and the perplexity drop over the 2nd-order Markov (Trigram) baseline.
 
 ---
