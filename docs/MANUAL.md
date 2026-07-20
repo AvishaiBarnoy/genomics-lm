@@ -43,7 +43,7 @@ You can configure training runs using YAML files under `configs/`. Complete temp
     *   `n_layer`: Number of transformer blocks (e.g., 6 or 10).
     *   `n_head`: Number of self-attention heads (must divide `n_embd`).
     *   `n_embd`: Hidden state embedding dimension size (e.g., 256).
-    *   `dropout`: Dropout probability applied to projections and embeddings.
+    *   `dropout`: Dropout probability applied to projections, embeddings, MLP layers, and attention probabilities during training. Attention dropout is disabled automatically in evaluation mode and is applied consistently by SDPA and manual attention. Runs created before the #81 correction did not apply attention-probability dropout even when this value was nonzero, so enabling the corrected behavior changes new-run training semantics without changing checkpoint keys.
     *   `label_smoothing`: Epsilon smoothing factor for CrossEntropyLoss.
     *   `use_checkpoint`: Enable activation gradient checkpointing (saves GPU RAM).
     *   `use_sdpa`: Use PyTorch's native Scaled Dot Product Attention for speedups.
