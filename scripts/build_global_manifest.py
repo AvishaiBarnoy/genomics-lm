@@ -36,6 +36,14 @@ from src.codonlm.codon_tokenize import (
     tokenize_cds_fragments,
 )
 from src.codonlm.extract_cds_from_genbank import reverse_complement, _first_qualifier, _join_qualifier
+from src.codonlm.lossless_packing import (
+    PACKING_METADATA_FIELDS,
+    PackedWindow,
+    chunk_record,
+    pack_chunks,
+    packed_arrays,
+    packing_metadata_rows,
+)
 
 
 ASSEMBLY_ACCESSION_RE = re.compile(
@@ -182,7 +190,7 @@ def main() -> None:
     if val_frac + test_frac >= 1.0:
         raise SystemExit("[error] val_frac + test_frac must be less than 1")
     pack_mode = cfg.get("pack_mode", "multi")
-    windows_per_seq = int(float(cfg.get("windows_per_seq", 2)))
+    windows_per_seq = int(float(cfg.get("windows_per_seq", 1)))
     min_len = int(cfg.get("min_len", 90))
     min_fragment_codons = int(cfg.get("min_fragment_codons", 10))
     if min_fragment_codons < 1:
@@ -414,113 +422,67 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(fragment_records)
 
-    # 5. Packing phase
-    splits = {"train": [], "val": [], "test": []}
+    # 5. Lossless chunking and packing phase
+    chunks_by_split = {"train": [], "val": [], "test": []}
     for fragment, token_ids in zip(fragment_records, token_ids_list):
-        splits[fragment["split"]].append(token_ids)
+        record = {
+            "tokens": token_ids,
+            "source_id": fragment["source_id"],
+            "source_line_idx": fragment["source_line_idx"],
+            "fragment_line_idx": fragment["fragment_line_idx"],
+            "fragment_index": fragment["fragment_index"],
+            "fragment_codon_start": fragment["codon_start"],
+            "fragment_codon_end": fragment["codon_end"],
+            "split": fragment["split"],
+        }
+        chunks_by_split[fragment["split"]].extend(
+            chunk_record(record, block_size=block_size)
+        )
 
-    def pack_multi(name: str, subset: List[List[int]]) -> Tuple[np.ndarray, np.ndarray]:
-        SEP_ID = 3
-        PAD_ID = 0
-        seqs = [arr for arr in subset if len(arr) > 2]
-        if not seqs:
-            return np.zeros((0, block_size), dtype=np.int32), np.zeros((0, block_size), dtype=np.int32)
-            
-        windows_goal = max(1, windows_per_seq * len(seqs))
-        Xs, Ys = [], []
-        indices = list(range(len(seqs)))
-        offsets = [0] * len(seqs)
-        
-        for _ in range(windows_goal):
-            rng.shuffle(indices)
-            buf: List[int] = []
-            for idx in indices:
-                if len(buf) >= block_size:
-                    break
-                arr = seqs[idx]
-                off = offsets[idx]
-                if off >= len(arr):
-                    continue
-                room = block_size - len(buf)
-                take = min(room, len(arr) - off)
-                if take <= 0:
-                    continue
-                buf.extend(arr[off : off + take])
-                offsets[idx] += take
-                if offsets[idx] >= len(arr) and len(buf) < block_size:
-                    buf.append(SEP_ID)
-            if len(buf) < 2:
-                break
-            x = buf[:-1]
-            y = buf[1:]
-            if len(x) < block_size:
-                pad_n = block_size - len(x)
-                x = x + [PAD_ID] * pad_n
-                y = y + [PAD_ID] * pad_n
-            else:
-                x = x[:block_size]
-                y = y[:block_size]
-            Xs.append(x)
-            Ys.append(y)
-            
-            remaining = sum(max(0, len(arr) - offsets[i]) for i, arr in enumerate(seqs))
-            if remaining < 2:
-                break
-                
-        return np.array(Xs, dtype=np.int32), np.array(Ys, dtype=np.int32)
+    if windows_per_seq != 1:
+        print(
+            "[global-prep] Ignoring legacy windows_per_seq="
+            f"{windows_per_seq}; lossless packing emits every source transition once."
+        )
 
-    def pack_single(name: str, subset: List[List[int]]) -> Tuple[np.ndarray, np.ndarray]:
-        Xs, Ys = [], []
-        for arr in subset:
-            if len(arr) <= 2:
-                continue
-            for _ in range(windows_per_seq):
-                if len(arr) <= block_size + 1:
-                    x = arr[:-1]
-                    y = arr[1:]
-                    pad = [0] * max(0, block_size - len(x))
-                    x = (x + pad)[:block_size]
-                    y = (y + pad)[:block_size]
-                else:
-                    i = rng.randrange(0, len(arr) - block_size - 1)
-                    x = arr[i : i + block_size]
-                    y = arr[i + 1 : i + 1 + block_size]
-                Xs.append(x)
-                Ys.append(y)
-        return np.array(Xs, dtype=np.int32), np.array(Ys, dtype=np.int32)
-
-    def pack_dynamic(name: str, subset: List[List[int]]) -> Tuple[np.ndarray, np.ndarray]:
-        filtered = []
-        for arr in subset:
-            if len(arr) <= 2:
-                continue
-            if len(arr) > block_size:
-                arr = arr[-block_size:]
-            filtered.append(arr)
-        if not filtered:
-            return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32)
-        flat_X = np.concatenate([np.array(x, dtype=np.int32) for x in filtered])
-        lengths = np.array([len(x) for x in filtered], dtype=np.int32)
-        return flat_X, lengths
+    def write_packing_metadata(
+        split: str, windows: List[PackedWindow]
+    ) -> Path:
+        path = out_dir / f"{split}_packing.tsv"
+        with open(path, "w", newline="") as handle:
+            writer = csv.DictWriter(
+                handle, fieldnames=PACKING_METADATA_FIELDS, delimiter="\t"
+            )
+            writer.writeheader()
+            writer.writerows(packing_metadata_rows(split, windows))
+        return path
 
     out_paths = {}
     empty_windows: dict[str, int] = {}
+    packing_metadata_paths: dict[str, str] = {}
+    packed_window_counts: dict[str, int] = {}
+    packed_chunk_counts: dict[str, int] = {}
     for name in ("train", "val", "test"):
-        if pack_mode == "single":
-            X, Y = pack_single(name, splits[name])
-        elif pack_mode == "dynamic":
-            X, Y = pack_dynamic(name, splits[name])  # Y holds lengths
-        else:
-            X, Y = pack_multi(name, splits[name])
-            
+        windows = pack_chunks(
+            chunks_by_split[name],
+            block_size=block_size,
+            mode=pack_mode,
+            sep_id=stoi["<SEP>"],
+        )
+        arrays = packed_arrays(windows, block_size=block_size, mode=pack_mode)
+        X = arrays["X"]
         out_npz = out_dir / f"{name}_bs{block_size}.npz"
+        np.savez_compressed(out_npz, **arrays)
         if pack_mode == "dynamic":
-            np.savez_compressed(out_npz, X=X, lengths=Y)
-            empty_windows[name] = int(np.count_nonzero(Y == 0))
+            empty_windows[name] = int(np.count_nonzero(arrays["lengths"] == 0))
         else:
-            np.savez_compressed(out_npz, X=X, Y=Y)
-            empty_windows[name] = int(np.count_nonzero((Y != 0).sum(axis=1) == 0))
+            empty_windows[name] = int(
+                np.count_nonzero((arrays["Y"] != 0).sum(axis=1) == 0)
+            )
         out_paths[name] = out_npz
+        packing_metadata_paths[name] = write_packing_metadata(name, windows).name
+        packed_window_counts[name] = len(windows)
+        packed_chunk_counts[name] = len(chunks_by_split[name])
         print(f"[global-prep] Packed split {name} to {out_npz} with shape {X.shape}")
 
     # Write itos/vocab files
@@ -578,10 +540,17 @@ def main() -> None:
             },
         },
         "packing": {
+            "schema_version": 1,
             "mode": pack_mode,
             "block_size": block_size,
-            "windows_per_seq": windows_per_seq,
+            "token_capacity": block_size + 1,
+            "chunk_overlap_tokens": 1,
+            "transition_policy": "exactly_once",
+            "legacy_windows_per_seq_ignored": windows_per_seq,
             "seed": args.seed,
+            "metadata": packing_metadata_paths,
+            "window_counts": packed_window_counts,
+            "chunk_counts": packed_chunk_counts,
         },
     }
     

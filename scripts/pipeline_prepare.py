@@ -164,64 +164,72 @@ def _stack_npz(paths: List[str], out_path: Path) -> None:
     if not paths:
         raise ValueError("No NPZ paths provided for stacking")
 
-    is_dynamic = False
     with np.load(paths[0], allow_pickle=False) as blob:
-        if "lengths" in blob:
-            is_dynamic = True
+        keys = list(blob.files)
+        is_dynamic = "lengths" in blob
+
+    for path in paths[1:]:
+        with np.load(path, allow_pickle=False) as blob:
+            if list(blob.files) != keys:
+                raise ValueError(
+                    f"Cannot stack NPZ files with different schemas: {paths[0]} has "
+                    f"{keys}, while {path} has {list(blob.files)}"
+                )
 
     if is_dynamic:
-        Xs = []
-        lengths_list = []
+        arrays_by_key = {key: [] for key in keys}
         for path in paths:
             with np.load(path, allow_pickle=False) as blob:
-                Xs.append(np.asarray(blob["X"]))
-                lengths_list.append(np.asarray(blob["lengths"]))
-        flat_X = np.concatenate(Xs)
-        lengths = np.concatenate(lengths_list)
-        np.savez_compressed(out_path, X=flat_X, lengths=lengths)
+                for key in keys:
+                    arrays_by_key[key].append(np.asarray(blob[key]))
+        np.savez_compressed(
+            out_path,
+            **{key: np.concatenate(arrays) for key, arrays in arrays_by_key.items()},
+        )
         return
 
     total = 0
-    x_tail = None
-    y_tail = None
-    x_dtype = None
-    y_dtype = None
+    tails = {}
+    dtypes = {}
 
     # First pass: determine total rows and shapes without keeping arrays resident
     for path in paths:
         with np.load(path, allow_pickle=False) as blob:
-            X = np.asarray(blob["X"])
-            Y = np.asarray(blob["Y"])
-            if x_tail is None:
-                x_tail = X.shape[1:]
-                y_tail = Y.shape[1:]
-                x_dtype = X.dtype
-                y_dtype = Y.dtype
-            total += X.shape[0]
+            for key in keys:
+                array = np.asarray(blob[key])
+                tails.setdefault(key, array.shape[1:])
+                if tails[key] != array.shape[1:]:
+                    raise ValueError(f"Shape mismatch for {key} in {path}")
+                dtypes[key] = (
+                    np.result_type(dtypes[key], array.dtype)
+                    if key in dtypes
+                    else array.dtype
+                )
+            total += blob[keys[0]].shape[0]
 
     if total == 0:
         np.savez_compressed(
             out_path,
-            X=np.zeros((0,) + x_tail, dtype=x_dtype),
-            Y=np.zeros((0,) + y_tail, dtype=y_dtype),
+            **{
+                key: np.zeros((0,) + tails[key], dtype=dtypes[key]) for key in keys
+            },
         )
         return
 
-    X_out = np.empty((total,) + x_tail, dtype=x_dtype)
-    Y_out = np.empty((total,) + y_tail, dtype=y_dtype)
+    outputs = {
+        key: np.empty((total,) + tails[key], dtype=dtypes[key]) for key in keys
+    }
 
     # Second pass: copy chunk-by-chunk to limit peak memory usage
     offset = 0
     for path in paths:
         with np.load(path, allow_pickle=False) as blob:
-            X = np.asarray(blob["X"])
-            Y = np.asarray(blob["Y"])
-            rows = X.shape[0]
-            X_out[offset : offset + rows] = X
-            Y_out[offset : offset + rows] = Y
+            rows = blob[keys[0]].shape[0]
+            for key in keys:
+                outputs[key][offset : offset + rows] = np.asarray(blob[key])
             offset += rows
 
-    np.savez_compressed(out_path, X=X_out, Y=Y_out)
+    np.savez_compressed(out_path, **outputs)
 
 
 def _write_manifest(

@@ -43,7 +43,7 @@ freeze gate passes.
 - [x] #87: legacy scientific claims relabeled.
 - [x] #91: required core CI, fatal lint, coverage, and checkout-cleanliness checks.
 - [x] #80: ambiguous-codon boundary preservation and fragment provenance.
-- [ ] #78: lossless long-gene chunking and explicit packing boundaries.
+- [x] #78: lossless long-gene chunking and explicit packing boundaries.
 - [ ] #77: preventive exact-duplicate and protein-homology leakage audits.
 - [ ] #83: abort and clear non-finite gradient-accumulation groups.
 - [ ] #81: correct attention-dropout behavior in all attention paths.

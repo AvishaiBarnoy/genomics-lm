@@ -4,6 +4,7 @@ import csv
 import json
 import os
 import subprocess
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +15,7 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from scripts.build_global_manifest import resolve_genome_identity
+from src.codonlm.codon_tokenize import stoi, to_ids
 from src.codonlm.extract_cds_from_genbank import reverse_complement
 
 
@@ -231,6 +233,73 @@ def test_global_builder_fragments_ambiguity_after_source_split(tmp_path):
         (0, 21),
         (22, 43),
     ]
+
+
+def _dynamic_sequences(npz_path: Path) -> list[list[int]]:
+    with np.load(npz_path) as data:
+        flat = data["X"]
+        lengths = data["lengths"]
+        offsets = np.concatenate([[0], np.cumsum(lengths)])
+        return [flat[offsets[i] : offsets[i + 1]].tolist() for i in range(len(lengths))]
+
+
+def _transition_counts(sequences: list[list[int]]) -> Counter:
+    return Counter(
+        (tokens[index], tokens[index + 1])
+        for tokens in sequences
+        for index in range(len(tokens) - 1)
+    )
+
+
+def test_global_dynamic_packing_keeps_starts_ends_and_all_transitions(tmp_path):
+    genomes = [tmp_path / f"GCF_00000000{i}.1.gbff" for i in range(3)]
+    for idx, genome in enumerate(genomes):
+        create_mock_genome(genome, str(idx), f"Genus{idx} species")
+    config = tmp_path / "config.yaml"
+    _write_config(config, genomes, pack_mode="dynamic", block_size=8)
+    run_dir = tmp_path / "run"
+    output_dir = tmp_path / "processed"
+
+    result = _run_global_builder(config, run_dir, output_dir)
+
+    assert result.returncode == 0, result.stderr
+    expected = to_ids("ATG" + "GCT" * 40 + "TAA")
+    for split in ("train", "val", "test"):
+        chunks = _dynamic_sequences(output_dir / f"{split}_bs8.npz")
+        assert chunks[0][0] == stoi["<BOS_CDS>"]
+        assert chunks[-1][-1] == stoi["<EOS_CDS>"]
+        assert _transition_counts(chunks) == _transition_counts([expected])
+        with open(output_dir / f"{split}_packing.tsv") as handle:
+            spans = list(csv.DictReader(handle, delimiter="\t"))
+        assert spans[0]["continues_from_previous"] == "0"
+        assert spans[-1]["continues_to_next"] == "0"
+        assert all(row["split"] == split for row in spans)
+
+
+def test_global_multi_packing_exposes_multiple_gene_spans(tmp_path):
+    genomes = [tmp_path / f"GCF_00000000{i}.1.gbff" for i in range(3)]
+    for idx, genome in enumerate(genomes):
+        create_mock_genome(
+            genome, str(idx), f"Genus{idx} species", cds_count=2
+        )
+    config = tmp_path / "config.yaml"
+    _write_config(config, genomes, pack_mode="multi", block_size=100)
+    run_dir = tmp_path / "run"
+    output_dir = tmp_path / "processed"
+
+    result = _run_global_builder(config, run_dir, output_dir)
+
+    assert result.returncode == 0, result.stderr
+    for split in ("train", "val", "test"):
+        with open(output_dir / f"{split}_packing.tsv") as handle:
+            spans = list(csv.DictReader(handle, delimiter="\t"))
+        assert len(spans) == 2
+        assert spans[0]["window_index"] == spans[1]["window_index"] == "0"
+        assert spans[0]["source_id"] != spans[1]["source_id"]
+        with np.load(output_dir / f"{split}_bs100.npz") as data:
+            segment_ids = data["segment_ids"][0]
+        assert len(set(segment_ids[segment_ids >= 0])) == 2
+        assert np.any(segment_ids == -1)
 
 
 def test_global_builder_rejects_identity_collisions_across_files(tmp_path):
