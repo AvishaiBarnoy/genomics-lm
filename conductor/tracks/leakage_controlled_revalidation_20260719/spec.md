@@ -46,7 +46,7 @@ freeze gate passes.
 - [x] #78: lossless long-gene chunking and explicit packing boundaries.
 - [x] #77: preventive exact-duplicate and protein-homology leakage audits.
 - [x] #83: abort and clear non-finite gradient-accumulation groups.
-- [ ] #81: correct attention-dropout behavior in all attention paths.
+- [x] #81: correct attention-dropout behavior in all attention paths.
 - [ ] #84: tokenizer artifact as the vocabulary source of truth.
 - [ ] #86: causal embedding extraction provenance and unsafe-fallback removal.
 - [ ] #82: format-aware, vocabulary-safe perplexity baselines.

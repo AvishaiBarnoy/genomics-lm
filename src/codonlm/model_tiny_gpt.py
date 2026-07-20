@@ -101,22 +101,32 @@ class CausalSelfAttention(nn.Module):
 
         base = self.mask[:,:,:T,:T]
         if self.use_sdpa and hasattr(torch.nn.functional, "scaled_dot_product_attention"):
+            attention_dropout = self.dropout.p if self.training else 0.0
             if attn_mask is not None:
                 attn_mask_bool = (attn_mask > 0)
+                if attn_mask_bool.ndim == 2:
+                    attn_mask_bool = attn_mask_bool.unsqueeze(0).unsqueeze(0)
+                elif attn_mask_bool.ndim == 3:
+                    attn_mask_bool = attn_mask_bool.unsqueeze(1)
                 mask = attn_mask_bool.expand(B, self.n_head, T, T)
-                y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=False)
+                y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=attention_dropout, is_causal=False)
             else:
-                y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=True)
+                y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=attention_dropout, is_causal=True)
             y = y.transpose(1,2).contiguous().view(B, T, C)
         else:
             att = (q @ k.transpose(-2,-1)) / math.sqrt(k.size(-1))
             if attn_mask is not None:
                 attn_mask_bool = (attn_mask > 0)
+                if attn_mask_bool.ndim == 2:
+                    attn_mask_bool = attn_mask_bool.unsqueeze(0).unsqueeze(0)
+                elif attn_mask_bool.ndim == 3:
+                    attn_mask_bool = attn_mask_bool.unsqueeze(1)
                 att = att.masked_fill(~attn_mask_bool, float('-inf'))
             else:
                 att = att.masked_fill(base==0, float('-inf'))
             att = torch.softmax(att, dim=-1)
             self.last_attn = att.detach()
+            att = self.dropout(att)
             y = att @ v
             y = y.transpose(1,2).contiguous().view(B, T, C)
         return self.proj(y)
