@@ -53,7 +53,7 @@ audits pass. Any later semantic change creates a new dataset version.
 - [x] Remove unsafe embedding fallbacks and record causal extraction provenance (#86).
 - [x] Add gene/genome-grouped DNA-shape folds plus one-hot, random-model, 5-mer, and
   7-mer controls (#88).
-- [ ] Add protein-cluster-held-out AMR splits, class reporting, stratified bootstrap,
+- [x] Add protein-cluster-held-out AMR splits, class reporting, stratified bootstrap,
   and output isolation (#89).
 - [ ] Validate every evaluator on fixtures derived from the frozen manifest schema.
 

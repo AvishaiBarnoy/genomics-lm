@@ -1,5 +1,5 @@
 import numpy as np
-from src.classifiers.probes import compute_metrics
+from src.classifiers.probes import _stratified_bootstrap_indices, compute_metrics
 
 def test_compute_metrics_imbalanced_and_bootstrap():
     # Mock data: Binary classification with 10 samples
@@ -31,3 +31,17 @@ def test_compute_metrics_imbalanced_and_bootstrap():
     assert metrics["accuracy"] <= metrics["accuracy_ci_upper"] <= 1.0
     
     print("Metrics and bootstrap CIs validated successfully.")
+
+
+def test_stratified_bootstrap_preserves_each_class_count():
+    y_true = np.array([0, 0, 0, 1, 1, 2])
+    indices = _stratified_bootstrap_indices(y_true, np.random.default_rng(7))
+    assert np.bincount(y_true[indices]).tolist() == [3, 2, 1]
+
+
+def test_stratified_bootstrap_intervals_are_deterministic():
+    y_true = np.array([0, 0, 1, 1, 2, 2])
+    y_pred = np.array([0, 1, 1, 1, 2, 0])
+    first = compute_metrics(y_true, y_pred, bootstrap=True, n_resamples=30, seed=9)
+    second = compute_metrics(y_true, y_pred, bootstrap=True, n_resamples=30, seed=9)
+    assert first == second

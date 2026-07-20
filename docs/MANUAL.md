@@ -594,10 +594,21 @@ python -m scripts.train_classifier --config configs/classifier/kmer_amr.yaml
 Download and process CARD (Comprehensive Antibiotic Resistance Database, CC BY 4.0):
 
 ```bash
-python -m scripts.prepare_amr_dataset
-# Outputs: data/labels/train_amr.csv, data/labels/test_amr.csv, data/labels/amr_label_map.json
-# Also: data/processed/train_amr_seqs.csv, data/processed/test_amr_seqs.csv (for k-mer)
+python -m scripts.prepare_amr_dataset \
+  --out_dir outputs/amr \
+  --protocol annotation_family_held_out
+
+python -m scripts.prepare_amr_dataset \
+  --out_dir outputs/amr \
+  --protocol protein_cluster_held_out \
+  --min-protein-identity 0.3 --min-coverage 0.8
 ```
+
+The protocols write separate subdirectories containing classifier and k-mer
+CSVs, label maps, split assignments, and `split_report.json`. Annotation-family
+holdout controls CARD family labels; it is not a protein-homology holdout.
+Protein-cluster results are defined by the recorded MMseqs2 identity and coverage
+thresholds. Report requested and achieved test fractions plus missing classes.
 
 ---
 
