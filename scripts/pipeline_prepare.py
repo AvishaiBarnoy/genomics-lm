@@ -453,8 +453,8 @@ def main() -> None:
             f"[integrity] ok: empty_windows train={empty_train} val={empty_val} test={empty_test}"
         )
 
-    # ---------- Run Split Duplication soft audit ----------
-    print("\n[prepare] Running split duplication soft audit...")
+    # ---------- Run legacy packed-data duplication gate ----------
+    print("\n[prepare] Running legacy packed-data duplication gate...")
     try:
         import sys
         import subprocess
@@ -466,13 +466,19 @@ def main() -> None:
             str(train_out),
             "--test_npz",
             str(test_out),
+            "--fail-on-exact",
+            "--report-json",
+            str(run_dir / "legacy_packed_leakage_audit.json"),
         ]
         res = subprocess.run(cmd, capture_output=True, text=True)
         print(res.stdout)
         if res.returncode != 0:
-            print(f"[warning] split duplication audit encountered an issue:\n{res.stderr}")
+            raise SystemExit(
+                "[integrity] legacy packed-data duplication gate failed:\n"
+                f"{res.stderr}"
+            )
     except Exception as exc:
-        print(f"[warning] failed to run split duplication audit: {exc}")
+        raise SystemExit(f"[integrity] failed to run duplication gate: {exc}") from exc
 
 
 if __name__ == "__main__":

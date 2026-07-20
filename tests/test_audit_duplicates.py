@@ -1,4 +1,5 @@
 import numpy as np
+import json
 import subprocess
 from pathlib import Path
 
@@ -49,3 +50,19 @@ def test_audit_duplicates_logic(tmp_path):
     # L=30: none should trigger overlap except maybe exact (which is len 12 < 30) so 0%
     assert "30 codons" in res.stdout
     assert "0.00%" in res.stdout
+
+    report_path = tmp_path / "audit.json"
+    blocked = subprocess.run(
+        [
+            *cmd,
+            "--fail-on-exact",
+            "--report-json",
+            str(report_path),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert blocked.returncode == 4
+    report = json.loads(report_path.read_text())
+    assert report["status"] == "failed"
+    assert report["exact_duplicates"] == 1

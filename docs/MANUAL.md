@@ -291,8 +291,12 @@ python -m scripts.evaluate_test --run_dir runs/<RUN_ID>/checkpoints
 # Sanity KPIs (codon_corr, frameshift_delta, start/stop deltas, syn_gap)
 python -m scripts.sanity_kpis --run_dir runs/<RUN_ID>/checkpoints
 
-# Audit pretraining splits for duplicate sequence and L-mer cross-leakage (exact & near-duplicates)
+# Legacy post-packing diagnostic only; scientific preparation now blocks full-record
+# exact and MMseqs2 protein-cluster leakage before packing and writes leakage_audit.json.
 python -m scripts.audit_duplicates --train_npz data/processed/train_bs256.npz --test_npz data/processed/test_bs256.npz
+
+# Generated-sequence nucleotide/protein nearest neighbors and training-match coverage
+python -m scripts.audit_generated_sequences --train-fasta data/frozen/train_cds.fasta --generated-fasta runs/<RUN_ID>/generated.fasta --output runs/<RUN_ID>/scores/generated_leakage_audit.json
 
 # Calculate baseline perplexities (Uniform, Unigram, Bigram, Trigram Markov baselines)
 python -m scripts.eval_ppl_baselines --test_npz data/processed/test_bs256.npz --train_npz data/processed/train_bs256.npz

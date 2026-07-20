@@ -347,6 +347,19 @@ def _ngram_repeat_ratio(tokens: List[str], n: int = 3) -> float:
     return 1.0 - (uniq / total) if total else 0.0
 
 
+def _training_match_coverage(
+    tokens: List[int], n: int, training_ngrams: set[tuple[int, ...]]
+) -> float:
+    """Fraction of generated token positions covered by an exact training n-gram."""
+    if len(tokens) < n or not training_ngrams:
+        return 0.0
+    covered = bytearray(len(tokens))
+    for start in range(len(tokens) - n + 1):
+        if tuple(tokens[start : start + n]) in training_ngrams:
+            covered[start : start + n] = b"\x01" * n
+    return sum(covered) / len(tokens)
+
+
 def _score_stop_behavior(
     gen_codons: List[str], truth_len_codons: int
 ) -> Tuple[float, bool, bool]:
@@ -955,13 +968,11 @@ def main() -> None:
                 if 10 in train_ngram_sets and train_ngram_sets[10]:
                     s10 = train_ngram_sets[10]
                     if len(full_gen_ids) >= 10:
-                        matches = sum(1 for idx in range(len(full_gen_ids) - 10 + 1) if tuple(full_gen_ids[idx : idx + 10]) in s10)
-                        overlap_10 = matches / (len(full_gen_ids) - 10 + 1)
+                        overlap_10 = _training_match_coverage(full_gen_ids, 10, s10)
                 if 20 in train_ngram_sets and train_ngram_sets[20]:
                     s20 = train_ngram_sets[20]
                     if len(full_gen_ids) >= 20:
-                        matches = sum(1 for idx in range(len(full_gen_ids) - 20 + 1) if tuple(full_gen_ids[idx : idx + 20]) in s20)
-                        overlap_20 = matches / (len(full_gen_ids) - 20 + 1)
+                        overlap_20 = _training_match_coverage(full_gen_ids, 20, s20)
 
                 rows.append(
                     SampleResult(

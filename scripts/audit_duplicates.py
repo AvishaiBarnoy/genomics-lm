@@ -10,6 +10,7 @@ Usage:
 """
 
 import argparse
+import json
 from pathlib import Path
 import numpy as np
 
@@ -26,6 +27,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--train_npz", help="Path to train NPZ dataset")
     ap.add_argument("--test_npz", help="Path to test NPZ dataset")
+    ap.add_argument(
+        "--fail-on-exact",
+        action="store_true",
+        help="Exit nonzero when an exact packed-sequence duplicate is found.",
+    )
+    ap.add_argument("--report-json", help="Optional machine-readable output path.")
     args = ap.parse_args()
 
     # 1. Resolve Paths
@@ -84,6 +91,7 @@ def main():
     print("\n| Window Size (Codons / bp) | Unique Train L-mers | Shared Test Sequences | Leakage Percentage |")
     print("| :--- | :---: | :---: | :---: |")
 
+    overlaps = {}
     for L in window_sizes:
         bp = L * 3
         # Index all unique L-mers in the training set
@@ -99,7 +107,27 @@ def main():
                 shared_seqs += 1
 
         leak_pct = (shared_seqs / len(test_seqs)) * 100 if test_seqs else 0.0
+        overlaps[str(L)] = {
+            "unique_train_lmers": len(train_lmers),
+            "shared_test_sequences": shared_seqs,
+            "leakage_fraction": leak_pct / 100.0,
+        }
         print(f"| {L:2} codons ({bp:2} bp)       | {len(train_lmers):19,} | {shared_seqs:21,} | {leak_pct:17.2f}% |")
+
+    report = {
+        "schema_version": 1,
+        "scope": "legacy_post_packing_diagnostic",
+        "exact_duplicates": exact_duplicates,
+        "test_sequences": len(test_seqs),
+        "overlaps": overlaps,
+        "status": "failed" if args.fail_on_exact and exact_duplicates else "passed",
+    }
+    if args.report_json:
+        report_path = Path(args.report_json)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(report, indent=2) + "\n")
+    if args.fail_on_exact and exact_duplicates:
+        raise SystemExit(4)
 
 if __name__ == "__main__":
     main()

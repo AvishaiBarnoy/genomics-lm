@@ -22,7 +22,7 @@ Exit gate: fixtures prove that no transition crosses ambiguity, no source transi
 is lost or duplicated, and every derived fragment/chunk retains its source split.
 
 ## Phase 3: Enforce Leakage and Training Correctness
-- [ ] Fail preparation on cross-split exact duplicates and disallowed protein
+- [x] Fail preparation on cross-split exact duplicates and disallowed protein
   homology; record offending IDs, thresholds, commands, and tool versions (#77).
 - [ ] Abort and clear an accumulation group after any non-finite loss, preserving
   correct optimizer/scheduler/resume counters (#83).
