@@ -102,6 +102,14 @@ def test_shape_baselines_end_to_end(tmp_path):
     X_test[:, 0] = 1
     X_test[:, -1] = 2
     np.savez(test_npz, X=X_test)
+    packing_metadata = tmp_path / "test_packing.tsv"
+    packing_metadata.write_text(
+        "split\twindow_index\twindow_token_start\twindow_token_end\tsource_id\n"
+        + "".join(
+            f"test\t{index}\t0\t32\tgene-{index}\n" for index in range(3)
+        )
+    )
+    output_prefix = tmp_path / "shape_results"
     
     cmd = [
         "python",
@@ -110,12 +118,18 @@ def test_shape_baselines_end_to_end(tmp_path):
         "--run_dir", str(run_dir),
         "--ckpt", "weights.pt",
         "--test_npz", str(test_npz),
+        "--packing-metadata", str(packing_metadata),
+        "--group-by", "gene",
+        "--n-splits", "3",
+        "--output-prefix", str(output_prefix),
         "--max_seqs", "3"
     ]
     res = subprocess.run(cmd, capture_output=True, text=True)
     assert res.returncode == 0, f"Script failed: {res.stderr}\nStdout: {res.stdout}"
-    assert "DNA-Shape Property" in res.stdout
-    assert "One-Hot R^2" in res.stdout
-    assert "Random Model R^2" in res.stdout
-    assert "Pretrained Model R^2" in res.stdout
-
+    assert "Representation" in res.stdout
+    assert "local_5mer" in res.stdout
+    assert "pretrained" in res.stdout
+    report = json.loads(output_prefix.with_suffix(".json").read_text())
+    assert report["group_by"] == "gene"
+    assert len(report["group_assignments"]) == 3
+    assert output_prefix.with_suffix(".folds.tsv").exists()

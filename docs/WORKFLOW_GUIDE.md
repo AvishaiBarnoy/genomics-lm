@@ -121,6 +121,22 @@ When training linear probes (e.g. for DNA-shape or EC level classification), com
 1. **One-Hot Codon Identity vectors** (proves learning beyond local codon lookup).
 2. **Randomly Initialized Model Embeddings** (proves that the pretraining phase, and not just the neural architecture, is responsible for the representation quality).
 
+DNA-shape results must additionally use explicit packing/CDS metadata, grouped
+folds, and centered local-sequence controls:
+
+```bash
+python -m scripts.eval_shape_baselines \
+  --run_dir runs/<RUN_ID> --ckpt best.pt \
+  --test_npz data/processed/global/<DATASET_ID>/test_bs256.npz \
+  --packing-metadata data/processed/global/<DATASET_ID>/test_packing_metadata.tsv \
+  --cds-metadata data/processed/global/<DATASET_ID>/cds_meta.tsv \
+  --group-by genome --output-prefix runs/<RUN_ID>/scores/shape_genome_grouped
+```
+
+The 5-mer and 7-mer controls use centered context and therefore constitute a
+stronger shortcut control than the causal model's information access. Report
+gene-grouped results only when genome metadata is unavailable.
+
 ---
 
 ## 5. Performance and Architectural Ablations

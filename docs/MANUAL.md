@@ -307,7 +307,12 @@ python -m scripts.eval_ppl_baselines --test data/processed/test_bs256.npz --trai
 python -m scripts.generate_synonymous_controls --test_npz data/processed/test_bs256.npz --out_dir data/processed/controls
 
 # Compare DNA-shape regression prediction performance against one-hot and random model baselines
-python -m scripts.eval_shape_baselines --run_dir runs/<RUN_ID> --ckpt best.pt --test_npz data/processed/test_bs256.npz
+python -m scripts.eval_shape_baselines \
+  --run_dir runs/<RUN_ID> --ckpt best.pt \
+  --test_npz data/processed/global/<DATASET_ID>/test_bs256.npz \
+  --packing-metadata data/processed/global/<DATASET_ID>/test_packing_metadata.tsv \
+  --cds-metadata data/processed/global/<DATASET_ID>/cds_meta.tsv \
+  --group-by genome --output-prefix runs/<RUN_ID>/scores/shape_genome_grouped
 
 ### Dataset Memory-Mapping (Host RAM Optimization)
 
