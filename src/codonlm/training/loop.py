@@ -6,6 +6,7 @@ import csv
 import json
 import logging
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 import torch
 import torch.nn as nn
@@ -44,6 +45,65 @@ from src.codonlm.training.objectives import (
 
 RUN_ID_ENV = "RUN_ID"
 PAD_ID = 0
+
+
+class NonfiniteGroupLimitError(RuntimeError):
+    """Raised when aborted accumulation groups exceed the configured tolerance."""
+
+
+@dataclass
+class AccumulationHealth:
+    """Checkpointable counters for gradient-accumulation group integrity."""
+
+    active_microbatches: int = 0
+    nonfinite_microbatches: int = 0
+    aborted_groups: int = 0
+    discarded_finite_microbatches: int = 0
+
+    def record_finite_microbatch(self) -> None:
+        self.active_microbatches += 1
+
+    def complete_group(self) -> None:
+        if self.active_microbatches <= 0:
+            raise ValueError("cannot complete an empty accumulation group")
+        self.active_microbatches = 0
+
+    def abort_group(self, optimizer) -> int:
+        discarded = self.active_microbatches
+        optimizer.zero_grad(set_to_none=True)
+        self.nonfinite_microbatches += 1
+        self.aborted_groups += 1
+        self.discarded_finite_microbatches += discarded
+        self.active_microbatches = 0
+        return discarded
+
+    def exceeds_limit(self, max_aborted_groups: int) -> bool:
+        if max_aborted_groups < 0:
+            return False
+        return self.aborted_groups > max_aborted_groups
+
+    def state_dict(self) -> dict[str, int]:
+        state = self.metrics_dict()
+        # Gradients are not checkpointed; resume replays from the last resolved group.
+        state["active_microbatches"] = 0
+        return state
+
+    def metrics_dict(self) -> dict[str, int]:
+        return {
+            "active_microbatches": self.active_microbatches,
+            "nonfinite_microbatches": self.nonfinite_microbatches,
+            "aborted_groups": self.aborted_groups,
+            "discarded_finite_microbatches": self.discarded_finite_microbatches,
+        }
+
+    def load_state_dict(self, state: dict | None) -> None:
+        state = state or {}
+        self.active_microbatches = 0
+        self.nonfinite_microbatches = int(state.get("nonfinite_microbatches", 0))
+        self.aborted_groups = int(state.get("aborted_groups", 0))
+        self.discarded_finite_microbatches = int(
+            state.get("discarded_finite_microbatches", 0)
+        )
 
 
 def _average_accumulated_gradients(parameters, microbatch_count: int) -> None:
@@ -201,6 +261,7 @@ def run_training(cfg: dict, args) -> None:
     outdir = cfg["out_dir"]
     scores_base = cfg.get("scores_dir", "outputs/scores")
     ckpt_dir, scores_dir = _prepare_output_dirs(outdir, scores_base, run_id)
+    accumulation_health = AccumulationHealth()
 
     shutil.copy2(args.config, ckpt_dir / "config.yaml")
     run_logger = RunLogger(ckpt_dir.parent / "logs" / "train.log")
@@ -212,6 +273,7 @@ def run_training(cfg: dict, args) -> None:
             "status": "failed",
             "error_type": type(exc).__name__,
             "error": str(exc),
+            "accumulation_health": accumulation_health.metrics_dict(),
             "model_spec": {},
         }
         write_meta(ckpt_dir, meta)
@@ -477,6 +539,9 @@ def run_training(cfg: dict, args) -> None:
         scheduler_name = "cosine"
 
     gacc = cfg.get("grad_accum_steps", 16)
+    max_nonfinite_groups = int(cfg.get("max_nonfinite_accumulation_groups", 3))
+    if max_nonfinite_groups < -1:
+        raise ValueError("max_nonfinite_accumulation_groups must be -1 or greater")
     warmup_steps = int(cfg.get("warmup_steps", 200))
     min_lr = float(cfg.get("min_lr", 1e-5))
     base_lr = float(cfg["lr"])
@@ -581,6 +646,9 @@ def run_training(cfg: dict, args) -> None:
             best_epoch = ckpt_resume.get("best_epoch", best_epoch)
             no_improve = int(ckpt_resume.get("no_improve", no_improve))
             resume_microbatch_idx = int(ckpt_resume.get("epoch_microbatch_idx", 0) or 0)
+            accumulation_health.load_state_dict(
+                ckpt_resume.get("accumulation_health")
+            )
             checkpoint_batch_size = ckpt_resume.get("batch_size")
             checkpoint_grad_accum = ckpt_resume.get("grad_accum_steps")
             if checkpoint_batch_size is not None and int(checkpoint_batch_size) != int(cfg["batch_size"]):
@@ -644,6 +712,8 @@ def run_training(cfg: dict, args) -> None:
                 "grad_accum_steps": int(gacc),
                 "train_examples": int(len(train_ds)),
                 "train_batches": int(len(train_loader)),
+                "accumulation_health": accumulation_health.state_dict(),
+                "max_nonfinite_accumulation_groups": max_nonfinite_groups,
             }
             if use_shape_guidance and encoder is not None:
                 payload["encoder"] = encoder.state_dict()
@@ -666,8 +736,8 @@ def run_training(cfg: dict, args) -> None:
             offset_totals = {offset: 0.0 for offset in multi_offset_weights}
             offset_counts = {offset: 0 for offset in multi_offset_weights}
             optim.zero_grad(set_to_none=True)
-            accumulated_microbatches = 0
             skipped = 0
+            health_before = accumulation_health.state_dict()
             start_time = time.perf_counter()
             if split == "train" and skip_microbatches > 0:
                 print(f"[resume] skipping {skip_microbatches}/{len(loader)} already-applied train microbatches")
@@ -761,6 +831,7 @@ def run_training(cfg: dict, args) -> None:
                             pg["lr"] = base_lr * scale
                     optim.step()
                     optim.zero_grad(set_to_none=True)
+                    accumulation_health.complete_group()
                     step += 1
                     current_resume_microbatch_idx = batch_idx + 1
                     if use_cosine:
@@ -781,13 +852,25 @@ def run_training(cfg: dict, args) -> None:
                     loss, next_loss, offset_losses, term_loss, replay_loss = fwd()
                 if not torch.isfinite(loss):
                     skipped += 1
+                    if split == "train":
+                        discarded = accumulation_health.abort_group(optim)
+                        current_resume_microbatch_idx = batch_idx + 1
+                        print(
+                            "[train] aborted nonfinite accumulation group "
+                            f"at microbatch={batch_idx + 1}; discarded_finite_microbatches={discarded} "
+                            f"aborted_groups={accumulation_health.aborted_groups}"
+                        )
+                        if accumulation_health.exceeds_limit(max_nonfinite_groups):
+                            raise NonfiniteGroupLimitError(
+                                "nonfinite accumulation groups exceeded configured maximum "
+                                f"{max_nonfinite_groups}: {accumulation_health.aborted_groups}"
+                            )
                     continue
                 if split=="train":
                     loss.backward()
-                    accumulated_microbatches += 1
-                    if accumulated_microbatches == gacc:
-                        step_optimizer(accumulated_microbatches)
-                        accumulated_microbatches = 0
+                    accumulation_health.record_finite_microbatch()
+                    if accumulation_health.active_microbatches == gacc:
+                        step_optimizer(accumulation_health.active_microbatches)
                         if split == "train" and periodic_ckpt.should_save(step):
                             save_last_checkpoint(epoch_idx, reason="periodic")
                 total += loss.item()
@@ -804,12 +887,17 @@ def run_training(cfg: dict, args) -> None:
                 n += 1
                 wall_timer.check()
             
-            if split == "train" and accumulated_microbatches:
-                step_optimizer(accumulated_microbatches)
+            if split == "train" and accumulation_health.active_microbatches:
+                step_optimizer(accumulation_health.active_microbatches)
 
             offset_avgs = {
                 offset: (offset_totals[offset] / max(offset_counts[offset], 1))
                 for offset in offset_totals
+            }
+            health_after = accumulation_health.state_dict()
+            health_delta = {
+                key: health_after[key] - health_before[key]
+                for key in health_after
             }
             return (
                 total / max(n, 1),
@@ -818,6 +906,7 @@ def run_training(cfg: dict, args) -> None:
                 (replay_total / max(replay_count, 1)) if replay_loss_enabled and split == "train" else None,
                 skipped,
                 offset_avgs,
+                health_delta,
             )
 
         history = []
@@ -856,14 +945,14 @@ def run_training(cfg: dict, args) -> None:
             epoch_idx = epoch + 1
             skip_for_epoch = resume_microbatch_idx if epoch == start_epoch else 0
             resume_microbatch_idx = 0
-            train_loss, train_next_loss, train_term_loss, train_replay_term_loss, train_skips, train_offsets = one_pass(
+            train_loss, train_next_loss, train_term_loss, train_replay_term_loss, train_skips, train_offsets, train_health = one_pass(
                 "train",
                 train_loader,
                 epoch_idx,
                 skip_microbatches=skip_for_epoch,
             )
             with torch.no_grad():
-                val_loss, val_next_loss, val_term_loss, _, val_skips, val_offsets = one_pass("val", val_loader, epoch_idx)
+                val_loss, val_next_loss, val_term_loss, _, val_skips, val_offsets, _ = one_pass("val", val_loader, epoch_idx)
             ppl = math.exp(min(20.0, val_next_loss))
             if not use_cosine:
                 scheduler.step(val_loss)
@@ -874,6 +963,12 @@ def run_training(cfg: dict, args) -> None:
             )
             if train_skips or val_skips:
                 msg += f" | skips train={train_skips} val={val_skips}"
+            if train_health["aborted_groups"]:
+                msg += (
+                    " | aborted_groups="
+                    f"{train_health['aborted_groups']} discarded_finite_microbatches="
+                    f"{train_health['discarded_finite_microbatches']}"
+                )
             if multi_offset_weights:
                 offset_msg = " ".join(
                     f"o{offset}:train={train_offsets.get(offset, 0.0):.3f}/val={val_offsets.get(offset, 0.0):.3f}"
@@ -946,6 +1041,11 @@ def run_training(cfg: dict, args) -> None:
                 "train_replay_term_loss": train_replay_term_loss,
                 "perplexity": ppl,
                 "lr": lr_now,
+                "nonfinite_microbatches": train_health["nonfinite_microbatches"],
+                "aborted_accumulation_groups": train_health["aborted_groups"],
+                "discarded_finite_microbatches": train_health[
+                    "discarded_finite_microbatches"
+                ],
             })
 
             if improved:
@@ -953,6 +1053,15 @@ def run_training(cfg: dict, args) -> None:
             elif no_improve >= int(cfg.get("early_stop_patience", 5)):
                 print("[early-stopping] no improvement; stopping.")
                 break
+    except NonfiniteGroupLimitError as exc:
+        ckpt_payload = make_checkpoint_payload(current_epoch_idx or (start_epoch + 1))
+        ckpt_payload["checkpoint_reason"] = "nonfinite_group_limit"
+        save_checkpoint_atomic(ckpt_payload, ckpt_dir / "last.pt")
+        print(
+            f"[checkpoint] saved {ckpt_dir / 'last.pt'} after nonfinite-group limit"
+        )
+        write_failure_meta(exc)
+        raise
     except WallTimeLimitException:
         print(f"\n[info] Wall-time limit of {max_time_minutes} minutes reached mid-epoch.")
         ckpt_payload = make_checkpoint_payload(current_epoch_idx or (start_epoch + 1))
@@ -971,6 +1080,7 @@ def run_training(cfg: dict, args) -> None:
             "best_epoch": best_epoch,
             "best_val_loss": float(best) if best != float("inf") else None,
             "status": "stopped",
+            "accumulation_health": accumulation_health.state_dict(),
             "model_spec": model.to_dict() if hasattr(model, "to_dict") else {}
         }
 
@@ -1049,6 +1159,7 @@ def run_training(cfg: dict, args) -> None:
         "best_epoch": best_epoch,
         "best_val_loss": float(best) if best != float("inf") else None,
         "status": "completed",
+        "accumulation_health": accumulation_health.state_dict(),
         "model_spec": model.to_dict() if hasattr(model, "to_dict") else {}
     }
 

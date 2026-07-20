@@ -1,11 +1,16 @@
 import inspect
 
 import numpy as np
+import pytest
 import torch
 
 from src.codonlm.data_loading import PackedDataset
 from src.codonlm.training.config import _ensure_path_list
-from src.codonlm.training.loop import _average_accumulated_gradients, run_training
+from src.codonlm.training.loop import (
+    AccumulationHealth,
+    _average_accumulated_gradients,
+    run_training,
+)
 
 
 def test_ensure_path_list_from_string():
@@ -85,3 +90,70 @@ def test_average_accumulated_gradients_matches_mean_loss():
 
 def test_training_loop_does_not_clear_mps_cache_on_happy_path():
     assert "empty_cache" not in inspect.getsource(run_training)
+
+
+@pytest.mark.parametrize(
+    ("group_size", "nonfinite_position", "discarded"),
+    [
+        pytest.param(4, 0, 0, id="full-first"),
+        pytest.param(4, 2, 2, id="full-middle"),
+        pytest.param(4, 3, 3, id="full-final"),
+        pytest.param(2, 0, 0, id="remainder-first"),
+        pytest.param(2, 1, 1, id="remainder-final"),
+    ],
+)
+def test_nonfinite_position_aborts_entire_group(
+    group_size, nonfinite_position, discarded
+):
+    parameter = torch.nn.Parameter(torch.tensor(1.0))
+    optimizer = torch.optim.SGD([parameter], lr=1.0)
+    health = AccumulationHealth()
+
+    for _ in range(nonfinite_position):
+        parameter.backward()
+        health.record_finite_microbatch()
+
+    assert health.abort_group(optimizer) == discarded
+    assert parameter.grad is None
+    assert health.active_microbatches == 0
+    assert health.aborted_groups == 1
+    assert health.nonfinite_microbatches == 1
+    assert health.discarded_finite_microbatches == discarded
+
+    # A later complete group must contain only its own gradients.
+    for _ in range(group_size):
+        parameter.backward()
+        health.record_finite_microbatch()
+    _average_accumulated_gradients([parameter], group_size)
+    optimizer.step()
+    optimizer.zero_grad(set_to_none=True)
+    health.complete_group()
+    assert parameter.item() == pytest.approx(0.0)
+
+
+def test_accumulation_health_resume_preserves_counters_but_not_active_gradients():
+    parameter = torch.nn.Parameter(torch.tensor(1.0))
+    optimizer = torch.optim.SGD([parameter], lr=0.1)
+    health = AccumulationHealth()
+    parameter.backward()
+    health.record_finite_microbatch()
+    health.abort_group(optimizer)
+
+    resumed = AccumulationHealth()
+    resumed.load_state_dict(health.state_dict())
+
+    assert resumed.active_microbatches == 0
+    assert resumed.nonfinite_microbatches == 1
+    assert resumed.aborted_groups == 1
+    assert resumed.discarded_finite_microbatches == 1
+    assert parameter.grad is None
+
+
+def test_nonfinite_group_limit_counts_only_aborted_groups():
+    health = AccumulationHealth(aborted_groups=2)
+
+    assert not health.exceeds_limit(2)
+    health.aborted_groups += 1
+    assert health.exceeds_limit(2)
+    assert health.exceeds_limit(0)
+    assert not health.exceeds_limit(-1)
