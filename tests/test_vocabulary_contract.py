@@ -126,3 +126,29 @@ def test_resume_requires_exact_embedding_output_and_checkpoint_vocab(tmp_path):
     )
     with pytest.raises(VocabularyContractError, match="Use transfer_from"):
         validate_resume_checkpoint(legacy_checkpoint, contract)
+
+
+def test_resume_rejects_different_dataset_identity(tmp_path):
+    vocab = _write_vocab(tmp_path / "itos.txt")
+    dataset = tmp_path / "train.npz"
+    np.savez(dataset, X=np.array([[0, 1]]), Y=np.array([[1, 0]]))
+    contract = resolve_vocabulary_contract(
+        [dataset], configured_path=vocab, configured_size=None
+    )
+    checkpoint = tmp_path / "checkpoint.pt"
+    torch.save(
+        {
+            "model": {
+                "tok_emb.weight": torch.zeros(contract.size, 4),
+                "head.weight": torch.zeros(contract.size, 4),
+            },
+            "cfg": {
+                "vocab_size": contract.size,
+                "vocabulary": {"sha256": contract.sha256},
+                "dataset_manifest": {"dataset_id": "dataset-a"},
+            },
+        },
+        checkpoint,
+    )
+    with pytest.raises(VocabularyContractError, match="current dataset_id='dataset-b'"):
+        validate_resume_checkpoint(checkpoint, contract, dataset_id="dataset-b")

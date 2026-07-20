@@ -5,6 +5,7 @@ import math
 import csv
 import json
 import logging
+import resource
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -124,8 +125,22 @@ def _average_accumulated_gradients(parameters, microbatch_count: int) -> None:
         if param.grad is not None:
             param.grad.div_(microbatch_count)
 
-def dev(force_gpu: bool = False):
-    device = default_device()
+def dev(force_gpu: bool = False, requested: str = "auto"):
+    requested = str(requested or "auto").lower()
+    if requested not in {"auto", "cpu", "mps", "cuda"}:
+        raise ValueError(f"unsupported device {requested!r}; expected auto, cpu, mps, or cuda")
+    if requested == "cpu":
+        device = torch.device("cpu")
+    elif requested == "mps":
+        if not torch.backends.mps.is_available():
+            raise RuntimeError("requested device=mps but MPS is not available")
+        device = torch.device("mps")
+    elif requested == "cuda":
+        if not torch.cuda.is_available():
+            raise RuntimeError("requested device=cuda but CUDA is not available")
+        device = torch.device("cuda")
+    else:
+        device = default_device()
     if force_gpu and device.type == "cpu":
         raise RuntimeError("force_gpu=true but no CUDA or MPS device is available")
     return device
@@ -178,11 +193,13 @@ def run_training(cfg: dict, args) -> None:
             "scientific_valid": dataset_manifest["dataset"]["scientific_valid"],
             "schema": dataset_manifest["schema"],
         }
+        current_dataset_id = dataset_manifest["dataset"]["id"]
     else:
         cfg["dataset_manifest"] = {
             "status": "legacy_unverified",
             "scientific_valid": False,
         }
+        current_dataset_id = None
 
     configured_vocab_size = cfg.get("vocab_size")
     vocabulary_contract = resolve_vocabulary_contract(
@@ -195,7 +212,9 @@ def run_training(cfg: dict, args) -> None:
     if resume_path and not os.path.isfile(resume_path):
         raise FileNotFoundError(f"Resume checkpoint not found: {resume_path}")
     if resume_path:
-        validate_resume_checkpoint(resume_path, vocabulary_contract)
+        validate_resume_checkpoint(
+            resume_path, vocabulary_contract, dataset_id=current_dataset_id
+        )
 
     transfer_path = None if resume_path else (args.transfer_from or cfg.pop("transfer_from", None))
     if transfer_path and not os.path.isfile(transfer_path):
@@ -376,7 +395,10 @@ def run_training(cfg: dict, args) -> None:
             ])
 
     try:
-        device = dev(force_gpu=bool(cfg.get("force_gpu", False)))
+        device = dev(
+            force_gpu=bool(cfg.get("force_gpu", False)),
+            requested=str(cfg.get("device", "auto")),
+        )
     except Exception as exc:
         print(f"[error] training failed: {exc}", file=sys.stderr)
         write_failure_meta(exc)
@@ -658,6 +680,13 @@ def run_training(cfg: dict, args) -> None:
     best = float("inf")
     no_improve = 0
     step = 0
+    consumed_train_tokens = 0
+    pending_train_tokens = 0
+    runtime_memory = {
+        "process_max_rss_raw": int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss),
+        "mps_peak_allocated_bytes": 0,
+        "mps_peak_driver_bytes": 0,
+    }
     best_epoch = None
     resume_microbatch_idx = 0
     current_epoch_idx = 0
@@ -742,6 +771,15 @@ def run_training(cfg: dict, args) -> None:
                     print(f"[resume] scheduler state load failed: {exc}")
             start_epoch = int(ckpt_resume.get("epoch", 0))
             step = int(ckpt_resume.get("step", step))
+            consumed_train_tokens = int(
+                ckpt_resume.get("consumed_train_tokens", consumed_train_tokens)
+            )
+            pending_train_tokens = 0
+            previous_memory = ckpt_resume.get("runtime_memory", {})
+            for key in runtime_memory:
+                runtime_memory[key] = max(
+                    runtime_memory[key], int(previous_memory.get(key, 0) or 0)
+                )
             best = float(ckpt_resume.get("best_val", best))
             best_epoch = ckpt_resume.get("best_epoch", best_epoch)
             no_improve = int(ckpt_resume.get("no_improve", no_improve))
@@ -804,6 +842,8 @@ def run_training(cfg: dict, args) -> None:
                 "best_epoch": best_epoch,
                 "no_improve": no_improve,
                 "step": step,
+                "consumed_train_tokens": int(consumed_train_tokens),
+                "runtime_memory": dict(runtime_memory),
                 "epoch_microbatch_idx": (
                     0 if val_loss != float("inf") else int(current_resume_microbatch_idx)
                 ),
@@ -828,6 +868,7 @@ def run_training(cfg: dict, args) -> None:
 
         def one_pass(split, loader, epoch_idx: int, skip_microbatches: int = 0):
             nonlocal step, current_epoch_idx, current_microbatch_idx, current_resume_microbatch_idx, replay_iter
+            nonlocal consumed_train_tokens, pending_train_tokens
             mps_autocast_ok = True
             model.train(split=="train")
             total, next_total, term_total, replay_total, n = 0.0, 0.0, 0.0, 0.0, 0
@@ -838,6 +879,22 @@ def run_training(cfg: dict, args) -> None:
             optim.zero_grad(set_to_none=True)
             skipped = 0
             health_before = accumulation_health.state_dict()
+
+            def sample_runtime_memory() -> None:
+                runtime_memory["process_max_rss_raw"] = max(
+                    runtime_memory["process_max_rss_raw"],
+                    int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss),
+                )
+                if device.type == "mps":
+                    runtime_memory["mps_peak_allocated_bytes"] = max(
+                        runtime_memory["mps_peak_allocated_bytes"],
+                        int(torch.mps.current_allocated_memory()),
+                    )
+                    driver = getattr(torch.mps, "driver_allocated_memory", None)
+                    if callable(driver):
+                        runtime_memory["mps_peak_driver_bytes"] = max(
+                            runtime_memory["mps_peak_driver_bytes"], int(driver())
+                        )
             start_time = time.perf_counter()
             if split == "train" and skip_microbatches > 0:
                 print(f"[resume] skipping {skip_microbatches}/{len(loader)} already-applied train microbatches")
@@ -922,6 +979,7 @@ def run_training(cfg: dict, args) -> None:
 
                 def step_optimizer(group_size: int) -> None:
                     nonlocal step, current_resume_microbatch_idx
+                    nonlocal consumed_train_tokens, pending_train_tokens
                     if group_size <= 0:
                         return
                     _average_accumulated_gradients(trainable_params, group_size)
@@ -932,6 +990,8 @@ def run_training(cfg: dict, args) -> None:
                     optim.step()
                     optim.zero_grad(set_to_none=True)
                     accumulation_health.complete_group()
+                    consumed_train_tokens += pending_train_tokens
+                    pending_train_tokens = 0
                     step += 1
                     current_resume_microbatch_idx = batch_idx + 1
                     if use_cosine:
@@ -954,6 +1014,7 @@ def run_training(cfg: dict, args) -> None:
                     skipped += 1
                     if split == "train":
                         discarded = accumulation_health.abort_group(optim)
+                        pending_train_tokens = 0
                         current_resume_microbatch_idx = batch_idx + 1
                         print(
                             "[train] aborted nonfinite accumulation group "
@@ -968,6 +1029,7 @@ def run_training(cfg: dict, args) -> None:
                     continue
                 if split=="train":
                     loss.backward()
+                    pending_train_tokens += int(yb.ne(PAD_ID).sum().item())
                     accumulation_health.record_finite_microbatch()
                     if accumulation_health.active_microbatches == gacc:
                         step_optimizer(accumulation_health.active_microbatches)
@@ -985,6 +1047,7 @@ def run_training(cfg: dict, args) -> None:
                     offset_totals[offset] += float(offset_loss.detach().item())
                     offset_counts[offset] += 1
                 n += 1
+                sample_runtime_memory()
                 wall_timer.check()
             
             if split == "train" and accumulation_health.active_microbatches:

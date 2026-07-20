@@ -647,6 +647,11 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     the versioned dataset-manifest contract, CPU/MPS train-save-resume preflight, and
     immutable genome/genus-held-out dataset freeze. Only then should models be retrained
     from random initialization and the controlled evaluations rerun.
+*   **Corrected Training Lifecycle Preflight:** Added explicit CPU/MPS device selection,
+    committed non-PAD token accounting, checkpointed peak-memory telemetry, strict
+    dataset-identity resume validation, and a two-process train/save/resume integration
+    command. The 2026-07-21 host M2 run completed on MPS with four total optimizer
+    steps, 80 committed tokens, and zero non-finite or aborted accumulation groups.
 
 ---
 *End of Log*

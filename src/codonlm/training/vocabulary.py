@@ -194,7 +194,12 @@ def checkpoint_embedding_rows(checkpoint: dict) -> tuple[int | None, int | None]
     )
 
 
-def validate_resume_checkpoint(checkpoint_path: str | Path, contract: VocabularyContract) -> None:
+def validate_resume_checkpoint(
+    checkpoint_path: str | Path,
+    contract: VocabularyContract,
+    *,
+    dataset_id: str | None = None,
+) -> None:
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     embedding_rows, output_rows = checkpoint_embedding_rows(checkpoint)
     checkpoint_cfg = checkpoint.get("cfg", {}) if isinstance(checkpoint, dict) else {}
@@ -210,6 +215,17 @@ def validate_resume_checkpoint(checkpoint_path: str | Path, contract: Vocabulary
     checkpoint_hash = checkpoint_vocab.get("sha256") if isinstance(checkpoint_vocab, dict) else None
     if checkpoint_hash is not None and checkpoint_hash != contract.sha256:
         mismatches.append(f"checkpoint vocabulary sha256={checkpoint_hash}")
+    if dataset_id is not None:
+        checkpoint_manifest = checkpoint_cfg.get("dataset_manifest", {})
+        checkpoint_dataset_id = (
+            checkpoint_manifest.get("dataset_id")
+            if isinstance(checkpoint_manifest, dict)
+            else None
+        )
+        if checkpoint_dataset_id != dataset_id:
+            mismatches.append(
+                f"checkpoint dataset_id={checkpoint_dataset_id!r}, current dataset_id={dataset_id!r}"
+            )
     if mismatches:
         raise VocabularyContractError(
             f"Resume checkpoint {checkpoint_path} is incompatible with tokenizer "

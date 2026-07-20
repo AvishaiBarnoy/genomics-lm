@@ -101,6 +101,7 @@ def test_nonfinite_abort_checkpoint_and_resume_preserve_step_counters(
     checkpoint_path = tmp_path / "runs/nonfinite-resume/checkpoints/last.pt"
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     assert checkpoint["step"] == 0
+    assert checkpoint["consumed_train_tokens"] == 0
     assert checkpoint["scheduler"]["last_epoch"] == 0
     assert checkpoint["epoch_microbatch_idx"] == 2
     assert checkpoint["accumulation_health"] == {
@@ -125,6 +126,7 @@ def test_nonfinite_abort_checkpoint_and_resume_preserve_step_counters(
 
     resumed = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     assert resumed["step"] == 2
+    assert resumed["consumed_train_tokens"] == 12
     assert resumed["scheduler"]["last_epoch"] == 2
     assert resumed["epoch_microbatch_idx"] == 0
     assert resumed["accumulation_health"]["aborted_groups"] == 1
