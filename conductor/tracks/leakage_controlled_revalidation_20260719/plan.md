@@ -1,8 +1,9 @@
 # Leakage-Controlled CodonLM Revalidation Plan
 
 ## Status
-In progress. Engineering gates are complete; full retraining remains blocked on
-the corrected dataset freeze.
+In progress. Engineering gates and the local corrected dataset freeze are complete;
+full retraining remains blocked on evaluator-fixture validation and the immutable
+training configuration gate.
 
 ## Phase 1: Governance and CI
 - [x] Relabel legacy results and unsupported claims (#87).
@@ -37,14 +38,21 @@ Exit gate: all blocking data and trainer PRs are merged, CI is green, and an MPS
 preflight completes without OOM, non-finite updates, provenance gaps, or leakage.
 
 ## Phase 4: Freeze Corrected Datasets
-- [ ] Pin the source snapshot and create immutable genome-held-out and genus-held-out
-  source-record manifests using seeds `1337` and `2027` where randomness applies.
-- [ ] Generate corrected fragment, chunk, packed, and vocabulary artifacts from the
+- [x] Pin the source snapshot and create immutable genome-held-out and genus-held-out
+  source-record manifests with split/packing seed `1337`.
+- [x] Generate corrected fragment, chunk, packed, and vocabulary artifacts from the
   same source inventory.
-- [ ] Run exact-duplicate and protein-homology gates before training.
-- [ ] Publish manifest hashes, group/record/fragment/chunk/token counts, achieved
+- [x] Quarantine and verify zero exact cross-split CDS copies; complete mandatory
+  protein-cluster and nearest-neighbor reports under the grouped-holdout policy.
+- [x] Record manifest hashes, group/record/fragment/chunk/token counts, achieved
   split fractions, ambiguity statistics, and audit reports.
 - [ ] Tag the dataset schema and artifact generation as the pipeline freeze.
+
+Local freeze `718417694607bed760fcb2335db1f65c96ef69cdae1612853e8778eef5ba8406`
+contains genome dataset `da3dfce28b7a46b8640d75c7cb417c867137a99e004ea359d85784ff0c269db9`
+and genus dataset `10f41e818182704bbe4f95fbd81eb8696047762a32f84d167a4101675945ab95`.
+The freeze is a local acceptance artifact until this pipeline PR merges and a
+clean-checkout reproduction confirms the same identities.
 
 Exit gate: a clean checkout can reproduce byte-identical manifests and all blocking
 audits pass. Any later semantic change creates a new dataset version.

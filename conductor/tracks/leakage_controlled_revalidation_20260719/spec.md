@@ -65,7 +65,9 @@ the following artifacts pass a reproducible preflight command:
 - fragment and chunk provenance with source-record membership preserved;
 - tokenizer vocabulary and policy hashes;
 - packing configuration and deterministic seed;
-- exact-duplicate and protein-cluster leakage reports with zero blocking violations;
+- zero exact-CDS cross-split duplicates after recorded quarantine, plus completed
+  protein-cluster and nearest-neighbor reports; protein crossings are blocking only
+  for protocols explicitly declared homology-held-out;
 - dataset token/count summaries and achieved split fractions;
 - successful CPU tests plus MPS smoke training, checkpoint, and resume tests.
 

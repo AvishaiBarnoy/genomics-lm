@@ -13,6 +13,7 @@ from src.codonlm.leakage_audit import (
     cross_split_cluster_violations,
     exact_cross_split_duplicates,
     matching_substring_coverage,
+    quarantine_cross_split_exact_duplicates,
     translate_cds,
 )
 
@@ -37,6 +38,24 @@ def test_exact_duplicate_hashes_normalized_full_cds():
 
 def test_translation_removes_terminal_stop_for_mmseqs():
     assert translate_cds("ATGGCTTAA") == "MA"
+
+
+def test_exact_duplicate_quarantine_preserves_heldout_priority():
+    records = [
+        _record("train-a", "train", "ATGGCCTAA"),
+        _record("train-b", "train", "ATGGCCTAA"),
+        _record("val-a", "val", "ATGGCCTAA"),
+        _record("test-a", "test", "ATGGCCTAA"),
+        _record("train-unique", "train", "ATGGCTTAA"),
+    ]
+
+    retained, report = quarantine_cross_split_exact_duplicates(records)
+
+    assert {record["source_id"] for record in retained} == {"test-a", "train-unique"}
+    assert report["duplicate_family_count"] == 1
+    assert report["removed_record_count"] == 3
+    assert report["removed_by_split"] == {"train": 2, "val": 1, "test": 0}
+    assert exact_cross_split_duplicates(retained) == []
 
 
 def test_matching_substring_coverage_marks_query_positions():
@@ -141,9 +160,52 @@ else:
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
+def _write_fake_minimap2(path: Path) -> None:
+    path.write_text(
+        """#!/usr/bin/env python3
+import sys
+from pathlib import Path
+
+def fasta(path):
+    records = []
+    name = None
+    sequence = []
+    for line in Path(path).read_text().splitlines():
+        if line.startswith('>'):
+            if name is not None:
+                records.append((name, ''.join(sequence)))
+            name = line[1:]
+            sequence = []
+        else:
+            sequence.append(line.strip())
+    if name is not None:
+        records.append((name, ''.join(sequence)))
+    return records
+
+if '--version' in sys.argv:
+    print('fake-minimap2-1.0')
+else:
+    targets = fasta(sys.argv[-2])
+    queries = fasta(sys.argv[-1])
+    if targets:
+        target_id, target = targets[0]
+        for query_id, query in queries:
+            length = min(len(query), len(target))
+            matches = sum(a == b for a, b in zip(query, target))
+            print(
+                f'{query_id}\t{len(query)}\t0\t{length}\t+\t{target_id}\t'
+                f'{len(target)}\t0\t{length}\t{matches}\t{length}\t60\ttp:A:P'
+            )
+"""
+    )
+    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
 def test_mmseqs_protein_cluster_violation_blocks_and_records_provenance(tmp_path):
     executable = tmp_path / "mmseqs"
+    nucleotide_executable = tmp_path / "minimap2"
     _write_fake_mmseqs(executable)
+    _write_fake_minimap2(nucleotide_executable)
     report_path = tmp_path / "leakage.json"
     records = [
         _record("train-synonym", "train", "ATGGCTGCTTAA"),
@@ -156,6 +218,7 @@ def test_mmseqs_protein_cluster_violation_blocks_and_records_provenance(tmp_path
             records,
             report_path,
             executable=str(executable),
+            nucleotide_executable=str(nucleotide_executable),
             min_protein_identity=0.3,
             min_coverage=0.8,
         )
@@ -171,6 +234,45 @@ def test_mmseqs_protein_cluster_violation_blocks_and_records_provenance(tmp_path
         "train-synonym",
     ]
     assert homology["nearest_neighbors"]["protein"]["summary"]["count"] == 2
+    search_commands = [command for command in homology["commands"] if command[1] == "easy-search"]
+    assert [command[command.index("--search-type") + 1] for command in search_commands] == ["1"]
+    assert homology["nearest_neighbors"]["nucleotide"]["tool"]["version"] == (
+        "fake-minimap2-1.0"
+    )
+    assert homology["intermediates_cleaned"] is True
+    work_dir = tmp_path / "leakage_audit_work"
+    assert sorted(path.name for path in work_dir.iterdir()) == [
+        "nearest_nucleotide.paf",
+        "nearest_protein.tsv",
+        "protein_clusters_cluster.tsv",
+    ]
+
+
+def test_mmseqs_protein_cluster_report_policy_is_nonblocking(tmp_path):
+    executable = tmp_path / "mmseqs"
+    nucleotide_executable = tmp_path / "minimap2"
+    _write_fake_mmseqs(executable)
+    _write_fake_minimap2(nucleotide_executable)
+    report_path = tmp_path / "leakage.json"
+    records = [
+        _record("train-synonym", "train", "ATGGCTGCTTAA"),
+        _record("test-synonym", "test", "ATGGCCGCCTAA"),
+        _record("val-unique", "val", "ATGAAACAATAA"),
+    ]
+
+    report = audit_source_records(
+        records,
+        report_path,
+        executable=str(executable),
+        nucleotide_executable=str(nucleotide_executable),
+        protein_homology_policy="report",
+    )
+
+    assert report["status"] == "passed"
+    assert report["blocking_reasons"] == []
+    assert report["protein_homology_policy"] == "report"
+    assert report["thresholds"]["max_cross_split_protein_clusters"] is None
+    assert report["protein_homology"]["cross_split_cluster_count"] == 1
 
 
 def test_generated_audit_reports_nearest_identity_and_match_coverage(tmp_path):

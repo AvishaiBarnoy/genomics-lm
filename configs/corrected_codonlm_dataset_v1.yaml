@@ -10,6 +10,14 @@ min_len: 90
 min_fragment_codons: 10
 max_cross_split_protein_identity: 0.3
 min_homology_coverage: 0.8
+exact_duplicate_policy: quarantine
+# Whole-genome/genus holdouts intentionally retain homologous but non-identical genes.
+# Cross-split clusters are measured and reported; dedicated homology-held-out probes
+# continue to use the strict blocking policy.
+protein_homology_policy: report
+mmseqs_query_batch_size: 4096
+mmseqs_split_memory_limit: "0"
+nucleotide_alignment_preset: asm20
 
 datasets:
   - name: ecoli_k12

@@ -34,8 +34,9 @@ Full training is blocked until all of the following are true:
 
 - The corrected genome-held-out and genus-held-out datasets are immutable and
   identified by versioned manifests and artifact hashes.
-- Ambiguity fragmentation, chunking, packing, vocabulary, exact-duplicate, and
-  protein-homology gates pass.
+- Ambiguity fragmentation, chunking, packing, and vocabulary gates pass; exact
+  cross-split CDS copies are absent after recorded quarantine; mandatory protein
+  homology reports complete under the declared grouped-holdout policy.
 - Every final evaluator consumes explicit frozen artifacts and emits provenance.
 - CPU integration and MPS train/save/resume preflights pass.
 - The MPS runtime policy is selected by an equal-token quality comparison without
