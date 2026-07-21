@@ -549,6 +549,8 @@ def test_global_split_and_baselines_end_to_end(tmp_path):
         "scripts.generate_synonymous_controls",
         "--test_npz",
         str(test_npz),
+        "--manifest",
+        str(output_dir / "manifest.json"),
     ]
     res_controls = subprocess.run(cmd_controls, capture_output=True, text=True)
     assert res_controls.returncode == 0, f"Controls generation failed: {res_controls.stderr}"
@@ -568,6 +570,18 @@ def test_global_split_and_baselines_end_to_end(tmp_path):
 
     with np.load(control_syn) as data:
         assert data["X"].shape == (expected_len, 128)
+        for control_x, control_y in zip(data["X"], data["Y"]):
+            transition_count = int(np.count_nonzero(control_y))
+            assert np.array_equal(
+                control_x[1:transition_count],
+                control_y[: transition_count - 1],
+            )
+
+    provenance = json.loads(
+        control_syn.with_suffix(".npz.provenance.json").read_text()
+    )
+    assert provenance["status"] == "derived_control_verified"
+    assert provenance["control"] == "synonymous"
         
     print("Synonymous controls test completed successfully.")
 

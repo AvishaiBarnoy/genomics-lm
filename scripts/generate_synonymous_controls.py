@@ -1,185 +1,241 @@
 #!/usr/bin/env python3
-"""
-scripts/generate_synonymous_controls.py — Synonymous & Shuffling Control Suite Generator
-
-This script generates control variants of a test dataset to scientifically validate
-whether Genomics-LM encodes biological properties beyond basic composition and protein templates.
-
-It outputs:
-  1. Synonymous Mutated Control (preserves amino acid sequence, randomizes codon selection).
-  2. Codon Shuffled Control (shuffles codon order within each gene, preserving composition).
-  3. Protein Shuffled Control (shuffles amino acids, maintaining codon usage).
-
-Usage:
-  python -m scripts.generate_synonymous_controls --test_npz data/processed/global/my_run/test_bs256.npz
-"""
+"""Generate manifest-bound synonymous and sequence-shuffling controls."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import random
 from pathlib import Path
+from typing import Callable
+
 import numpy as np
 
-# Standard Genetic Code
+from src.codonlm.dataset_manifest import manifest_artifact_path
+from src.codonlm.evaluation_provenance import artifact_provenance, bind_dataset_manifest
+from src.codonlm.training.vocabulary import load_itos
+
+
 AA_TO_CODONS = {
-    'A': ['GCT', 'GCC', 'GCA', 'GCG'],
-    'R': ['CGT', 'CGC', 'CGA', 'CGG', 'AGA', 'AGG'],
-    'N': ['AAT', 'AAC'],
-    'D': ['GAT', 'GAC'],
-    'C': ['TGT', 'TGC'],
-    'Q': ['CAA', 'CAG'],
-    'E': ['GAA', 'GAG'],
-    'G': ['GGT', 'GGC', 'GGA', 'GGG'],
-    'H': ['CAT', 'CAC'],
-    'I': ['ATT', 'ATC', 'ATA'],
-    'L': ['TTA', 'TTG', 'CTT', 'CTC', 'CTA', 'CTG'],
-    'K': ['AAA', 'AAG'],
-    'M': ['ATG'],
-    'F': ['TTT', 'TTC'],
-    'P': ['CCT', 'CCC', 'CCA', 'CCG'],
-    'S': ['TCT', 'TCC', 'TCA', 'TCG', 'AGT', 'AGC'],
-    'T': ['ACT', 'ACC', 'ACA', 'ACG'],
-    'W': ['TGG'],
-    'Y': ['TAT', 'TAC'],
-    'V': ['GTT', 'GTC', 'GTA', 'GTG'],
-    '*': ['TAA', 'TAG', 'TGA']  # Stop codons
+    "A": ["GCT", "GCC", "GCA", "GCG"],
+    "R": ["CGT", "CGC", "CGA", "CGG", "AGA", "AGG"],
+    "N": ["AAT", "AAC"], "D": ["GAT", "GAC"], "C": ["TGT", "TGC"],
+    "Q": ["CAA", "CAG"], "E": ["GAA", "GAG"],
+    "G": ["GGT", "GGC", "GGA", "GGG"], "H": ["CAT", "CAC"],
+    "I": ["ATT", "ATC", "ATA"],
+    "L": ["TTA", "TTG", "CTT", "CTC", "CTA", "CTG"],
+    "K": ["AAA", "AAG"], "M": ["ATG"], "F": ["TTT", "TTC"],
+    "P": ["CCT", "CCC", "CCA", "CCG"],
+    "S": ["TCT", "TCC", "TCA", "TCG", "AGT", "AGC"],
+    "T": ["ACT", "ACC", "ACA", "ACG"], "W": ["TGG"],
+    "Y": ["TAT", "TAC"], "V": ["GTT", "GTC", "GTA", "GTG"],
+    "*": ["TAA", "TAG", "TGA"],
+}
+CODON_TO_AA = {
+    codon: amino_acid
+    for amino_acid, codons in AA_TO_CODONS.items()
+    for codon in codons
 }
 
-CODON_TO_AA = {codon: aa for aa, codons in AA_TO_CODONS.items() for codon in codons}
 
-# Vocabulary mapping (must match codon_tokenize.py)
-CODONS = [a + b + c for a in "ACGT" for b in "ACGT" for c in "ACGT"]
-SPECIALS = ["<PAD>", "<BOS_CDS>", "<EOS_CDS>", "<SEP>"]
-VOCAB = SPECIALS + CODONS
-stoi = {tok: i for i, tok in enumerate(VOCAB)}
-itos = {i: tok for i, tok in enumerate(VOCAB)}
+def _codon_spans(sequence: np.ndarray, itos: list[str]):
+    start = None
+    for index, value in enumerate(sequence):
+        token_id = int(value)
+        is_codon = 0 <= token_id < len(itos) and itos[token_id] in CODON_TO_AA
+        if is_codon and start is None:
+            start = index
+        elif not is_codon and start is not None:
+            yield start, index
+            start = None
+    if start is not None:
+        yield start, len(sequence)
 
-def synonymous_mutate_sequence(seq: np.ndarray, rng: random.Random) -> np.ndarray:
-    out = np.copy(seq)
-    for i in range(len(seq)):
-        val = int(seq[i])
-        # Preserve specials (PAD=0, BOS=1, EOS=2, SEP=3)
-        if val < 4:
+
+def synonymous_mutate_sequence(
+    sequence: np.ndarray, rng: random.Random, itos: list[str], stoi: dict[str, int]
+) -> np.ndarray:
+    output = np.copy(sequence)
+    for start, end in _codon_spans(sequence, itos):
+        for index in range(start, end):
+            amino_acid = CODON_TO_AA[itos[int(sequence[index])]]
+            output[index] = stoi[rng.choice(AA_TO_CODONS[amino_acid])]
+    return output
+
+
+def codon_shuffle_sequence(
+    sequence: np.ndarray, rng: random.Random, itos: list[str], _stoi: dict[str, int]
+) -> np.ndarray:
+    output = np.copy(sequence)
+    for start, end in _codon_spans(sequence, itos):
+        values = list(sequence[start:end])
+        rng.shuffle(values)
+        output[start:end] = values
+    return output
+
+
+def protein_shuffle_sequence(
+    sequence: np.ndarray, rng: random.Random, itos: list[str], stoi: dict[str, int]
+) -> np.ndarray:
+    output = np.copy(sequence)
+    for start, end in _codon_spans(sequence, itos):
+        amino_acids = [CODON_TO_AA[itos[int(value)]] for value in sequence[start:end]]
+        rng.shuffle(amino_acids)
+        output[start:end] = [
+            stoi[rng.choice(AA_TO_CODONS[amino_acid])]
+            for amino_acid in amino_acids
+        ]
+    return output
+
+
+def _transform_dataset(
+    X: np.ndarray,
+    Y: np.ndarray | None,
+    lengths: np.ndarray | None,
+    transform: Callable,
+    *,
+    rng: random.Random,
+    itos: list[str],
+    stoi: dict[str, int],
+) -> tuple[np.ndarray, np.ndarray | None]:
+    if lengths is not None:
+        output = np.copy(X)
+        offset = 0
+        for raw_length in lengths:
+            length = int(raw_length)
+            output[offset : offset + length] = transform(
+                X[offset : offset + length], rng, itos, stoi
+            )
+            offset += length
+        if offset != len(X):
+            raise ValueError("dynamic lengths do not cover the flat token array")
+        return output, None
+
+    if Y is None or X.ndim != 2 or Y.shape != X.shape:
+        raise ValueError("fixed controls require equally shaped two-dimensional X and Y")
+    output_x = np.zeros_like(X)
+    output_y = np.zeros_like(Y)
+    for row in range(len(X)):
+        transition_count = int(np.count_nonzero(Y[row]))
+        if transition_count == 0:
             continue
-        codon_str = itos[val]
-        aa = CODON_TO_AA.get(codon_str)
-        if aa is None:
-            continue
-        synonyms = AA_TO_CODONS[aa]
-        chosen_codon = rng.choice(synonyms)
-        out[i] = stoi[chosen_codon]
-    return out
+        if transition_count > 1 and not np.array_equal(
+            X[row, 1:transition_count], Y[row, : transition_count - 1]
+        ):
+            raise ValueError("source dataset violates the next-token X/Y shift invariant")
+        if np.any(X[row, transition_count:]) or np.any(Y[row, transition_count:]):
+            raise ValueError("source dataset contains non-PAD tokens after padding begins")
+        stream = np.concatenate(
+            (X[row, :transition_count], Y[row, transition_count - 1 : transition_count])
+        )
+        transformed = transform(stream, rng, itos, stoi)
+        output_x[row, :transition_count] = transformed[:-1]
+        output_y[row, :transition_count] = transformed[1:]
+    return output_x, output_y
 
-def codon_shuffle_sequence(seq: np.ndarray, rng: random.Random) -> np.ndarray:
-    out = np.copy(seq)
-    # Find positions of sense codons (ids >= 4)
-    codon_indices = [i for i, val in enumerate(seq) if val >= 4]
-    if not codon_indices:
-        return out
-    
-    # Extract, shuffle, and re-insert
-    codon_vals = [seq[i] for i in codon_indices]
-    rng.shuffle(codon_vals)
-    for idx, i in enumerate(codon_indices):
-        out[i] = codon_vals[idx]
-    return out
 
-def protein_shuffle_sequence(seq: np.ndarray, rng: random.Random) -> np.ndarray:
-    out = np.copy(seq)
-    # Find indices of sense codons (ids >= 4)
-    codon_indices = [i for i, val in enumerate(seq) if val >= 4]
-    if not codon_indices:
-        return out
-        
-    # Translate to amino acids
-    aas = []
-    for i in codon_indices:
-        codon_str = itos[int(seq[i])]
-        aas.append(CODON_TO_AA.get(codon_str, 'M'))  # Default to Methionine if not found
-        
-    # Shuffle amino acids
-    rng.shuffle(aas)
-    
-    # Re-encode back to codon ids (randomly choosing synonymous codons for each shuffled amino acid)
-    for idx, i in enumerate(codon_indices):
-        aa = aas[idx]
-        syns = AA_TO_CODONS[aa]
-        chosen = rng.choice(syns)
-        out[i] = stoi[chosen]
-    return out
+def _write_control(
+    path: Path,
+    X: np.ndarray,
+    Y: np.ndarray | None,
+    lengths: np.ndarray | None,
+    *,
+    kind: str,
+    seed: int,
+    manifest_provenance: dict | None,
+    source_provenance: dict,
+    vocabulary_provenance: dict,
+) -> None:
+    if lengths is None:
+        np.savez_compressed(path, X=X, Y=Y)
+    else:
+        np.savez_compressed(path, X=X, lengths=lengths)
+    provenance = {
+        "schema_version": 1,
+        "status": "derived_control_verified" if manifest_provenance else "legacy_unverified",
+        "control": kind,
+        "seed": seed,
+        "dataset_id": manifest_provenance.get("dataset_id") if manifest_provenance else None,
+        "dataset_manifest": manifest_provenance,
+        "vocabulary": vocabulary_provenance,
+        "source_test": source_provenance,
+        "output": artifact_provenance(path),
+    }
+    sidecar = path.with_suffix(path.suffix + ".provenance.json")
+    sidecar.write_text(json.dumps(provenance, indent=2, sort_keys=True) + "\n")
+    print(f"[controls] saved {path} and {sidecar}")
+
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--test_npz", required=True, help="Path to test NPZ dataset")
-    ap.add_argument("--seed", type=int, default=1337)
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--test_npz", type=Path, required=True)
+    parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--vocabulary", type=Path, help="Required for legacy data without a manifest.")
+    parser.add_argument("--out_dir", type=Path)
+    parser.add_argument("--seed", type=int, default=1337)
+    args = parser.parse_args()
 
-    test_path = Path(args.test_npz)
-    if not test_path.exists():
-        raise FileNotFoundError(f"Test NPZ not found: {test_path}")
+    test_path = args.test_npz.expanduser().resolve()
+    if not test_path.is_file():
+        raise FileNotFoundError(f"test dataset not found: {test_path}")
 
-    print(f"[controls] Loading test dataset from {test_path}...")
-    with np.load(test_path) as data:
-        X = data["X"]
-        Y = data.get("Y", None)
-        lengths = data.get("lengths", None)
+    manifest_provenance = None
+    if args.manifest:
+        manifest, manifest_provenance = bind_dataset_manifest(
+            args.manifest,
+            expected_artifacts={"test_tokens": test_path},
+            require_scientific=False,
+        )
+        vocabulary_path = manifest_artifact_path(
+            manifest, args.manifest.expanduser().resolve(), "vocabulary"
+        )
+    elif args.vocabulary:
+        vocabulary_path = args.vocabulary.expanduser().resolve()
+    else:
+        raise ValueError("provide --manifest or --vocabulary; vocabulary IDs are not inferred")
 
-    rng = random.Random(args.seed)
+    itos = load_itos(vocabulary_path)
+    stoi = {token: index for index, token in enumerate(itos)}
+    missing_codons = sorted(set(CODON_TO_AA) - set(stoi))
+    if missing_codons:
+        raise ValueError(f"vocabulary lacks standard codons: {missing_codons}")
 
-    # 1. Synonymous Recoding
-    print("[controls] Generating Synonymous Recoding control...")
-    X_syn = np.copy(X)
-    for i in range(len(X)):
-        X_syn[i] = synonymous_mutate_sequence(X[i], rng)
-    
-    Y_syn = None
-    if Y is not None:
-        Y_syn = np.copy(Y)
-        for i in range(len(Y)):
-            Y_syn[i] = synonymous_mutate_sequence(Y[i], rng)
+    with np.load(test_path, allow_pickle=False) as data:
+        X = np.asarray(data["X"])
+        Y = np.asarray(data["Y"]) if "Y" in data else None
+        lengths = np.asarray(data["lengths"]) if "lengths" in data else None
 
-    # 2. Codon Shuffling
-    print("[controls] Generating Codon Shuffling control...")
-    X_shuf = np.copy(X)
-    for i in range(len(X)):
-        X_shuf[i] = codon_shuffle_sequence(X[i], rng)
-        
-    Y_shuf = None
-    if Y is not None:
-        Y_shuf = np.copy(Y)
-        for i in range(len(Y)):
-            Y_shuf[i] = codon_shuffle_sequence(Y[i], rng)
+    controls = (
+        ("synonymous", synonymous_mutate_sequence, 0),
+        ("codon_shuffle", codon_shuffle_sequence, 1),
+        ("protein_shuffle", protein_shuffle_sequence, 2),
+    )
+    out_dir = (args.out_dir or test_path.parent).expanduser().resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    block_label = X.shape[1] if X.ndim > 1 else int(lengths.max(initial=0))
+    for kind, transform, seed_offset in controls:
+        control_x, control_y = _transform_dataset(
+            X,
+            Y,
+            lengths,
+            transform,
+            rng=random.Random(args.seed + seed_offset),
+            itos=itos,
+            stoi=stoi,
+        )
+        output = out_dir / f"test_control_{kind}_bs{block_label}.npz"
+        _write_control(
+            output,
+            control_x,
+            control_y,
+            lengths,
+            kind=kind,
+            seed=args.seed + seed_offset,
+            manifest_provenance=manifest_provenance,
+            source_provenance=artifact_provenance(test_path),
+            vocabulary_provenance=artifact_provenance(vocabulary_path),
+        )
 
-    # 3. Protein Shuffling
-    print("[controls] Generating Protein Shuffling control...")
-    X_prot = np.copy(X)
-    for i in range(len(X)):
-        X_prot[i] = protein_shuffle_sequence(X[i], rng)
-        
-    Y_prot = None
-    if Y is not None:
-        Y_prot = np.copy(Y)
-        for i in range(len(Y)):
-            Y_prot[i] = protein_shuffle_sequence(Y[i], rng)
-
-    # Save outputs
-    out_dir = test_path.parent
-    
-    npz_syn_path = out_dir / f"test_control_synonymous_bs{X.shape[1] if X.ndim > 1 else 256}.npz"
-    npz_shuf_path = out_dir / f"test_control_codon_shuffle_bs{X.shape[1] if X.ndim > 1 else 256}.npz"
-    npz_prot_path = out_dir / f"test_control_protein_shuffle_bs{X.shape[1] if X.ndim > 1 else 256}.npz"
-
-    def save_npz(path, x_arr, y_arr):
-        if lengths is not None:
-            np.savez_compressed(path, X=x_arr, lengths=lengths)
-        else:
-            np.savez_compressed(path, X=x_arr, Y=y_arr)
-        print(f"[controls] Saved control dataset to {path}")
-
-    save_npz(npz_syn_path, X_syn, Y_syn)
-    save_npz(npz_shuf_path, X_shuf, Y_shuf)
-    save_npz(npz_prot_path, X_prot, Y_prot)
 
 if __name__ == "__main__":
     main()

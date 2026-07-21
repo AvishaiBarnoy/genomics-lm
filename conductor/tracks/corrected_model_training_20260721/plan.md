@@ -2,9 +2,9 @@
 
 ## Status
 
-In progress. The corrected datasets have passed the local freeze and the generation
-protocol separation is implemented. The program remains blocked on evaluator
-fixtures, immutable training configs, and the MPS policy gate.
+In progress. The corrected datasets, evaluator contracts, and generation protocol
+separation are complete. The program remains blocked on the formal pipeline freeze,
+immutable training configs, and the MPS policy gate.
 
 ## Phase 0: Close Pre-Training Gates
 
@@ -17,7 +17,7 @@ fixtures, immutable training configs, and the MPS policy gate.
   genome-held-out and genus-held-out datasets.
 - [x] Record source, split, fragment, chunk, packed-array, vocabulary, and audit
   hashes plus count summaries.
-- [ ] Complete frozen-manifest evaluator fixtures and provenance validation.
+- [x] Complete frozen-manifest evaluator fixtures and provenance validation.
 - [x] Resolve generation protocol issue #85 before generation comparisons.
 - [x] Implement and merge batch-aware memmap conversion with fixed/dynamic parity
   tests (#90).

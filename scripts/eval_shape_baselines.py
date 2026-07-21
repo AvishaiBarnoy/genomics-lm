@@ -19,7 +19,11 @@ from sklearn.metrics import r2_score
 
 from scripts._shared import build_model, load_model, load_token_list, resolve_run
 from scripts.probe_structural_awareness import get_theoretical_shape
-from src.codonlm.dataset_manifest import load_dataset_manifest, manifest_artifact_path
+from src.codonlm.checkpoints import load_codon_checkpoint
+from src.codonlm.evaluation_provenance import (
+    bind_checkpoint_dataset,
+    bind_dataset_manifest,
+)
 
 PROPERTIES = (
     "MGW", "Roll", "EP", "ProT", "HelT", "Slide", "Rise", "Shift", "Tilt",
@@ -215,27 +219,20 @@ def main():
     run_id, run_dir = resolve_run(args.run_id, args.run_dir)
     manifest_provenance = {"status": "legacy_unverified"}
     if args.manifest is not None:
-        manifest = load_dataset_manifest(args.manifest)
         expected = {
             "test_tokens": Path(args.test_npz),
             "test_packing_metadata": args.packing_metadata,
         }
         if args.cds_metadata is not None:
             expected["source_metadata"] = args.cds_metadata
-        for artifact_name, selected in expected.items():
-            declared = manifest_artifact_path(
-                manifest, args.manifest.resolve(), artifact_name
-            ).resolve()
-            if selected.resolve() != declared:
-                raise ValueError(
-                    f"{artifact_name} {selected.resolve()} does not match manifest {declared}"
-                )
-        manifest_provenance = {
-            "path": str(args.manifest.resolve()),
-            "dataset_id": manifest["dataset"]["id"],
-            "scientific_valid": manifest["dataset"]["scientific_valid"],
-            "schema": manifest["schema"],
-        }
+        _, manifest_provenance = bind_dataset_manifest(
+            args.manifest, expected_artifacts=expected, require_scientific=False
+        )
+    _, checkpoint_cfg, _ = load_codon_checkpoint(run_dir, ckpt_name=args.ckpt)
+    checkpoint_dataset = bind_checkpoint_dataset(
+        checkpoint_cfg,
+        manifest_provenance if args.manifest is not None else None,
+    )
     tokens = load_token_list(run_dir)
     pretrained, spec = load_model(run_dir, ckpt_name=args.ckpt)
     random_model = build_model(spec).eval()
@@ -254,6 +251,7 @@ def main():
     report = {
         "schema_version": 1, "run_id": run_id, "seed": args.seed,
         "dataset_manifest": manifest_provenance,
+        "checkpoint_dataset": checkpoint_dataset,
         "group_by": args.group_by, "n_splits": args.n_splits,
         "dataset": {"path": str(test_path.resolve()), "sha256": _sha256(test_path)},
         "checkpoint": {"path": str(checkpoint_path.resolve()), "sha256": _sha256(checkpoint_path)},

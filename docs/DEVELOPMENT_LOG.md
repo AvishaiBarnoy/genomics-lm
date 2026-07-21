@@ -20,6 +20,20 @@ This document captures the end-to-end journey of Genomics-LM. It details how we 
   protocol-level metadata, and bootstrap confidence intervals while retaining the
   existing CSV outputs for compatibility.
 
+## 2026-07-21: Frozen Evaluator Contracts
+
+* Added a shared fail-closed evaluation provenance contract binding corrected
+  checkpoints to a scientific dataset manifest, vocabulary, and declared artifacts.
+* Applied the contract to CodonLM test perplexity, simple PPL baselines, causal
+  embedding extraction, grouped DNA-shape controls, classifier probes, and generated
+  novelty audits. Corrected probe inputs must share checkpoint, dataset, and
+  vocabulary provenance.
+* Generated-sequence audits now derive train-only records from the manifest-aligned
+  source metadata and DNA artifacts instead of relying on a manually selected FASTA.
+* Synonymous and shuffled controls now use the frozen vocabulary, preserve packed
+  next-token alignment and CDS boundaries, and emit hash-bound derivation sidecars
+  that corrected test evaluation verifies before scoring.
+
 ---
 
 ## 1. Stage 1: Toy Scale (The Grammar School)
