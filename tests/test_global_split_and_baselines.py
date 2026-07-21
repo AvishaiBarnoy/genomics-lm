@@ -9,13 +9,14 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
+import pytest
 import yaml
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
-from scripts.build_global_manifest import resolve_genome_identity
+from scripts.build_global_manifest import resolve_genome_identity, validate_pinned_source
 from src.codonlm.codon_tokenize import itos, stoi, to_ids
 from src.codonlm.extract_cds_from_genbank import reverse_complement
 
@@ -112,6 +113,20 @@ def test_resolve_genome_identity_prefers_explicit_config(tmp_path):
 
     assert genome_id == "GCF_123456789.1"
     assert source == "config.genome_id"
+
+
+def test_global_builder_source_pin_detects_content_drift(tmp_path):
+    gbff = tmp_path / "source.gbff"
+    gbff.write_bytes(b"original")
+    dataset = {
+        "bytes": gbff.stat().st_size,
+        "sha256": hashlib.sha256(gbff.read_bytes()).hexdigest(),
+    }
+    validate_pinned_source(dataset, gbff)
+
+    gbff.write_bytes(b"modified")
+    with pytest.raises(ValueError, match="Source SHA-256 mismatch"):
+        validate_pinned_source(dataset, gbff)
 
 
 def test_reverse_complement_supports_iupac_ambiguity():

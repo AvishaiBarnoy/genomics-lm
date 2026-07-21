@@ -652,6 +652,14 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     dataset-identity resume validation, and a two-process train/save/resume integration
     command. The 2026-07-21 host M2 run completed on MPS with four total optimizer
     steps, 80 committed tokens, and zero non-finite or aborted accumulation groups.
+*   **Corrected Training Program and Dataset-Freeze Entry Point:** Defined the staged
+    basic, multi-offset, termination/replay, and biophysical training program. Pinned
+    the first corrected corpus to 24 explicit GBFF assembly snapshots using byte sizes
+    and SHA-256 hashes, made the global builder fail on source drift, and added a
+    fail-closed command that prepares both genome- and genus-held-out protocols and
+    binds their validated manifests into one content-addressed freeze index. The local
+    source-only preflight passes; the scientific freeze remains pending because its
+    mandatory MMseqs2 homology audit has not yet run on this host.
 
 ---
 *End of Log*
