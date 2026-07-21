@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Dict, List, Tuple
 
 import torch
+import torch.nn as nn
 
 
 STOP_CODONS = {"TAA", "TAG", "TGA"}
@@ -44,6 +46,66 @@ def _mask_to_allowed_tokens(logits: torch.Tensor, allowed_ids: List[int]) -> tor
     masked = torch.full_like(logits, float("-inf"))
     masked[allowed] = logits[allowed]
     return masked
+
+
+def _sample_token(logits: torch.Tensor, temperature: float, topk: int) -> int:
+    if temperature != 1.0:
+        logits = logits / max(1e-6, float(temperature))
+    probs = torch.softmax(logits, dim=-1)
+    if topk and topk > 0:
+        vals, idxs = torch.topk(probs, k=min(topk, probs.numel()))
+        pick = torch.multinomial(vals, 1).item()
+        return int(idxs[pick].item())
+    return int(torch.multinomial(probs, 1).item())
+
+
+@torch.no_grad()
+def generate_model_raw(
+    model,
+    device: torch.device,
+    ctx_ids: List[int],
+    stoi: Dict[str, int],
+    itos: List[str],
+    max_new_tokens: int,
+    temperature: float = 1.0,
+    topk: int = 0,
+) -> Tuple[List[int], Dict[str, object]]:
+    """Sample the model vocabulary without CDS masking or forced termination."""
+    ids = list(ctx_ids)
+    eos_idx = stoi.get("<EOS_CDS>")
+    had_terminal_stop = False
+    generated_codons = 0
+    stop_reason = "max_new_tokens"
+
+    for _ in range(int(max_new_tokens)):
+        logits = _next_token_logits(model, device, ids)
+        next_id = _sample_token(logits, temperature=temperature, topk=topk)
+        ids.append(next_id)
+        tok = itos[next_id] if 0 <= next_id < len(itos) else ""
+        if len(tok) == 3 and set(tok) <= set("ACGT"):
+            generated_codons += 1
+            if tok in STOP_CODONS:
+                had_terminal_stop = True
+                stop_reason = "biological_stop"
+                break
+        if eos_idx is not None and next_id == eos_idx:
+            stop_reason = "eos"
+            break
+
+    generated_tokens = len(ids) - len(ctx_ids)
+    return ids, {
+        "protocol": "raw_model",
+        "cds_only": False,
+        "require_terminal_stop": False,
+        "guidance_components": [],
+        "had_terminal_stop": had_terminal_stop,
+        "early_stop": False,
+        "hit_hard_cap": stop_reason == "max_new_tokens",
+        "generated_codons": generated_codons,
+        "generated_tokens": generated_tokens,
+        "max_new_tokens": int(max_new_tokens),
+        "stop_reason": stop_reason,
+    }
 
 
 def _apply_termination_stop_bias(
@@ -163,15 +225,7 @@ def generate_cds_constrained(
                     termination_bias_steps += 1
         if cds_only:
             logits = _mask_to_allowed_tokens(logits, allowed_cds_ids)
-        if temperature != 1.0:
-            logits = logits / max(1e-6, float(temperature))
-        probs = torch.softmax(logits, dim=-1)
-        if topk and topk > 0:
-            vals, idxs = torch.topk(probs, k=min(topk, probs.numel()))
-            pick = torch.multinomial(vals, 1).item()
-            next_id = idxs[pick].item()
-        else:
-            next_id = torch.multinomial(probs, 1).item()
+        next_id = _sample_token(logits, temperature=temperature, topk=topk)
         ids.append(int(next_id))
 
         # decode this token to a codon string to check stops
@@ -208,7 +262,18 @@ def generate_cds_constrained(
     if new_codons >= int(hard_cap):
         hit_hard_cap = True
 
+    guidance_components = []
+    if termination_bias_enabled:
+        guidance_components.append("termination_bias")
+    if multi_offset_prior_enabled:
+        guidance_components.append("multi_offset_prior")
+    if require_terminal_stop:
+        guidance_components.append("forced_terminal_stop")
+    if not cds_only:
+        guidance_components.append("non_cds_tokens")
     info = {
+        "protocol": "guided" if guidance_components else "cds_constrained",
+        "guidance_components": guidance_components,
         "had_terminal_stop": bool(had_terminal_stop),
         "early_stop": bool(early_stop),
         "hit_hard_cap": bool(hit_hard_cap),
@@ -219,6 +284,8 @@ def generate_cds_constrained(
         "termination_bias_window": int(termination_bias_window),
         "last_termination_class": last_termination_class,
         "cds_only": bool(cds_only),
+        "require_terminal_stop": bool(require_terminal_stop),
+        "generated_tokens": int(total_new_tokens),
     }
     return ids, info
 
@@ -331,6 +398,7 @@ def batch_red_sampler(
 
 
 __all__ = [
+    "generate_model_raw",
     "generate_cds_constrained",
     "generate_cds_red",
     "batch_red_sampler",
@@ -338,8 +406,6 @@ __all__ = [
     "batch_score_critic",
     "generate_cds_critic_guided"
 ]
-
-import torch.nn as nn
 
 @torch.no_grad()
 def batch_score_critic(
@@ -528,13 +594,22 @@ def generate_cds_critic_guided(
     if new_codons >= int(hard_cap):
         hit_hard_cap = True
 
+    guidance_components = ["ebm" if ebm_model is not None else "critic"]
+    if require_terminal_stop:
+        guidance_components.append("forced_terminal_stop")
+    if not cds_only:
+        guidance_components.append("non_cds_tokens")
     info = {
+        "protocol": "guided",
+        "guidance_components": guidance_components,
         "had_terminal_stop": bool(had_terminal_stop),
         "early_stop": bool(early_stop),
         "hit_hard_cap": bool(hit_hard_cap),
         "target_codons": int(target_codons),
         "generated_codons": int(new_codons),
         "cds_only": bool(cds_only),
+        "require_terminal_stop": bool(require_terminal_stop),
+        "generated_tokens": int(total_new_tokens),
     }
     return ids, info
 
@@ -559,7 +634,6 @@ CODON_TABLE = {
     'AGA':'R', 'AGG':'R', 'AGC':'S', 'AGT':'S',
 }
 
-from collections import defaultdict
 AA_TO_CODONS = defaultdict(list)
 for codon, aa in CODON_TABLE.items():
     AA_TO_CODONS[aa].append(codon)
@@ -589,7 +663,6 @@ def generate_cds_synonymous(
     from src.eval.inference_playground import translate_codons_to_aa
 
     ids = list(ctx_ids)
-    had_terminal_stop = False
     new_codons = 0
     eos_idx = stoi.get("<EOS_CDS>")
     
@@ -658,19 +731,23 @@ def generate_cds_synonymous(
     next_id = torch.multinomial(probs, 1).item()
     ids.append(next_id)
     new_codons += 1
-    had_terminal_stop = True
-
     # 3. Append UTR boundary token (EOS)
     if eos_idx is not None:
         ids.append(eos_idx)
         
     info = {
+        "protocol": "guided",
+        "guidance_components": [
+            "synonymous_template",
+            *(["ebm" if ebm_model is not None else "critic"] if critic_model is not None or ebm_model is not None else []),
+        ],
         "had_terminal_stop": True,
         "early_stop": False,
         "hit_hard_cap": False,
         "target_codons": len(target_protein) + 1,
         "generated_codons": new_codons,
         "cds_only": True,
+        "require_terminal_stop": True,
+        "generated_tokens": len(ids) - len(ctx_ids),
     }
     return ids, info
-

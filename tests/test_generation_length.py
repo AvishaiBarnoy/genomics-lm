@@ -1,6 +1,6 @@
 import torch
 
-from src.codonlm.generate import generate_cds_constrained, STOP_CODONS
+from src.codonlm.generate import generate_cds_constrained, generate_model_raw, STOP_CODONS
 
 
 class DummyModel(torch.nn.Module):
@@ -191,3 +191,58 @@ def test_cds_generation_masks_hybrid_nucleotide_tokens_by_default():
     assert [itos[idx] for idx in ids[1:]] == ["AAA", "AAA", "AAA"]
     assert info["generated_codons"] == 3
     assert info["cds_only"] is True
+
+
+def test_raw_generation_uses_full_vocabulary_without_forced_stop():
+    itos = ["<PAD>", "<BOS_CDS>", "<EOS_CDS>", "<SEP>", "AAA", "TAA", "A"]
+    stoi = {token: idx for idx, token in enumerate(itos)}
+    model = DummyHybridTokenModel(
+        vocab_size=len(itos),
+        nucleotide_id=stoi["A"],
+        codon_id=stoi["AAA"],
+    )
+
+    ids, info = generate_model_raw(
+        model=model,
+        device=torch.device("cpu"),
+        ctx_ids=[stoi["<BOS_CDS>"]],
+        stoi=stoi,
+        itos=itos,
+        max_new_tokens=2,
+        temperature=1.0,
+        topk=1,
+    )
+
+    assert [itos[idx] for idx in ids[1:]] == ["A", "A"]
+    assert info["protocol"] == "raw_model"
+    assert info["cds_only"] is False
+    assert info["require_terminal_stop"] is False
+    assert info["stop_reason"] == "max_new_tokens"
+
+
+def test_raw_generation_replays_with_the_same_torch_seed():
+    itos = ["<PAD>", "<BOS_CDS>", "<EOS_CDS>", "<SEP>", "AAA", "CCC", "GGG"]
+    stoi = {token: idx for idx, token in enumerate(itos)}
+    model = DummyHybridTokenModel(
+        vocab_size=len(itos),
+        nucleotide_id=stoi["CCC"],
+        codon_id=stoi["AAA"],
+    )
+    kwargs = {
+        "model": model,
+        "device": torch.device("cpu"),
+        "ctx_ids": [stoi["<BOS_CDS>"]],
+        "stoi": stoi,
+        "itos": itos,
+        "max_new_tokens": 5,
+        "temperature": 1.0,
+        "topk": 0,
+    }
+
+    torch.manual_seed(91)
+    first_ids, first_info = generate_model_raw(**kwargs)
+    torch.manual_seed(91)
+    second_ids, second_info = generate_model_raw(**kwargs)
+
+    assert first_ids == second_ids
+    assert first_info == second_info

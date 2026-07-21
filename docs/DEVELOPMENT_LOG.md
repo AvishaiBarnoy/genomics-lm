@@ -10,6 +10,16 @@ This document captures the end-to-end journey of Genomics-LM. It details how we 
 > evidence. Corrected revalidation is tracked in
 > [issue #92](https://github.com/AvishaiBarnoy/genomics-lm/issues/92).
 
+## 2026-07-21: Generation Protocol Separation
+
+* Began issue #85 by separating prefix evaluation into `raw_model`,
+  `cds_constrained`, and `guided` protocols. Raw sampling uses the full vocabulary
+  and natural EOS/biological-stop termination; the CDS control applies only the
+  codon-token constraint; guided rows record every active intervention.
+* Added deterministic per-prompt/per-replicate seeds shared across protocols,
+  protocol-level metadata, and bootstrap confidence intervals while retaining the
+  existing CSV outputs for compatibility.
+
 ---
 
 ## 1. Stage 1: Toy Scale (The Grammar School)

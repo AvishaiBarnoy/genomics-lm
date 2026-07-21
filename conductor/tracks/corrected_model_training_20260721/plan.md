@@ -2,8 +2,9 @@
 
 ## Status
 
-In progress. The corrected datasets have passed the local freeze; the program remains
-blocked on evaluator fixtures, immutable training configs, and the MPS policy gate.
+In progress. The corrected datasets have passed the local freeze and the generation
+protocol separation is implemented. The program remains blocked on evaluator
+fixtures, immutable training configs, and the MPS policy gate.
 
 ## Phase 0: Close Pre-Training Gates
 
@@ -17,9 +18,11 @@ blocked on evaluator fixtures, immutable training configs, and the MPS policy ga
 - [x] Record source, split, fragment, chunk, packed-array, vocabulary, and audit
   hashes plus count summaries.
 - [ ] Complete frozen-manifest evaluator fixtures and provenance validation.
-- [ ] Resolve generation protocol issue #85 before generation comparisons.
-- [ ] Benchmark issue #90 on MPS and either promote batch-aware memmap conversion or
-  close it with evidence of no useful benefit.
+- [x] Resolve generation protocol issue #85 before generation comparisons.
+- [x] Implement and merge batch-aware memmap conversion with fixed/dynamic parity
+  tests (#90).
+- [ ] Measure the merged #90 path on MPS and record useful-token throughput and
+  memory evidence as part of the runtime policy gate.
 - [ ] Select the MPS runtime policy through an equal-token quality gate.
 - [ ] Add immutable corrected primary configs and config-contract tests.
 

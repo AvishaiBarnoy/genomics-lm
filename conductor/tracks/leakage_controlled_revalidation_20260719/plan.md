@@ -95,6 +95,7 @@ passing manifests, no invalid updates, and complete checkpoint/resume provenance
   a clearly separated legacy-versus-corrected table.
 
 ## Deferred Follow-Ups
-- [ ] Separate raw, CDS-constrained, and guided generation protocols (#85).
-- [ ] Promote batch-aware memmap conversion only after an MPS benefit is measured
-  without a memory regression (#90).
+- [x] Separate raw, CDS-constrained, and guided generation protocols (#85).
+- [x] Implement batch-aware memmap conversion with fixed/dynamic parity tests (#90).
+- [ ] Record whether the merged batch-aware path improves useful-token throughput on
+  MPS without a memory regression before freezing the runtime policy.
