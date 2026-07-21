@@ -241,6 +241,10 @@ class MmapPackedDataset(Dataset):
             return len(self._delegate)
         return self._total
 
+    @property
+    def supports_batched_fetch(self) -> bool:
+        return self._delegate is None
+
     def __getitem__(self, i):
         if self._delegate is not None:
             return self._delegate[i]
@@ -263,6 +267,52 @@ class MmapPackedDataset(Dataset):
         length = int(self._lengths[fi][li])
         seq = np.array(self._mmaps[fi][start : start + length], dtype=np.int64)
         return torch.from_numpy(seq)
+
+    def fetch_batch(self, indices) -> tuple[torch.Tensor, torch.Tensor]:
+        if self._delegate is not None:
+            samples = [self._delegate[int(i)] for i in indices]
+            if getattr(self._delegate, "is_dynamic", False):
+                return dynamic_lm_collate_fn(samples)
+            xs, ys = zip(*samples, strict=True)
+            return torch.stack(list(xs)), torch.stack(list(ys))
+
+        indices = np.asarray(indices, dtype=np.int64)
+        if indices.size == 0:
+            return torch.empty((0, 0), dtype=torch.long), torch.empty((0, 0), dtype=torch.long)
+
+        file_ids = self._global_file[indices].astype(np.int64, copy=False)
+        local_ids = self._global_local[indices].astype(np.int64, copy=False)
+
+        if not self.is_dynamic:
+            seq_len = int(self._mmaps_X[0].shape[1])
+            x_batch = np.empty((len(indices), seq_len), dtype=np.int64)
+            y_batch = np.empty((len(indices), seq_len), dtype=np.int64)
+            for file_idx in np.unique(file_ids):
+                mask = file_ids == file_idx
+                rows = local_ids[mask]
+                x_batch[mask] = self._mmaps_X[int(file_idx)][rows]
+                y_batch[mask] = self._mmaps_Y[int(file_idx)][rows]
+            return torch.from_numpy(x_batch), torch.from_numpy(y_batch)
+
+        lengths = np.asarray(
+            [int(self._lengths[int(fi)][int(li)]) for fi, li in zip(file_ids, local_ids, strict=True)],
+            dtype=np.int64,
+        )
+        max_len = int(lengths.max())
+        target_len = max(0, max_len - 1)
+        x_batch = np.full((len(indices), target_len), PAD_ID, dtype=np.int64)
+        y_batch = np.full((len(indices), target_len), PAD_ID, dtype=np.int64)
+        source_arrays = self._mmaps_X if self.use_npy_mmap else self._mmaps
+        for row_idx, (file_idx, local_idx, length) in enumerate(
+            zip(file_ids, local_ids, lengths, strict=True)
+        ):
+            start = int(self._offsets[int(file_idx)][int(local_idx)])
+            seq = source_arrays[int(file_idx)][start : start + int(length)]
+            usable = max(0, int(length) - 1)
+            if usable:
+                x_batch[row_idx, :usable] = seq[:-1]
+                y_batch[row_idx, :usable] = seq[1:]
+        return torch.from_numpy(x_batch), torch.from_numpy(y_batch)
 
     @property
     def seq_lengths(self) -> np.ndarray:
@@ -361,9 +411,38 @@ def build_codon_lm_datasets(train_paths, val_paths, use_mmap: bool = False):
     return dataset_cls(train_paths), dataset_cls(val_paths)
 
 
+class _IndexDataset(Dataset):
+    def __init__(self, length: int) -> None:
+        self.length = int(length)
+
+    def __len__(self) -> int:
+        return self.length
+
+    def __getitem__(self, idx: int) -> int:
+        return int(idx)
+
+
+def _batched_mmap_collate(dataset: MmapPackedDataset):
+    def collate(indices):
+        return dataset.fetch_batch(indices)
+
+    return collate
+
+
 def build_codon_lm_dataloaders(train_ds, val_ds, cfg: dict[str, Any]):
     kwargs = dataloader_kwargs(cfg)
-    collate_fn = dynamic_lm_collate_fn if getattr(train_ds, "is_dynamic", False) else None
+    train_batched_fetch = bool(getattr(train_ds, "supports_batched_fetch", False))
+    val_batched_fetch = bool(getattr(val_ds, "supports_batched_fetch", False))
+    collate_fn = (
+        _batched_mmap_collate(train_ds)
+        if train_batched_fetch
+        else dynamic_lm_collate_fn if getattr(train_ds, "is_dynamic", False) else None
+    )
+    val_collate_fn = (
+        _batched_mmap_collate(val_ds)
+        if val_batched_fetch
+        else dynamic_lm_collate_fn if getattr(val_ds, "is_dynamic", False) else None
+    )
     bucket_batching = bool(cfg.get("bucket_batching", False))
     train_sampler = None
     train_shuffle = True
@@ -381,24 +460,27 @@ def build_codon_lm_dataloaders(train_ds, val_ds, cfg: dict[str, Any]):
         train_shuffle = False
 
     if train_sampler is not None:
-        train_loader = DataLoader(train_ds, batch_sampler=train_sampler, collate_fn=collate_fn, **kwargs)
+        loader_dataset = _IndexDataset(len(train_ds)) if train_batched_fetch else train_ds
+        train_loader = DataLoader(loader_dataset, batch_sampler=train_sampler, collate_fn=collate_fn, **kwargs)
     else:
         generator = None
         if dataloader_seed is not None:
             generator = torch.Generator()
             generator.manual_seed(int(dataloader_seed))
+        loader_dataset = _IndexDataset(len(train_ds)) if train_batched_fetch else train_ds
         train_loader = DataLoader(
-            train_ds,
+            loader_dataset,
             batch_size=int(cfg["batch_size"]),
             shuffle=train_shuffle,
             collate_fn=collate_fn,
             generator=generator,
             **kwargs,
         )
+    val_loader_dataset = _IndexDataset(len(val_ds)) if val_batched_fetch else val_ds
     val_loader = DataLoader(
-        val_ds,
+        val_loader_dataset,
         batch_size=int(cfg["batch_size"]),
-        collate_fn=collate_fn,
+        collate_fn=val_collate_fn,
         **kwargs,
     )
     return train_loader, val_loader, train_sampler, kwargs

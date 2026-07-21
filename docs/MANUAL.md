@@ -328,8 +328,11 @@ python -m scripts.convert_npz_to_npy path/to/dataset.npz
 This generates `_X.npy`, `_Y.npy` (and/or `_lengths.npy`) files in the same
 directory. Set `use_mmap: true` in the training YAML to select
 `MmapPackedDataset`; it will report `storage_mode=npy_mmap` when all required
-sidecars are present. If they are absent, it reports `storage_mode=npz_memory`
-and warns that compressed NPZ members are being loaded into memory.
+sidecars are present. Training DataLoaders batch indices first and convert each
+mmap-backed batch to `torch.long` once, avoiding persistent `int64` token storage
+and avoiding a separate `int64` allocation for every fetched sample. If sidecars
+are absent, the loader reports `storage_mode=npz_memory` and warns that compressed
+NPZ members are being loaded into memory.
 
 # Compare multiple runs and produce a table + plots
 python -m scripts.compare_runs

@@ -675,6 +675,15 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     and nearest-neighbor evidence reduces reconstructable audit workspace. This is a
     local acceptance freeze until the preparation PR merges and a clean-checkout
     reproduction confirms byte-identical identities.
+*   **Corrected Dataset Freeze Merge Validation and Mmap Batch Fetching (2026-07-21):**
+    After PR #111 merged, updated `main` and validated both frozen corrected manifests
+    successfully (`genome` artifact count 23, scientific valid true; `genus` artifact
+    count 23, scientific valid true). Began issue #90 by teaching
+    `MmapPackedDataset` to fetch fixed and dynamic mmap-backed batches directly from
+    batch indices. Training DataLoaders now use an index dataset plus mmap-aware
+    collate function, so `uint8` NPY sidecars are converted to `torch.long` once per
+    batch instead of materializing a separate `int64` NumPy copy per sample. Direct
+    `dataset[i]` behavior remains unchanged for compatibility.
 
 ---
 *End of Log*
