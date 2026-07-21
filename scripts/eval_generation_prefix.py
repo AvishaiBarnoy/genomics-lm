@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import random
@@ -34,7 +35,12 @@ import torch
 import matplotlib.pyplot as plt
 
 from . import query_model as Q
-from src.codonlm.generate import generate_cds_constrained, generate_cds_critic_guided, generate_cds_synonymous
+from src.codonlm.generate import (
+    generate_cds_constrained,
+    generate_cds_critic_guided,
+    generate_cds_synonymous,
+    generate_model_raw,
+)
 from .generative_design_loop import load_critic, score_with_critic
 
 PRESETS = {
@@ -70,6 +76,31 @@ def _set_seed(seed: int) -> None:
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+def _sample_seed(base_seed: int, gene_idx: int, k: int, sample_id: int) -> int:
+    payload = f"{base_seed}:{gene_idx}:{k}:{sample_id}".encode()
+    return int.from_bytes(hashlib.sha256(payload).digest()[:4], "big")
+
+
+def _bootstrap_interval(
+    values: List[float],
+    *,
+    statistic: str,
+    seed: int,
+    n_resamples: int,
+) -> tuple[float, float]:
+    array = np.asarray(values, dtype=np.float64)
+    if array.size == 0:
+        return float("nan"), float("nan")
+    if array.size == 1 or n_resamples <= 0:
+        value = float(np.median(array) if statistic == "median" else np.mean(array))
+        return value, value
+    rng = np.random.default_rng(seed)
+    sampled = array[rng.integers(0, array.size, size=(int(n_resamples), array.size))]
+    estimates = np.median(sampled, axis=1) if statistic == "median" else np.mean(sampled, axis=1)
+    low, high = np.quantile(estimates, [0.025, 0.975])
+    return float(low), float(high)
 
 
 def _load_run_meta(run_dir: Path) -> dict:
@@ -424,6 +455,40 @@ class SampleResult:
     train_overlap_20: float = 0.0
 
 
+@dataclass
+class ProtocolResult:
+    run_id: str
+    gene_idx: int
+    k: int
+    sample_id: int
+    protocol: str
+    sample_seed: int
+    cds_only: bool
+    require_terminal_stop: bool
+    guidance_components: str
+    temperature: float
+    topk: int
+    target_codons: int
+    max_new_tokens: int
+    generated_tokens: int
+    aa_identity: float
+    syn_rate: float
+    stop_score: float
+    frame_integrity: float
+    ppl_stability: float
+    no_repeat: float
+    usage_agree: float
+    gqs: float
+    gen_len_codons: int
+    valid_end: bool
+    early_stop: bool
+    had_terminal_stop: bool
+    hit_hard_cap: bool
+    stop_reason: str
+    train_overlap_10: float
+    train_overlap_20: float
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run_id", required=True)
@@ -446,6 +511,12 @@ def main() -> None:
         help="Device for generation/evaluation. Explicit unavailable devices fail fast.",
     )
     ap.add_argument("--seed", type=int, default=1337)
+    ap.add_argument(
+        "--ci_resamples",
+        type=int,
+        default=1000,
+        help="Bootstrap resamples for per-protocol 95%% confidence intervals.",
+    )
     ap.add_argument(
         "--out_label",
         default="gen_prefix",
@@ -628,7 +699,6 @@ def main() -> None:
     multi_offset_prior_weights = None
     if args.multi_offset_prior:
         if args.multi_offset_prior_weights:
-            import json
             try:
                 parsed = json.loads(args.multi_offset_prior_weights)
                 multi_offset_prior_weights = {int(k): float(v) for k, v in parsed.items()}
@@ -785,7 +855,98 @@ def main() -> None:
             + 0.05 * frame
         )
 
+    def score_protocol(
+        *,
+        generated_ids: List[int],
+        generation_info: dict,
+        protocol: str,
+        sample_seed: int,
+        gene_idx: int,
+        k: int,
+        sample_id: int,
+        truth_codons: List[str],
+        truth_aa: str,
+        target_codons: int,
+        max_new_tokens: int,
+        guidance_components: List[str],
+        topk: int,
+    ) -> tuple[ProtocolResult, dict]:
+        generated_tokens = Q.ids_to_codons(generated_ids, itos)
+        codons = [tok for tok in generated_tokens if len(tok) == 3 and set(tok) <= set("ACGT")]
+        continuation = codons[min(k, len(codons)) :]
+        continuation_ids = [stoi[codon] for codon in continuation if codon in stoi]
+        continuation_aa = _aa_seq(continuation)
+        aaid = aa_identity(truth_aa[k:], continuation_aa)
+        synonymous_rate = syn_rate(truth_codons[k:], continuation)
+        stop_score, valid_end, early = _score_stop_behavior(
+            codons, truth_len_codons=len(truth_codons)
+        )
+        stability = ppl_stability([stoi.get(codon, 0) for codon in codons])
+        no_repeat = 1.0 - _ngram_repeat_ratio(codons, n=3)
+        usage = usage_agree(continuation_ids)
+        frame = frame_integrity_ok(codons)
+        score = gqs(stop_score, aaid, synonymous_rate, stability, no_repeat, usage, frame)
+
+        overlap_10 = 0.0
+        overlap_20 = 0.0
+        full_ids = [stoi[codon] for codon in codons if codon in stoi]
+        if 10 in train_ngram_sets and train_ngram_sets[10] and len(full_ids) >= 10:
+            overlap_10 = _training_match_coverage(full_ids, 10, train_ngram_sets[10])
+        if 20 in train_ngram_sets and train_ngram_sets[20] and len(full_ids) >= 20:
+            overlap_20 = _training_match_coverage(full_ids, 20, train_ngram_sets[20])
+
+        result = ProtocolResult(
+            run_id=args.run_id,
+            gene_idx=gene_idx,
+            k=k,
+            sample_id=sample_id,
+            protocol=protocol,
+            sample_seed=sample_seed,
+            cds_only=bool(generation_info.get("cds_only", protocol != "raw_model")),
+            require_terminal_stop=bool(generation_info.get("require_terminal_stop", False)),
+            guidance_components=json.dumps(sorted(guidance_components)),
+            temperature=float(args.temperature),
+            topk=int(topk),
+            target_codons=int(target_codons),
+            max_new_tokens=int(max_new_tokens),
+            generated_tokens=int(
+                generation_info.get("generated_tokens", max(0, len(generated_ids) - (k + 1)))
+            ),
+            aa_identity=aaid,
+            syn_rate=synonymous_rate,
+            stop_score=stop_score,
+            frame_integrity=frame,
+            ppl_stability=stability,
+            no_repeat=no_repeat,
+            usage_agree=usage,
+            gqs=score,
+            gen_len_codons=len(codons),
+            valid_end=valid_end,
+            early_stop=early,
+            had_terminal_stop=bool(generation_info.get("had_terminal_stop", False)),
+            hit_hard_cap=bool(generation_info.get("hit_hard_cap", False)),
+            stop_reason=str(generation_info.get("stop_reason", "unspecified")),
+            train_overlap_10=overlap_10,
+            train_overlap_20=overlap_20,
+        )
+        return result, {
+            "codons": codons,
+            "aa_identity": aaid,
+            "syn_rate": synonymous_rate,
+            "stop_score": stop_score,
+            "valid_end": valid_end,
+            "early_stop": early,
+            "ppl_stability": stability,
+            "no_repeat": no_repeat,
+            "usage_agree": usage,
+            "frame_integrity": frame,
+            "gqs": score,
+            "train_overlap_10": overlap_10,
+            "train_overlap_20": overlap_20,
+        }
+
     rows: List[SampleResult] = []
+    protocol_rows: List[ProtocolResult] = []
     k_list = [int(x) for x in args.k_list.split(",") if x]
     total_expected = len(cds) * len(k_list) * int(args.samples)
     done = 0
@@ -807,7 +968,25 @@ def main() -> None:
                 hard_cap = int(min(max_window_codons, args.max_aa_len, args.max_new))
                 target_codons = int(min(args.target_aa_len, hard_cap))
                 target_codons = int(max(target_codons, args.min_aa_len))
-                # Constrained generation
+                paired_seed = _sample_seed(args.seed, gene_idx, k, sidx)
+                selected_guidance = []
+                if target_protein is not None:
+                    selected_guidance.append("synonymous_template")
+                if args.critic_guidance:
+                    selected_guidance.append("critic")
+                if args.ebm_guidance:
+                    selected_guidance.append("ebm")
+                if args.termination_bias:
+                    selected_guidance.append("termination_bias")
+                if args.multi_offset_prior:
+                    selected_guidance.append("multi_offset_prior")
+                if args.require_terminal_stop:
+                    selected_guidance.append("forced_terminal_stop")
+                if args.allow_non_cds_tokens:
+                    selected_guidance.append("non_cds_tokens")
+                is_guided = bool(selected_guidance)
+
+                _set_seed(paired_seed)
                 if target_protein is not None:
                     gen_ids, info = generate_cds_synonymous(
                         model=model,
@@ -865,82 +1044,100 @@ def main() -> None:
                         multi_offset_prior_enabled=bool(args.multi_offset_prior),
                         multi_offset_prior_weights=multi_offset_prior_weights,
                     )
-                gen_toks = Q.ids_to_codons(gen_ids, itos)
-                # strip BOS and anything before first codon
-                codons = [t for t in gen_toks if len(t) == 3 and set(t) <= set("ACGT")]
-                # continuation after prefix length
-                gen_cont_cod = codons[min(k, len(codons)) :]
-                gen_cont_ids = [stoi[c] for c in gen_cont_cod if c in stoi]
-                gen_cont_aa = _aa_seq(gen_cont_cod)
-                # metrics
-                aaid = aa_identity(truth_aa[k:], gen_cont_aa)
-                syn = syn_rate(truth_codons[k:], gen_cont_cod)
-                stop_score, valid_end, early = _score_stop_behavior(
-                    codons, truth_len_codons=len(truth_codons)
-                )
-                stab = ppl_stability([stoi.get(c, 0) for c in codons])
-                norep = 1.0 - _ngram_repeat_ratio(codons, n=3)
-                usage = usage_agree(gen_cont_ids)
-                frame = frame_integrity_ok(codons)
-                score = gqs(stop_score, aaid, syn, stab, norep, usage, frame)
 
-                # Raw baseline computation: unguided, unbiased, no priors
-                is_guided = (
-                    target_protein is not None or
-                    bool(args.critic_guidance) or
-                    bool(args.ebm_guidance) or
-                    bool(args.termination_bias) or
-                    bool(args.multi_offset_prior)
+                selected_protocol = "guided" if is_guided else "cds_constrained"
+                selected_result, selected_metrics = score_protocol(
+                    generated_ids=gen_ids,
+                    generation_info=info,
+                    protocol=selected_protocol,
+                    sample_seed=paired_seed,
+                    gene_idx=gene_idx,
+                    k=k,
+                    sample_id=sidx,
+                    truth_codons=truth_codons,
+                    truth_aa=truth_aa,
+                    target_codons=target_codons,
+                    max_new_tokens=hard_cap,
+                    guidance_components=selected_guidance,
+                    topk=args.guide_top_k if (args.critic_guidance or args.ebm_guidance) else args.topk,
                 )
-                raw_gen_ids = None
-                raw_info = {}
+
+                _set_seed(paired_seed)
+                raw_gen_ids, raw_info = generate_model_raw(
+                    model=model,
+                    device=device,
+                    ctx_ids=ctx_ids,
+                    stoi=stoi,
+                    itos=itos,
+                    max_new_tokens=hard_cap,
+                    temperature=float(args.temperature),
+                    topk=int(args.topk) if args.topk > 0 else 0,
+                )
+                raw_result, _ = score_protocol(
+                    generated_ids=raw_gen_ids,
+                    generation_info=raw_info,
+                    protocol="raw_model",
+                    sample_seed=paired_seed,
+                    gene_idx=gene_idx,
+                    k=k,
+                    sample_id=sidx,
+                    truth_codons=truth_codons,
+                    truth_aa=truth_aa,
+                    target_codons=target_codons,
+                    max_new_tokens=hard_cap,
+                    guidance_components=[],
+                    topk=args.topk,
+                )
+
                 if is_guided:
-                    try:
-                        raw_gen_ids, raw_info = generate_cds_constrained(
-                            model=model,
-                            device=device,
-                            ctx_ids=ctx_ids,
-                            stoi=stoi,
-                            itos=itos,
-                            target_codons=target_codons,
-                            hard_cap=hard_cap,
-                            require_terminal_stop=bool(args.require_terminal_stop),
-                            temperature=float(args.temperature),
-                            topk=int(args.topk) if args.topk > 0 else 0,
-                            termination_bias_enabled=False,
-                            multi_offset_prior_enabled=False,
-                            cds_only=not bool(args.allow_non_cds_tokens),
-                        )
-                    except Exception as exc:
-                        print(f"[gen-prefix] raw baseline generation failed, falling back: {exc}")
-                        raw_gen_ids = None
-
-                if raw_gen_ids is not None:
-                    raw_gen_toks = Q.ids_to_codons(raw_gen_ids, itos)
-                    raw_codons = [t for t in raw_gen_toks if len(t) == 3 and set(t) <= set("ACGT")]
-                    raw_gen_cont_cod = raw_codons[min(k, len(raw_codons)) :]
-                    raw_gen_cont_ids = [stoi[c] for c in raw_gen_cont_cod if c in stoi]
-                    raw_gen_cont_aa = _aa_seq(raw_gen_cont_cod)
-                    raw_aaid = aa_identity(truth_aa[k:], raw_gen_cont_aa)
-                    raw_syn = syn_rate(truth_codons[k:], raw_gen_cont_cod)
-                    raw_stop_score, raw_valid_end, raw_early = _score_stop_behavior(
-                        raw_codons, truth_len_codons=len(truth_codons)
+                    _set_seed(paired_seed)
+                    constrained_ids, constrained_info = generate_cds_constrained(
+                        model=model,
+                        device=device,
+                        ctx_ids=ctx_ids,
+                        stoi=stoi,
+                        itos=itos,
+                        target_codons=target_codons,
+                        hard_cap=hard_cap,
+                        require_terminal_stop=False,
+                        temperature=float(args.temperature),
+                        topk=int(args.topk) if args.topk > 0 else 0,
+                        termination_bias_enabled=False,
+                        multi_offset_prior_enabled=False,
+                        cds_only=True,
                     )
-                    raw_stab = ppl_stability([stoi.get(c, 0) for c in raw_codons])
-                    raw_norep = 1.0 - _ngram_repeat_ratio(raw_codons, n=3)
-                    raw_usage = usage_agree(raw_gen_cont_ids)
-                    raw_frame = frame_integrity_ok(raw_codons)
-                    raw_gqs = gqs(raw_stop_score, raw_aaid, raw_syn, raw_stab, raw_norep, raw_usage, raw_frame)
-                    raw_gen_len = len(raw_codons)
-                    raw_had_terminal_stop = bool(raw_info.get("had_terminal_stop", False))
-                    raw_hit_hard_cap = bool(raw_info.get("hit_hard_cap", False))
-                    raw_valid_end_val = raw_valid_end
+                    constrained_result, _ = score_protocol(
+                        generated_ids=constrained_ids,
+                        generation_info=constrained_info,
+                        protocol="cds_constrained",
+                        sample_seed=paired_seed,
+                        gene_idx=gene_idx,
+                        k=k,
+                        sample_id=sidx,
+                        truth_codons=truth_codons,
+                        truth_aa=truth_aa,
+                        target_codons=target_codons,
+                        max_new_tokens=hard_cap,
+                        guidance_components=[],
+                        topk=args.topk,
+                    )
                 else:
-                    raw_gqs = score
-                    raw_gen_len = len(codons)
-                    raw_had_terminal_stop = bool(info.get("had_terminal_stop", False))
-                    raw_hit_hard_cap = bool(info.get("hit_hard_cap", False))
-                    raw_valid_end_val = valid_end
+                    constrained_result = selected_result
+                protocol_rows.extend([raw_result, constrained_result])
+                if is_guided:
+                    protocol_rows.append(selected_result)
+
+                codons = selected_metrics["codons"]
+                aaid = selected_metrics["aa_identity"]
+                syn = selected_metrics["syn_rate"]
+                stop_score = selected_metrics["stop_score"]
+                valid_end = selected_metrics["valid_end"]
+                early = selected_metrics["early_stop"]
+                stab = selected_metrics["ppl_stability"]
+                norep = selected_metrics["no_repeat"]
+                usage = selected_metrics["usage_agree"]
+                frame = selected_metrics["frame_integrity"]
+                score = selected_metrics["gqs"]
 
                 critic_stability = 0.0
                 critic_family_prob = 0.0
@@ -961,18 +1158,8 @@ def main() -> None:
                     if "function" in critic_task_dims:
                         critic_function_prob = crit_scores.get("function_top1_conf", 0.0)
 
-                # Calculate train overlap rates for memorization check
-                overlap_10 = 0.0
-                overlap_20 = 0.0
-                full_gen_ids = [stoi[c] for c in codons if c in stoi]
-                if 10 in train_ngram_sets and train_ngram_sets[10]:
-                    s10 = train_ngram_sets[10]
-                    if len(full_gen_ids) >= 10:
-                        overlap_10 = _training_match_coverage(full_gen_ids, 10, s10)
-                if 20 in train_ngram_sets and train_ngram_sets[20]:
-                    s20 = train_ngram_sets[20]
-                    if len(full_gen_ids) >= 20:
-                        overlap_20 = _training_match_coverage(full_gen_ids, 20, s20)
+                overlap_10 = selected_metrics["train_overlap_10"]
+                overlap_20 = selected_metrics["train_overlap_20"]
 
                 rows.append(
                     SampleResult(
@@ -1000,11 +1187,11 @@ def main() -> None:
                         critic_stability=critic_stability,
                         critic_family_prob=critic_family_prob,
                         critic_function_prob=critic_function_prob,
-                        raw_gqs=raw_gqs,
-                        raw_gen_len=raw_gen_len,
-                        raw_had_terminal_stop=raw_had_terminal_stop,
-                        raw_hit_hard_cap=raw_hit_hard_cap,
-                        raw_valid_end=raw_valid_end_val,
+                        raw_gqs=raw_result.gqs,
+                        raw_gen_len=raw_result.gen_len_codons,
+                        raw_had_terminal_stop=raw_result.had_terminal_stop,
+                        raw_hit_hard_cap=raw_result.hit_hard_cap,
+                        raw_valid_end=raw_result.valid_end,
                         train_overlap_10=overlap_10,
                         train_overlap_20=overlap_20,
                     )
@@ -1031,6 +1218,122 @@ def main() -> None:
                 [getattr(r, c) for c in SampleResult.__annotations__.keys()]
             )
     print(f"[gen-prefix] wrote {samples_csv}")
+
+    protocol_samples_csv = out_dir / "protocol_samples.csv"
+    with protocol_samples_csv.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(ProtocolResult.__annotations__.keys())
+        for result in protocol_rows:
+            writer.writerow(
+                [getattr(result, column) for column in ProtocolResult.__annotations__]
+            )
+    print(f"[gen-prefix] wrote {protocol_samples_csv}")
+
+    protocol_summary = []
+    protocols = ("raw_model", "cds_constrained", "guided")
+    for k in k_list:
+        for protocol_index, protocol in enumerate(protocols):
+            selected = [r for r in protocol_rows if r.k == k and r.protocol == protocol]
+            if not selected:
+                continue
+            ci_seed = _sample_seed(args.seed, protocol_index, k, len(selected))
+            gqs_low, gqs_high = _bootstrap_interval(
+                [r.gqs for r in selected],
+                statistic="median",
+                seed=ci_seed,
+                n_resamples=args.ci_resamples,
+            )
+            length_low, length_high = _bootstrap_interval(
+                [float(r.gen_len_codons) for r in selected],
+                statistic="mean",
+                seed=ci_seed + 1,
+                n_resamples=args.ci_resamples,
+            )
+            stop_low, stop_high = _bootstrap_interval(
+                [float(r.had_terminal_stop) for r in selected],
+                statistic="mean",
+                seed=ci_seed + 2,
+                n_resamples=args.ci_resamples,
+            )
+            hard_cap_low, hard_cap_high = _bootstrap_interval(
+                [float(r.hit_hard_cap) for r in selected],
+                statistic="mean",
+                seed=ci_seed + 3,
+                n_resamples=args.ci_resamples,
+            )
+            protocol_summary.append(
+                {
+                    "k": k,
+                    "protocol": protocol,
+                    "n": len(selected),
+                    "median_gqs": float(np.median([r.gqs for r in selected])),
+                    "median_gqs_ci_low": gqs_low,
+                    "median_gqs_ci_high": gqs_high,
+                    "mean_aa_len": float(np.mean([r.gen_len_codons for r in selected])),
+                    "mean_aa_len_ci_low": length_low,
+                    "mean_aa_len_ci_high": length_high,
+                    "terminal_stop_rate": float(np.mean([r.had_terminal_stop for r in selected])),
+                    "terminal_stop_rate_ci_low": stop_low,
+                    "terminal_stop_rate_ci_high": stop_high,
+                    "hard_cap_rate": float(np.mean([r.hit_hard_cap for r in selected])),
+                    "hard_cap_rate_ci_low": hard_cap_low,
+                    "hard_cap_rate_ci_high": hard_cap_high,
+                    "mean_train_overlap_10": float(np.mean([r.train_overlap_10 for r in selected])),
+                    "mean_train_overlap_20": float(np.mean([r.train_overlap_20 for r in selected])),
+                }
+            )
+
+    protocol_summary_csv = out_dir / "protocol_summary.csv"
+    with protocol_summary_csv.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(protocol_summary[0].keys()))
+        writer.writeheader()
+        writer.writerows(protocol_summary)
+    print(f"[gen-prefix] wrote {protocol_summary_csv}")
+
+    protocol_manifest = {
+        "schema_version": 1,
+        "run_id": args.run_id,
+        "checkpoint": str(weights_path),
+        "base_seed": int(args.seed),
+        "sample_seed_derivation": "sha256(base_seed:gene_idx:k:sample_id)[0:4]",
+        "confidence_interval": {
+            "method": "percentile_bootstrap",
+            "level": 0.95,
+            "resamples": int(args.ci_resamples),
+        },
+        "decoding": {
+            "temperature": float(args.temperature),
+            "topk": int(args.topk),
+            "guide_top_k": int(args.guide_top_k),
+            "max_new": int(args.max_new),
+        },
+        "protocols": {
+            "raw_model": {
+                "full_vocabulary": True,
+                "forced_terminal_stop": False,
+                "guidance_components": [],
+            },
+            "cds_constrained": {
+                "full_vocabulary": False,
+                "forced_terminal_stop": False,
+                "guidance_components": [],
+            },
+            **(
+                {
+                    "guided": {
+                        "full_vocabulary": bool(args.allow_non_cds_tokens),
+                        "forced_terminal_stop": bool(args.require_terminal_stop),
+                        "guidance_components": selected_guidance,
+                    }
+                }
+                if any(r.protocol == "guided" for r in protocol_rows)
+                else {}
+            ),
+        },
+    }
+    (out_dir / "protocol_manifest.json").write_text(
+        json.dumps(protocol_manifest, indent=2, sort_keys=True) + "\n"
+    )
 
     # summary per k
     import statistics as stats

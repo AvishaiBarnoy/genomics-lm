@@ -3,12 +3,14 @@ from pathlib import Path
 
 from scripts import query_model as Q
 from scripts.eval_generation_prefix import (
+    _bootstrap_interval,
     _codon_to_aa,
     _load_vocab_for_run,
     _model_spec_from,
     _ngram_repeat_ratio,
     _score_stop_behavior,
     _select_device,
+    _sample_seed,
     _training_match_coverage,
 )
 
@@ -25,6 +27,17 @@ def test_training_match_coverage_counts_covered_positions():
     training = {(1, 2, 3), (3, 4, 5)}
 
     assert _training_match_coverage(tokens, 3, training) == 5 / 6
+
+
+def test_protocol_sample_seed_is_stable_and_prompt_specific():
+    assert _sample_seed(1337, 4, 8, 2) == _sample_seed(1337, 4, 8, 2)
+    assert _sample_seed(1337, 4, 8, 2) != _sample_seed(1337, 4, 8, 3)
+
+
+def test_bootstrap_interval_is_seeded():
+    first = _bootstrap_interval([0.0, 1.0, 1.0], statistic="mean", seed=9, n_resamples=50)
+    second = _bootstrap_interval([0.0, 1.0, 1.0], statistic="mean", seed=9, n_resamples=50)
+    assert first == second
 
 
 def test_codon_to_aa_mapping():
@@ -177,6 +190,9 @@ def test_eval_generation_prefix_end_to_end(tmp_path):
             "--min_aa_len", "2",
             "--target_aa_len", "4",
             "--max_aa_len", "10",
+            "--termination_bias",
+            "--termination_stop_bias", "1.0",
+            "--ci_resamples", "20",
         ]
         
         res = subprocess.run(cmd, capture_output=True, text=True)
@@ -185,9 +201,48 @@ def test_eval_generation_prefix_end_to_end(tmp_path):
         # Check that samples.csv and summary.csv are written
         samples_csv = test_run_dir / "scores" / "gen_prefix" / "samples.csv"
         summary_csv = test_run_dir / "scores" / "gen_prefix" / "summary.csv"
+        protocol_samples_csv = test_run_dir / "scores" / "gen_prefix" / "protocol_samples.csv"
+        protocol_summary_csv = test_run_dir / "scores" / "gen_prefix" / "protocol_summary.csv"
+        protocol_manifest = test_run_dir / "scores" / "gen_prefix" / "protocol_manifest.json"
         
         assert samples_csv.exists()
         assert summary_csv.exists()
+        assert protocol_samples_csv.exists()
+        assert protocol_summary_csv.exists()
+        assert protocol_manifest.exists()
+
+        with protocol_samples_csv.open() as f:
+            protocol_rows = list(csv.DictReader(f))
+        assert {row["protocol"] for row in protocol_rows} == {
+            "raw_model",
+            "cds_constrained",
+            "guided",
+        }
+        grouped_seeds = {}
+        for row in protocol_rows:
+            key = (row["gene_idx"], row["k"], row["sample_id"])
+            grouped_seeds.setdefault(key, set()).add(row["sample_seed"])
+        assert all(len(seeds) == 1 for seeds in grouped_seeds.values())
+        raw_rows = [row for row in protocol_rows if row["protocol"] == "raw_model"]
+        assert all(row["cds_only"] == "False" for row in raw_rows)
+        assert all(row["require_terminal_stop"] == "False" for row in raw_rows)
+        guided_rows = [row for row in protocol_rows if row["protocol"] == "guided"]
+        assert all("termination_bias" in row["guidance_components"] for row in guided_rows)
+
+        with protocol_summary_csv.open() as f:
+            protocol_summary_rows = list(csv.DictReader(f))
+        assert {row["protocol"] for row in protocol_summary_rows} == {
+            "raw_model",
+            "cds_constrained",
+            "guided",
+        }
+        assert "median_gqs_ci_low" in protocol_summary_rows[0]
+        assert "terminal_stop_rate_ci_high" in protocol_summary_rows[0]
+
+        manifest = json.loads(protocol_manifest.read_text())
+        assert set(manifest["protocols"]) == {"raw_model", "cds_constrained", "guided"}
+        assert manifest["protocols"]["raw_model"]["full_vocabulary"] is True
+        assert manifest["protocols"]["raw_model"]["forced_terminal_stop"] is False
         
         # Verify columns in summary.csv
         with summary_csv.open() as f:
