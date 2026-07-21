@@ -1,0 +1,134 @@
+# Immutable source inventory and preparation policy for the first corrected CodonLM run.
+# Source hashes bind the local GBFF snapshots; any source drift is fatal.
+
+block_size: 512
+pack_mode: multi
+windows_per_seq: 1
+val_frac: 0.1
+test_frac: 0.1
+min_len: 90
+min_fragment_codons: 10
+max_cross_split_protein_identity: 0.3
+min_homology_coverage: 0.8
+
+datasets:
+  - name: ecoli_k12
+    genome_id: GCF_000005845
+    gbff: data/raw/Enterobacteriaceae/GCF_000005845.gbff
+    bytes: 11882100
+    sha256: 0bf75744d8ef1c9c5bae4ef2e18bf9dda06c1ffae29d1c14265068a90e575827
+  - name: streptomyces_avermitilis
+    genome_id: GCF_000009765
+    gbff: data/raw/Enterobacteriaceae/GCF_000009765.gbff
+    bytes: 23952978
+    sha256: 8d8f7eeeec00777657395dea30aa778f13c4bfc8a7349261a2f8d01648264158
+  - name: klebsiella_pneumoniae
+    genome_id: GCF_000240185
+    gbff: data/raw/Enterobacteriaceae/GCF_000240185.gbff
+    bytes: 12420539
+    sha256: 1c820fffce2db787627e515308f18e44d98dea6284879dd8aefd728458d4b6c9
+  - name: nitrososphaera_viennensis
+    genome_id: GCF_000698785
+    gbff: data/raw/Enterobacteriaceae/GCF_000698785.gbff
+    bytes: 6915778
+    sha256: ae4582e9c25581f3e52a2af2570e48e650b32b4ea39b34fe4c5ff5c5a4642955
+  - name: salmonella_enterica
+    genome_id: GCF_000006945
+    gbff: data/raw/Enterobacteriaceae/GCF_000006945.gbff
+    bytes: 12753261
+    sha256: 4eb18db183e4216a5c82540574ec16042f96ae3d44a81f28ec54139feceb0c82
+  - name: bacillus_subtilis
+    genome_id: GCF_000009045
+    gbff: data/raw/gram_pos/GCF_000009045.gbff
+    bytes: 13416020
+    sha256: dec50c042eac02710a380ea72db40a1cb5ce6af17556a1668a674f06cfea16d0
+  - name: staphylococcus_aureus
+    genome_id: GCF_000013425
+    gbff: data/raw/gram_pos/GCF_000013425.gbff
+    bytes: 6335681
+    sha256: 7833f1e79c1fb7b0b5212d7f8ec2ace7119591391382ae51c8fee215959d134b
+  - name: pseudomonas_aeruginosa
+    genome_id: GCF_000006765
+    gbff: data/raw/high-gc/GCF_000006765.gbff
+    bytes: 14682016
+    sha256: a745f10b2ec129bf81d855af17c13e9d1a7864ddb664fc88b773b06ba5d2d9d9
+  - name: streptomyces_coelicolor
+    genome_id: GCF_000203835
+    gbff: data/raw/high-gc/GCF_000203835.gbff
+    bytes: 22652642
+    sha256: 00e9562a3afbcd1b13faf1b6f458e8727ea6d4e7e45e5cb72d081a167e1c148e
+  - name: vibrio_cholerae
+    genome_id: GCF_000006745.1
+    gbff: data/raw/expanded/GCF_000006745.1.gbff
+    bytes: 10448757
+    sha256: f1cca2e36c6bda695f50d6ac9fdd1cdc54c571cfc829beed438c0c529859dff2
+  - name: caulobacter_vibrioides
+    genome_id: GCF_000006905.1
+    gbff: data/raw/expanded/GCF_000006905.1.gbff
+    bytes: 10437485
+    sha256: e22bfe1bee5b5e32bda1bf3b0fc4d89a5882987516e5ffc3920cba88870569a6
+  - name: shigella_flexneri
+    genome_id: GCF_000006925.2
+    gbff: data/raw/expanded/GCF_000006925.2.gbff
+    bytes: 10571574
+    sha256: 5997ec0ad92bfcae880354e56e3f7b4a029f6d6f2748115d3439daeb6219e6e7
+  - name: streptococcus_pneumoniae
+    genome_id: GCF_000007045.1
+    gbff: data/raw/expanded/GCF_000007045.1.gbff
+    bytes: 5280630
+    sha256: ced8476662772238876039ea4900c7d6dda4594ac5961f7e9d03877d76a4d15f
+  - name: geobacter_sulfurreducens
+    genome_id: GCF_000007985.2
+    gbff: data/raw/expanded/GCF_000007985.2.gbff
+    bytes: 9563743
+    sha256: bf6ae3e9ecbe4606b4445e9c7540c448295642485a0cb80392cda27bba51e2b9
+  - name: helicobacter_pylori
+    genome_id: GCF_000008525.1
+    gbff: data/raw/expanded/GCF_000008525.1.gbff
+    bytes: 4344891
+    sha256: 7919a5230ec625da7b136226255bbfac251d30b70f840a0f3206586e55d698ac
+  - name: borreliella_burgdorferi
+    genome_id: GCF_000008685.2
+    gbff: data/raw/expanded/GCF_000008685.2.gbff
+    bytes: 3955770
+    sha256: b23aa454330184dc0db35c512258faad21e81f3e90204dce54e4574dc5ca9db7
+  - name: chlamydia_trachomatis
+    genome_id: GCF_000008725.1
+    gbff: data/raw/expanded/GCF_000008725.1.gbff
+    bytes: 2228791
+    sha256: ecc60e51ba4ad7fa23a1d960257a2c8817e4220a0ae83981b006ee81f0757ffe
+  - name: neisseria_meningitidis
+    genome_id: GCF_000008805.1
+    gbff: data/raw/expanded/GCF_000008805.1.gbff
+    bytes: 5765110
+    sha256: 6aa1cf795af6c5b94b58f8488e6f17bac99bc3e841c584d26150773858f99aec
+  - name: ralstonia_pseudosolanacearum
+    genome_id: GCF_000009125.1
+    gbff: data/raw/expanded/GCF_000009125.1.gbff
+    bytes: 15159743
+    sha256: 1527c186848c25056cf8dfbb89c8536682ad68c710611daed35d0a0837276639
+  - name: synechocystis_sp
+    genome_id: GCF_000009725.1
+    gbff: data/raw/expanded/GCF_000009725.1.gbff
+    bytes: 9974821
+    sha256: a2575d062aab4cdb80ea75e6ec5f1d3d23fad13bda0aeecefee5e038dbaf2d7d
+  - name: bacteroides_thetaiotaomicron
+    genome_id: GCF_000011065.1
+    gbff: data/raw/expanded/GCF_000011065.1.gbff
+    bytes: 15154141
+    sha256: 42972ae2f0b669bf2dabe1f04045799a406cc8fc6f254b0b8a8a93bf94f746ba
+  - name: ruegeria_pomeroyi
+    genome_id: GCF_000011965.2
+    gbff: data/raw/expanded/GCF_000011965.2.gbff
+    bytes: 11979544
+    sha256: e53f29f73e90cead19e03ed247b39c2cc4ddaded701f8d676d031d7da0c8d4e2
+  - name: mycoplasmoides_genitalium
+    genome_id: GCF_000027325.1
+    gbff: data/raw/expanded/GCF_000027325.1.gbff
+    bytes: 1522816
+    sha256: 9f77e43e8b5a755a1d7eefaab7e3f48f0d751088ce7f478fe453da4c411a062b
+  - name: lactiplantibacillus_plantarum
+    genome_id: GCF_000203855.3
+    gbff: data/raw/expanded/GCF_000203855.3.gbff
+    bytes: 8560998
+    sha256: 287259f644e52b71d1904bb4589d663c2b00012e8e4cfb8a7acd94e1ea310d05

@@ -82,6 +82,26 @@ def _parse_extra_dataset(spec: str) -> dict:
     return entry
 
 
+def validate_pinned_source(dataset: dict, gbff_path: Path) -> None:
+    """Fail before extraction when a configured immutable source has drifted."""
+    expected_sha256 = str(dataset.get("sha256", "")).strip().lower()
+    expected_bytes = dataset.get("bytes")
+    if expected_bytes is not None and gbff_path.stat().st_size != int(expected_bytes):
+        raise ValueError(
+            f"Source size mismatch for {gbff_path}: expected {expected_bytes}, "
+            f"found {gbff_path.stat().st_size}"
+        )
+    if expected_sha256:
+        if not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+            raise ValueError(f"Invalid configured sha256 for {gbff_path}")
+        observed_sha256 = file_sha256(gbff_path)
+        if observed_sha256 != expected_sha256:
+            raise ValueError(
+                f"Source SHA-256 mismatch for {gbff_path}: expected "
+                f"{expected_sha256}, found {observed_sha256}"
+            )
+
+
 def resolve_genome_identity(dataset: dict, gbff_path: Path, record) -> tuple[str, str]:
     """Resolve a stable genome identity and describe its provenance."""
     for key in ("genome_id", "assembly_accession", "accession"):
@@ -254,6 +274,10 @@ def main() -> None:
         gbff_path = Path(ds["gbff"])
         if not gbff_path.exists():
             raise FileNotFoundError(f"GBFF not found: {gbff_path}")
+        try:
+            validate_pinned_source(ds, gbff_path)
+        except ValueError as exc:
+            raise SystemExit(f"[error] {exc}") from exc
         
         dataset_min_len = int(ds.get("min_len", min_len))
         for rec in SeqIO.parse(gbff_path, "genbank"):

@@ -35,3 +35,31 @@ as `legacy_unverified`; an explicit or discovered invalid manifest is fatal.
 
 Evaluators record the validated dataset ID when `--manifest` is supplied. Results
 without it remain legacy/unverified and cannot support corrected headline claims.
+
+## Corrected Dataset Freeze
+
+The first corrected training program uses the pinned 24-genome inventory in
+`configs/corrected_codonlm_dataset_v1.yaml`. Verify that every local GBFF still
+matches its declared assembly ID, byte size, and SHA-256 digest without creating
+derived data:
+
+```bash
+python -m scripts.freeze_corrected_datasets \
+  --config configs/corrected_codonlm_dataset_v1.yaml \
+  --freeze-id corrected-codonlm-v1 \
+  --verify-sources-only
+```
+
+Build both genome- and genus-held-out protocols and bind their manifests into one
+content-addressed `freeze.json`:
+
+```bash
+python -m scripts.freeze_corrected_datasets \
+  --config configs/corrected_codonlm_dataset_v1.yaml \
+  --freeze-id corrected-codonlm-v1 \
+  --seed 1337 \
+  --audit-threads 4
+```
+
+MMseqs2 is mandatory for this command. The freeze refuses to skip its cross-split
+protein-homology gate and refuses to overwrite an existing freeze ID.
