@@ -2,7 +2,8 @@
 
 ## Status
 
-Planned. The program is blocked on the corrected dataset and evaluator freeze.
+In progress. The corrected datasets have passed the local freeze; the program remains
+blocked on evaluator fixtures, immutable training configs, and the MPS policy gate.
 
 ## Phase 0: Close Pre-Training Gates
 
@@ -11,9 +12,9 @@ Planned. The program is blocked on the corrected dataset and evaluator freeze.
 - [x] Add a fail-closed command that builds genome/genus protocols, validates their
   shared source/vocabulary/packing contract, and emits a content-addressed freeze
   index.
-- [ ] Complete Phase 4 of the leakage-controlled revalidation track: freeze immutable
+- [x] Complete the local Phase 4 build of immutable
   genome-held-out and genus-held-out datasets.
-- [ ] Publish source, split, fragment, chunk, packed-array, vocabulary, and audit
+- [x] Record source, split, fragment, chunk, packed-array, vocabulary, and audit
   hashes plus count summaries.
 - [ ] Complete frozen-manifest evaluator fixtures and provenance validation.
 - [ ] Resolve generation protocol issue #85 before generation comparisons.

@@ -233,8 +233,20 @@ def test_global_builder_fragments_ambiguity_after_source_split(tmp_path):
     assert len(manifest["dataset"]["id"]) == 64
     assert manifest["dataset"]["scientific_valid"] is False
     assert set(manifest["artifacts"]) >= {
-        "train_tokens", "val_tokens", "test_tokens", "vocabulary", "leakage_audit"
+        "train_tokens", "val_tokens", "test_tokens", "vocabulary", "leakage_audit",
+        "train_x_npy", "train_y_npy", "val_x_npy", "val_y_npy",
+        "test_x_npy", "test_y_npy",
     }
+    block_size = manifest["packing"]["block_size"]
+    for split in ("train", "val", "test"):
+        mmap_x = np.load(
+            output_dir / f"{split}_bs{block_size}_X.npy", mmap_mode="r"
+        )
+        mmap_y = np.load(
+            output_dir / f"{split}_bs{block_size}_Y.npy", mmap_mode="r"
+        )
+        assert mmap_x.dtype == np.uint8
+        assert mmap_y.dtype == np.uint8
     policy = manifest["tokenization"]["ambiguous_codon_policy"]
     assert policy["name"] == "split"
     assert policy["min_fragment_codons"] == 2
@@ -387,8 +399,36 @@ def test_global_builder_blocks_cross_split_exact_cds(tmp_path):
     assert report["blocking_reasons"] == ["cross_split_exact_duplicates"]
 
 
+def test_global_builder_quarantines_cross_split_exact_cds(tmp_path):
+    genomes = [tmp_path / f"GCF_00000000{i}.1.gbff" for i in range(3)]
+    duplicate = "ATG" + "GCT" * 40 + "TAA"
+    create_mock_genome(genomes[0], "0", "Genus0 species", cds_sequence=duplicate)
+    create_mock_genome(genomes[1], "1", "Genus1 species", cds_sequence=duplicate)
+    create_mock_genome(
+        genomes[2],
+        "2",
+        "Genus2 species",
+        cds_sequence="ATG" + "AAA" * 40 + "TAA",
+    )
+    config = tmp_path / "config.yaml"
+    _write_config(config, genomes, exact_duplicate_policy="quarantine")
+    output_dir = tmp_path / "processed"
+
+    result = _run_global_builder(config, tmp_path / "run", output_dir)
+
+    assert result.returncode == 0, result.stderr
+    audit = json.loads((output_dir / "leakage_audit.json").read_text())
+    quarantine = json.loads((output_dir / "exact_duplicate_quarantine.json").read_text())
+    manifest = json.loads((output_dir / "manifest.json").read_text())
+    assert audit["exact_duplicates"]["count"] == 0
+    assert quarantine["removed_record_count"] == 1
+    assert manifest["dataset"]["extracted_source_record_count"] == 3
+    assert manifest["dataset"]["source_record_count"] == 2
+    assert "exact_duplicate_quarantine" in manifest["artifacts"]
+
+
 def test_global_builder_blocks_cross_split_protein_clusters(tmp_path):
-    from tests.test_leakage_audit import _write_fake_mmseqs
+    from tests.test_leakage_audit import _write_fake_minimap2, _write_fake_mmseqs
 
     genomes = [tmp_path / f"GCF_00000000{i}.1.gbff" for i in range(3)]
     create_mock_genome(
@@ -403,7 +443,9 @@ def test_global_builder_blocks_cross_split_protein_clusters(tmp_path):
     config = tmp_path / "config.yaml"
     _write_config(config, genomes)
     executable = tmp_path / "mmseqs"
+    nucleotide_executable = tmp_path / "minimap2"
     _write_fake_mmseqs(executable)
+    _write_fake_minimap2(nucleotide_executable)
     output_dir = tmp_path / "processed"
 
     result = _run_global_builder(
@@ -412,6 +454,8 @@ def test_global_builder_blocks_cross_split_protein_clusters(tmp_path):
         output_dir,
         "--mmseqs-executable",
         str(executable),
+        "--nucleotide-executable",
+        str(nucleotide_executable),
         skip_homology=False,
     )
 

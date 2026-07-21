@@ -21,14 +21,24 @@ This guide establishes the mandatory scientific and engineering workflow for dev
    proteins, and searches validation/test records against training at both the
    nucleotide and protein levels. It writes commands, the MMseqs2 version,
    thresholds, identity summaries, and offending source IDs to
-   `leakage_audit.json`. Cross-split exact CDS duplicates or protein clusters are
-   fatal.
+   `leakage_audit.json`. The default policy makes cross-split exact CDS duplicates
+   and protein clusters fatal.
 
    The default protein-cluster gate uses 30% sequence identity and 80% coverage.
    Override those recorded thresholds with `max_cross_split_protein_identity` and
    `min_homology_coverage` in the run config. `--skip-homology-audit` and
    `--allow-cross-split-exact-duplicates` exist only for fixtures and legacy
    reproduction; either marks the resulting manifest as non-scientific.
+
+   Whole-genome and whole-genus holdouts may instead declare
+   `exact_duplicate_policy: quarantine` and `protein_homology_policy: report`.
+   Quarantine deterministically retains each exact-CDS family in test, then
+   validation, then training priority and records every removed source. Homologous
+   but non-identical genes remain in grouped splits because conserved protein
+   families are part of the intended generalization problem; their cluster and
+   nearest-neighbor distributions remain mandatory report artifacts. Dedicated
+   protein-family or homology-held-out evaluations must retain the strict `block`
+   policy.
 
    Scientific preparation also fails when fewer than three groups are available.
    `--allow-sequence-split` is an explicit development-only escape hatch and marks

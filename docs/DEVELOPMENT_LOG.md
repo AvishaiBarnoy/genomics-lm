@@ -658,8 +658,23 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     and SHA-256 hashes, made the global builder fail on source drift, and added a
     fail-closed command that prepares both genome- and genus-held-out protocols and
     binds their validated manifests into one content-addressed freeze index. The local
-    source-only preflight passes; the scientific freeze remains pending because its
-    mandatory MMseqs2 homology audit has not yet run on this host.
+    source-only preflight passes.
+*   **Corrected Dataset Freeze Acceptance (2026-07-21):** Installed and ran native
+    MMseqs2 18-8cc5c and Minimap2 2.31 against the pinned 24-assembly inventory. The
+    local freeze ID is
+    `718417694607bed760fcb2335db1f65c96ef69cdae1612853e8778eef5ba8406`;
+    its genome and genus dataset IDs are respectively
+    `da3dfce28b7a46b8640d75c7cb417c867137a99e004ea359d85784ff0c269db9`
+    and `10f41e818182704bbe4f95fbd81eb8696047762a32f84d167a4101675945ab95`.
+    Genome splitting retained 74,600/9,807/6,678 train/validation/test records after
+    quarantining 134 training-side exact duplicates; genus splitting retained
+    67,794/5,755/17,670 with no quarantine. Both final audits contain zero exact
+    cross-split copies. Homologous-but-nonidentical cluster crossings are retained and
+    reported for these grouped holdouts (5,084 genome; 3,150 genus). Manifest-tracked
+    `uint8` NPY sidecars activate true memory mapping, while compacted, hashed cluster
+    and nearest-neighbor evidence reduces reconstructable audit workspace. This is a
+    local acceptance freeze until the preparation PR merges and a clean-checkout
+    reproduction confirms byte-identical identities.
 
 ---
 *End of Log*

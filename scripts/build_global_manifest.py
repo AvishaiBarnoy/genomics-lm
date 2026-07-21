@@ -9,7 +9,7 @@ it:
   2. Resolves stable genome accessions and groups records by genome or genus.
   3. Splits groups globally into train/val/test partitions (Option A).
   4. Tokenizes all sequences using the standard codon tokenizer.
-  5. Packs split tokenized IDs into final NPZ files directly.
+  5. Packs split tokenized IDs into provenance NPZ files plus mmap-ready NPY sidecars.
   6. Emits pipeline_prepare.json and manifest.json for downstream training compatibility.
 
 Usage:
@@ -54,6 +54,7 @@ from src.codonlm.dataset_manifest import (
     validate_dataset_manifest,
 )
 from src.codonlm.leakage_audit import LeakageAuditError, audit_source_records
+from src.codonlm.leakage_audit import quarantine_cross_split_exact_duplicates
 
 
 ASSEMBLY_ACCESSION_RE = re.compile(
@@ -221,6 +222,11 @@ def main() -> None:
         help="MMseqs2 executable used for clustering and nearest-neighbor searches.",
     )
     ap.add_argument("--audit-threads", type=int, default=1)
+    ap.add_argument(
+        "--nucleotide-executable",
+        default="minimap2",
+        help="Minimap2 executable used for low-memory nucleotide nearest-neighbor mapping.",
+    )
     ap.add_argument("--force", action="store_true", help="Force rebuild")
     args = ap.parse_args()
 
@@ -241,12 +247,28 @@ def main() -> None:
     min_fragment_codons = int(cfg.get("min_fragment_codons", 10))
     min_protein_identity = float(cfg.get("max_cross_split_protein_identity", 0.3))
     min_homology_coverage = float(cfg.get("min_homology_coverage", 0.8))
+    exact_duplicate_policy = str(cfg.get("exact_duplicate_policy", "block"))
+    protein_homology_policy = str(cfg.get("protein_homology_policy", "block"))
+    nearest_query_batch_size = int(cfg.get("mmseqs_query_batch_size", 4096))
+    split_memory_limit = str(cfg.get("mmseqs_split_memory_limit", "0"))
+    nucleotide_preset = str(cfg.get("nucleotide_alignment_preset", "asm20"))
     if min_fragment_codons < 1:
         raise SystemExit("[error] min_fragment_codons must be at least 1")
     if not (0.0 < min_protein_identity <= 1.0):
         raise SystemExit("[error] max_cross_split_protein_identity must be in (0, 1]")
     if not (0.0 < min_homology_coverage <= 1.0):
         raise SystemExit("[error] min_homology_coverage must be in (0, 1]")
+    if exact_duplicate_policy not in {"block", "quarantine"}:
+        raise SystemExit("[error] exact_duplicate_policy must be block or quarantine")
+    if protein_homology_policy not in {"block", "report"}:
+        raise SystemExit("[error] protein_homology_policy must be block or report")
+    if nearest_query_batch_size < 1:
+        raise SystemExit("[error] mmseqs_query_batch_size must be at least 1")
+    if exact_duplicate_policy == "quarantine" and args.allow_cross_split_exact_duplicates:
+        raise SystemExit(
+            "[error] exact_duplicate_policy=quarantine cannot be combined with "
+            "--allow-cross-split-exact-duplicates"
+        )
     requested_group_by = args.group_by or str(cfg.get("split_group_by", "genome"))
     if requested_group_by not in {"genome", "genus", "sequence"}:
         raise SystemExit(
@@ -342,7 +364,8 @@ def main() -> None:
                         "strand": strand,
                     })
 
-    total_seqs = len(all_records)
+    extracted_total_seqs = len(all_records)
+    total_seqs = extracted_total_seqs
     print(f"[global-prep] Extracted {total_seqs} total CDS records.")
     if not all_records:
         raise SystemExit("[error] No eligible CDS records were extracted.")
@@ -371,7 +394,19 @@ def main() -> None:
             for split, groups in split_groups.items():
                 print(f"  {split.title()} groups: {groups}")
 
-    # Count split stats
+    duplicate_quarantine = None
+    if exact_duplicate_policy == "quarantine":
+        all_records, duplicate_quarantine = quarantine_cross_split_exact_duplicates(
+            all_records
+        )
+        print(
+            "[global-prep] Quarantined "
+            f"{duplicate_quarantine['removed_record_count']} cross-split exact "
+            "duplicate records."
+        )
+        total_seqs = len(all_records)
+
+    # Count split stats after any preventive quarantine.
     counts = {"train": 0, "val": 0, "test": 0}
     for rec in all_records:
         counts[rec["split"]] += 1
@@ -402,12 +437,22 @@ def main() -> None:
             min_coverage=min_homology_coverage,
             threads=args.audit_threads,
             executable=args.mmseqs_executable,
+            nucleotide_executable=args.nucleotide_executable,
+            nucleotide_preset=nucleotide_preset,
             skip_homology=args.skip_homology_audit,
             allow_exact_duplicates=args.allow_cross_split_exact_duplicates,
+            protein_homology_policy=protein_homology_policy,
+            nearest_query_batch_size=nearest_query_batch_size,
+            split_memory_limit=split_memory_limit,
         )
     except LeakageAuditError as exc:
         raise SystemExit(f"[error] {exc}; see {audit_path}") from exc
     print(f"[global-prep] Leakage audit passed: {audit_path}")
+
+    quarantine_path = None
+    if duplicate_quarantine is not None:
+        quarantine_path = out_dir / "exact_duplicate_quarantine.json"
+        quarantine_path.write_text(json.dumps(duplicate_quarantine, indent=2) + "\n")
     
     meta_path = out_dir / "cds_meta.tsv"
     dna_path = out_dir / "cds_dna.txt"
@@ -543,6 +588,7 @@ def main() -> None:
         return path
 
     out_paths = {}
+    mmap_sidecars: dict[str, dict[str, Path]] = {}
     empty_windows: dict[str, int] = {}
     packing_metadata_paths: dict[str, str] = {}
     packed_window_counts: dict[str, int] = {}
@@ -558,6 +604,19 @@ def main() -> None:
         X = arrays["X"]
         out_npz = out_dir / f"{name}_bs{block_size}.npz"
         np.savez_compressed(out_npz, **arrays)
+        split_sidecars: dict[str, Path] = {}
+        for key in ("X", "Y", "lengths"):
+            if key not in arrays:
+                continue
+            sidecar = out_dir / f"{out_npz.stem}_{key}.npy"
+            values = arrays[key]
+            if key in {"X", "Y"}:
+                if values.size and (values.min() < 0 or values.max() > 255):
+                    raise ValueError(f"{name} {key} token IDs do not fit in uint8")
+                values = values.astype(np.uint8, copy=False)
+            np.save(sidecar, values, allow_pickle=False)
+            split_sidecars[key] = sidecar
+        mmap_sidecars[name] = split_sidecars
         if pack_mode == "dynamic":
             empty_windows[name] = int(np.count_nonzero(arrays["lengths"] == 0))
         else:
@@ -614,6 +673,32 @@ def main() -> None:
         "fragment_metadata": artifact_entry(fragments_path, out_dir, "fragment_metadata"),
         "leakage_audit": artifact_entry(audit_path, out_dir, "leakage_audit"),
     }
+    for split, sidecars in mmap_sidecars.items():
+        for key, path in sidecars.items():
+            artifacts[f"{split}_{key.lower()}_npy"] = artifact_entry(
+                path, out_dir, f"{split}_{key.lower()}_npy"
+            )
+    protein_homology = leakage_report.get("protein_homology") or {}
+    audit_evidence = {
+        "protein_clusters": protein_homology.get("cluster_artifact"),
+        "nearest_nucleotide": (
+            protein_homology.get("nearest_neighbors", {})
+            .get("nucleotide", {})
+            .get("artifact")
+        ),
+        "nearest_protein": (
+            protein_homology.get("nearest_neighbors", {})
+            .get("protein", {})
+            .get("artifact")
+        ),
+    }
+    for name, path in audit_evidence.items():
+        if path:
+            artifacts[name] = artifact_entry(Path(path), out_dir, name)
+    if quarantine_path is not None:
+        artifacts["exact_duplicate_quarantine"] = artifact_entry(
+            quarantine_path, out_dir, "exact_duplicate_quarantine"
+        )
     for split in ("train", "val", "test"):
         artifacts[f"{split}_packing_metadata"] = artifact_entry(
             out_dir / packing_metadata_paths[split], out_dir, f"{split}_packing_metadata"
@@ -625,6 +710,7 @@ def main() -> None:
             "id": "pending",
             "scientific_valid": scientific_valid,
             "source_record_count": total_seqs,
+            "extracted_source_record_count": extracted_total_seqs,
         },
         "train": str(out_paths["train"]),
         "val": str(out_paths["val"]),
@@ -672,6 +758,8 @@ def main() -> None:
             "status": leakage_report["status"],
             "homology_audit_skipped": args.skip_homology_audit,
             "exact_duplicate_override": args.allow_cross_split_exact_duplicates,
+            "exact_duplicate_policy": exact_duplicate_policy,
+            "protein_homology_policy": protein_homology_policy,
             "thresholds": leakage_report["thresholds"],
         },
         "tokenization": {

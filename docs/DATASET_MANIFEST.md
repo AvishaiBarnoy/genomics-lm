@@ -36,6 +36,15 @@ as `legacy_unverified`; an explicit or discovered invalid manifest is fatal.
 Evaluators record the validated dataset ID when `--manifest` is supplied. Results
 without it remain legacy/unverified and cannot support corrected headline claims.
 
+Fixed and multi-packed datasets retain the compressed NPZ as the complete packing
+record and provide manifest-tracked `uint8` `*_X.npy` and `*_Y.npy` sidecars.
+Training with `use_mmap: true` reads these sidecars without materializing the full
+dataset in RAM. Dynamic datasets provide `*_X.npy` and `*_lengths.npy` instead.
+
+Leakage audits retain the protein-cluster assignments and nucleotide/protein
+nearest-neighbor results as hashed artifacts. Reconstructable FASTA inputs and
+aligner databases are removed after a successful audit.
+
 ## Corrected Dataset Freeze
 
 The first corrected training program uses the pinned 24-genome inventory in
@@ -61,5 +70,9 @@ python -m scripts.freeze_corrected_datasets \
   --audit-threads 4
 ```
 
-MMseqs2 is mandatory for this command. The freeze refuses to skip its cross-split
-protein-homology gate and refuses to overwrite an existing freeze ID.
+MMseqs2 is mandatory for this command, and the freeze refuses to overwrite an
+existing freeze ID. The corrected grouped protocols quarantine exact cross-split CDS
+copies and report all protein-cluster crossings and nearest-neighbor identities.
+Protein homology is diagnostic here because homologous genes are expected across
+whole genomes and genera; strict blocking remains mandatory for explicitly
+homology-held-out evaluations.

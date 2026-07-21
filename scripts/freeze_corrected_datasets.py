@@ -61,6 +61,7 @@ def validate_protocol_manifests(
     reference_sources = None
     reference_vocab = None
     reference_packing = None
+    reference_homology_policy = None
     for protocol in GROUP_PROTOCOLS:
         manifest, _ = manifests[protocol]
         if not manifest["dataset"].get("scientific_valid"):
@@ -69,6 +70,15 @@ def validate_protocol_manifests(
             raise ValueError(f"{protocol} manifest uses the wrong split protocol")
         if manifest["leakage_audit"].get("status") != "passed":
             raise ValueError(f"{protocol} leakage audit did not pass")
+        if manifest["leakage_audit"].get("homology_audit_skipped"):
+            raise ValueError(f"{protocol} homology audit was skipped")
+        if manifest["leakage_audit"].get("exact_duplicate_override"):
+            raise ValueError(f"{protocol} exact-duplicate audit was overridden")
+        homology_policy = manifest["leakage_audit"].get(
+            "protein_homology_policy", "block"
+        )
+        if homology_policy not in {"block", "report"}:
+            raise ValueError(f"{protocol} manifest has an invalid homology policy")
 
         sources = {
             key: {"sha256": value["sha256"], "bytes": int(value["bytes"])}
@@ -87,12 +97,15 @@ def validate_protocol_manifests(
             reference_sources = sources
             reference_vocab = vocab
             reference_packing = packing
+            reference_homology_policy = homology_policy
         elif sources != reference_sources:
             raise ValueError("genome and genus manifests do not share the same sources")
         elif vocab != reference_vocab:
             raise ValueError("genome and genus manifests do not share the same vocabulary")
         elif packing != reference_packing:
             raise ValueError("genome and genus manifests do not share the same packing policy")
+        elif homology_policy != reference_homology_policy:
+            raise ValueError("genome and genus manifests do not share the same homology policy")
 
 
 def build_freeze_index(
@@ -138,6 +151,7 @@ def _run_builder(
     output_root: Path,
     run_root: Path,
     mmseqs_executable: str,
+    nucleotide_executable: str,
     audit_threads: int,
 ) -> Path:
     output_dir = output_root / freeze_id / protocol
@@ -167,6 +181,8 @@ def _run_builder(
         mmseqs_executable,
         "--audit-threads",
         str(audit_threads),
+        "--nucleotide-executable",
+        nucleotide_executable,
     ]
     subprocess.run(command, check=True)
     return output_dir / "manifest.json"
@@ -180,6 +196,7 @@ def main() -> None:
     parser.add_argument("--run-root", default="runs/dataset_freeze")
     parser.add_argument("--seed", type=int, default=1337)
     parser.add_argument("--mmseqs-executable", default="mmseqs")
+    parser.add_argument("--nucleotide-executable", default="minimap2")
     parser.add_argument("--audit-threads", type=int, default=1)
     parser.add_argument(
         "--verify-sources-only",
@@ -198,6 +215,11 @@ def main() -> None:
             f"[error] MMseqs2 executable not found: {args.mmseqs_executable}; "
             "the scientific freeze cannot skip the homology gate"
         )
+    if shutil.which(args.nucleotide_executable) is None:
+        raise SystemExit(
+            f"[error] nucleotide aligner not found: {args.nucleotide_executable}; "
+            "the scientific freeze cannot skip nucleotide nearest-neighbor mapping"
+        )
 
     output_root = Path(args.output_root)
     run_root = Path(args.run_root)
@@ -210,6 +232,7 @@ def main() -> None:
             output_root=output_root,
             run_root=run_root,
             mmseqs_executable=args.mmseqs_executable,
+            nucleotide_executable=args.nucleotide_executable,
             audit_threads=args.audit_threads,
         )
         for protocol in GROUP_PROTOCOLS
