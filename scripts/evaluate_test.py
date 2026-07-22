@@ -21,6 +21,13 @@ from torch.utils.data import DataLoader
 
 from src.codonlm.checkpoints import build_codon_model_from_cfg, load_codon_checkpoint
 from src.codonlm.data_loading import PackedDataset, dynamic_lm_collate_fn
+from src.codonlm.evaluation_provenance import (
+    artifact_provenance,
+    bind_checkpoint_dataset,
+    bind_dataset_manifest,
+    bind_derived_dataset,
+)
+from src.codonlm.dataset_manifest import manifest_artifact_path
 from scripts._shared import resolve_run
 from src.codonlm.metrics_io import write_merge_metrics
 
@@ -67,7 +74,7 @@ def _find_test_npz(
 @torch.no_grad()
 def evaluate(
     model: torch.nn.Module, device: torch.device, loader: DataLoader
-) -> tuple[float, float]:
+) -> tuple[float, float, int]:
     total_loss = 0.0
     total_tokens = 0
     for xb, yb in loader:
@@ -82,7 +89,7 @@ def evaluate(
         total_tokens += max(1, valid)
     mean_nll = total_loss / max(1, total_tokens)
     ppl = float(math.exp(min(20.0, mean_nll)))
-    return mean_nll, ppl
+    return mean_nll, ppl, total_tokens
 
 
 def main() -> None:
@@ -92,6 +99,17 @@ def main() -> None:
     ap.add_argument(
         "--data_dir", help="override test NPZ directory (contains test_bs*.npz)"
     )
+    ap.add_argument("--test_npz", type=Path, help="explicit test or control dataset")
+    ap.add_argument(
+        "--manifest",
+        type=Path,
+        help="Frozen dataset manifest; required for corrected checkpoints.",
+    )
+    ap.add_argument(
+        "--derived_provenance",
+        type=Path,
+        help="Provenance sidecar when --test_npz is derived from the frozen test set.",
+    )
     ap.add_argument("--batch_size", type=int, default=None, help="evaluation batch size")
     args = ap.parse_args()
 
@@ -99,13 +117,35 @@ def main() -> None:
     run_id, run_dir = resolve_run(args.run_id, args.run_dir)
     repo_root = Path(__file__).resolve().parents[1]
 
-    state_dict, cfg, _ = load_codon_checkpoint(run_dir)
+    state_dict, cfg, checkpoint_path = load_codon_checkpoint(run_dir)
     model = build_codon_model_from_cfg(cfg)
     model.load_state_dict(state_dict, strict=False)
     model.to(dev()).eval()
 
     data_dir_opt = Path(args.data_dir) if args.data_dir else None
-    test_npz = _find_test_npz(run_id, cfg, repo_root, data_dir_opt)
+    test_npz = args.test_npz or _find_test_npz(run_id, cfg, repo_root, data_dir_opt)
+    test_npz = test_npz.expanduser().resolve()
+    manifest_provenance = None
+    derived_provenance = None
+    if args.manifest is not None:
+        if args.derived_provenance is None:
+            _, manifest_provenance = bind_dataset_manifest(
+                args.manifest, expected_artifacts={"test_tokens": test_npz}
+            )
+        else:
+            manifest, manifest_provenance = bind_dataset_manifest(args.manifest)
+            source_test = manifest_artifact_path(
+                manifest, args.manifest.expanduser().resolve(), "test_tokens"
+            )
+            derived_provenance = bind_derived_dataset(
+                test_npz,
+                args.derived_provenance,
+                manifest_provenance=manifest_provenance,
+                source_artifact_path=source_test,
+            )
+    elif args.derived_provenance is not None:
+        raise ValueError("--derived_provenance requires --manifest")
+    checkpoint_dataset = bind_checkpoint_dataset(cfg, manifest_provenance)
     ds = PackedDataset(test_npz)
 
     collate_fn = dynamic_lm_collate_fn if getattr(ds, "is_dynamic", False) else None
@@ -114,18 +154,25 @@ def main() -> None:
     if batch_size is None:
         batch_size = int(cfg.get("eval_batch_size", 16 if dev().type == "mps" else 64))
     loader = DataLoader(ds, batch_size=batch_size, collate_fn=collate_fn)
-    nll, ppl = evaluate(model, dev(), loader)
+    nll, ppl, evaluated_tokens = evaluate(model, dev(), loader)
     print(f"[test] loss={nll:.4f} ppl={ppl:.2f}")
 
     metrics_path = run_dir / "scores" / "metrics.json"
-    if not metrics_path.parent.exists():
-        metrics_path = repo_root / "outputs/scores" / run_id / "metrics.json"
 
     write_merge_metrics(
         metrics_path,
         {
             "test_loss": float(nll),
             "test_ppl": float(ppl),
+            "test_evaluated_tokens": int(evaluated_tokens),
+            "test_evaluation_provenance": {
+                "schema_version": 1,
+                "dataset_manifest": manifest_provenance or {"status": "legacy_unverified"},
+                "checkpoint_dataset": checkpoint_dataset,
+                "checkpoint": artifact_provenance(checkpoint_path),
+                "test_tokens": artifact_provenance(test_npz),
+                "derived_dataset": derived_provenance,
+            },
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )

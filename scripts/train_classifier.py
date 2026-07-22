@@ -60,6 +60,7 @@ from src.classifiers.probes import (
 from src.classifiers.linear_probe import fit_linear_svm, fit_logreg
 from src.classifiers.mlp_head import fit_mlp
 from src.classifiers.kmer_baselines import fit_kmer_logreg, fit_kmer_svm, fit_kmer_xgb
+from src.codonlm.evaluation_provenance import artifact_provenance, bind_embedding_pair
 
 
 def _read_labels_csv(path: Path) -> Dict[str, int]:
@@ -111,8 +112,26 @@ def main() -> None:
     out_dir = ensure_dir(cfg.get("out_dir", "outputs/reports/exp"))
     str(cfg.get("protocol", "std")).upper()
     clf_kind = str(cfg.get("classifier", {}).get("kind", "probe_logreg"))
+    provenance = {
+        "schema_version": 1,
+        "config": artifact_provenance(args.config),
+        "classifier_kind": clf_kind,
+        "task": cfg.get("task"),
+        "protocol": cfg.get("protocol", "std"),
+    }
 
     if clf_kind.startswith("probe") or clf_kind == "mlp":
+        require_verified = bool(cfg.get("require_verified_embeddings", False))
+        provenance["embedding_inputs"] = bind_embedding_pair(
+            cfg["data"]["train_embeddings"],
+            cfg["data"]["test_embeddings"],
+            require_verified=require_verified,
+        )
+        provenance["require_verified_embeddings"] = require_verified
+        provenance["labels"] = {
+            split: artifact_provenance(cfg["data"][f"{split}_labels"])
+            for split in ("train", "test")
+        }
         train_X, train_y = _align_embeddings(
             Path(cfg["data"]["train_embeddings"]), Path(cfg["data"]["train_labels"])
         )
@@ -159,6 +178,11 @@ def main() -> None:
                 y_pred = torch.argmax(logits, dim=1).cpu().numpy()
                 y_proba = torch.softmax(logits, dim=1).cpu().numpy()
         metrics = compute_metrics(test_y, y_pred, y_proba, bootstrap=True)
+        metrics["evaluation_provenance"] = {
+            "status": "verified" if require_verified else "legacy_unverified",
+            "path": str((out_dir / "provenance.json").resolve()),
+        }
+        save_json(out_dir / "provenance.json", provenance)
         save_json(out_dir / "metrics.json", metrics)
         plot_confusion(test_y, y_pred, out_dir / "confusion.png")
         if y_proba is not None:
@@ -173,6 +197,11 @@ def main() -> None:
         print(f"[train-clf] {clf_kind} → {out_dir}; metrics={json.dumps(metrics)}")
 
     else:
+        provenance["sequence_inputs"] = {
+            f"{split}_{kind}": artifact_provenance(cfg["data"][f"{split}_{kind}"])
+            for split in ("train", "test")
+            for kind in ("seqs", "labels")
+        }
         # k-mer baselines expect sequences
         _, train_seqs = _read_seqs_csv(Path(cfg["data"]["train_seqs"]))
         _, test_seqs = _read_seqs_csv(Path(cfg["data"]["test_seqs"]))
@@ -219,6 +248,11 @@ def main() -> None:
             except Exception:
                 y_proba = None
         metrics = compute_metrics(y_test_i, y_pred, y_proba, bootstrap=True)
+        metrics["evaluation_provenance"] = {
+            "status": "input_artifacts_recorded",
+            "path": str((out_dir / "provenance.json").resolve()),
+        }
+        save_json(out_dir / "provenance.json", provenance)
         save_json(out_dir / "metrics.json", metrics)
         plot_confusion(y_test_i, y_pred, out_dir / "confusion.png")
         if y_proba is not None:

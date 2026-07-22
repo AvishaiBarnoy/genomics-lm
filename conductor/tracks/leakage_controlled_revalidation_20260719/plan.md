@@ -1,9 +1,9 @@
 # Leakage-Controlled CodonLM Revalidation Plan
 
 ## Status
-In progress. Engineering gates and the local corrected dataset freeze are complete;
-full retraining remains blocked on evaluator-fixture validation and the immutable
-training configuration gate.
+In progress. Engineering gates, the local corrected dataset freeze, and evaluator
+contracts are complete; full retraining remains blocked on the formal pipeline
+freeze, runtime-policy selection, and immutable training configuration gate.
 
 ## Phase 1: Governance and CI
 - [x] Relabel legacy results and unsupported claims (#87).
@@ -64,7 +64,7 @@ audits pass. Any later semantic change creates a new dataset version.
   7-mer controls (#88).
 - [x] Add protein-cluster-held-out AMR splits, class reporting, stratified bootstrap,
   and output isolation (#89).
-- [ ] Validate every evaluator on fixtures derived from the frozen manifest schema.
+- [x] Validate every evaluator on fixtures derived from the frozen manifest schema.
 
 Exit gate: all evaluators consume explicit frozen artifacts, reject incompatible
 inputs, preserve grouping, and emit machine-readable provenance.

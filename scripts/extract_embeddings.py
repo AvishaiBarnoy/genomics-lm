@@ -29,6 +29,10 @@ import torch
 
 from . import query_model as Q
 from src.codonlm.checkpoints import load_codon_checkpoint
+from src.codonlm.evaluation_provenance import (
+    bind_checkpoint_dataset,
+    bind_dataset_manifest,
+)
 from src.codonlm.training.vocabulary import load_itos
 
 
@@ -151,6 +155,11 @@ def main() -> None:
     ap.add_argument("--csv")
     ap.add_argument("--seq_col", default="seq")
     ap.add_argument("--mode", choices=["dna_cds", "codon_tokens"], default="dna_cds")
+    ap.add_argument(
+        "--manifest",
+        type=Path,
+        help="Frozen pretraining manifest; required for corrected checkpoints.",
+    )
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
@@ -163,6 +172,10 @@ def main() -> None:
     itos = load_itos(itos_path)
     stoi = {token: index for index, token in enumerate(itos)}
     state_dict, cfg, checkpoint_path = load_codon_checkpoint(rd)
+    manifest_provenance = None
+    if args.manifest is not None:
+        _, manifest_provenance = bind_dataset_manifest(args.manifest)
+    checkpoint_dataset = bind_checkpoint_dataset(cfg, manifest_provenance)
     _validate_vocabulary(itos, state_dict, cfg, itos_path)
     model = Q.build_model_from_state(
         state_dict, cfg, setup_shape_runtime=False
@@ -235,6 +248,8 @@ def main() -> None:
         "validation_status": "causal_verified",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "checkpoint": {"path": str(checkpoint_path.resolve()), "sha256": _sha256(checkpoint_path)},
+        "dataset_manifest": manifest_provenance or {"status": "legacy_unverified"},
+        "checkpoint_dataset": checkpoint_dataset,
         "vocabulary": {"path": str(itos_path.resolve()), "size": len(itos), "sha256": _sha256(itos_path)},
         "inputs": [{"path": str(path.resolve()), "sha256": _sha256(path)} for path in input_paths],
         "mask_mode": (

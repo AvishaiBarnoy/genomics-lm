@@ -93,6 +93,17 @@ For every test evaluation, calculate and compare model performance against Unifo
    genus-held-out dataset and a distinct output prefix.
 2. Report the **excess bits per codon** ($\Delta H$) and the perplexity drop over the 2nd-order Markov (Trigram) baseline.
 
+Evaluate the corrected model on the same manifest-bound test artifact:
+
+```bash
+python -m scripts.evaluate_test \
+  --run_dir runs/<RUN_ID> \
+  --manifest data/processed/corrected/<FREEZE_ID>/genome/manifest.json
+```
+
+Corrected checkpoints fail if the explicit manifest is missing or if its dataset or
+vocabulary identity differs from the checkpoint.
+
 ---
 
 ## 3. Synonymous and Shuffling Controls
@@ -103,13 +114,25 @@ For every test evaluation, calculate and compare model performance against Unifo
 ### Mandatory Workflow
 1. Generate control datasets from your test split:
    ```bash
-   python -m scripts.generate_synonymous_controls --test_npz data/processed/global/<RUN_ID>/test_bs256.npz
+   python -m scripts.generate_synonymous_controls \
+     --test_npz data/processed/corrected/<FREEZE_ID>/genome/test_bs256.npz \
+     --manifest data/processed/corrected/<FREEZE_ID>/genome/manifest.json \
+     --out_dir runs/<RUN_ID>/controls
    ```
    This outputs:
    - `test_control_synonymous_bs256.npz` (random synonymous codons, same protein).
-   - `test_control_codon_shuffle_bs256.npz` (shuffled codons, same composition).
-   - `test_control_protein_shuffle_bs256.npz` (shuffled protein, same codon counts).
-2. Run [`evaluate_test.py`](file:///Users/User/github/genomics-lm/scripts/evaluate_test.py) on each of these control NPZs.
+   - `test_control_codon_shuffle_bs256.npz` (codons shuffled within each CDS, same codon composition).
+   - `test_control_protein_shuffle_bs256.npz` (amino acids shuffled within each CDS, same amino-acid composition).
+2. Run `evaluate_test.py` on each control with its generated provenance sidecar:
+   ```bash
+   python -m scripts.evaluate_test \
+     --run_dir runs/<RUN_ID> \
+     --test_npz runs/<RUN_ID>/controls/test_control_synonymous_bs256.npz \
+     --derived_provenance runs/<RUN_ID>/controls/test_control_synonymous_bs256.npz.provenance.json \
+     --manifest data/processed/corrected/<FREEZE_ID>/genome/manifest.json
+   ```
+   Corrected evaluation fails if the control, source test artifact, vocabulary, or
+   dataset identity differs from the recorded derivation.
 3. Assert that the model's perplexity is significantly better (lower) on the natural test set compared to the synonymous recoding set.
 
 ---
@@ -126,6 +149,7 @@ Regenerate embeddings from the corrected checkpoint before running any probe:
 python -m scripts.extract_embeddings \
   --run_dir runs/<RUN_ID> \
   --fasta data/frozen/test_cds.fasta \
+  --manifest data/processed/corrected/<FREEZE_ID>/genome/manifest.json \
   --out runs/<RUN_ID>/embeddings/test_causal.npz
 ```
 
@@ -135,6 +159,10 @@ shape encoder. The adjacent `.npz.metadata.json` sidecar records checkpoint,
 vocabulary, input, masking, pooling, truncation, and code provenance. Embedding
 files without this sidecar are legacy/unverified and must not be used for
 corrected headline results.
+
+Corrected probe configs must set `require_verified_embeddings: true`. The classifier
+then rejects train/test embeddings produced by different checkpoints, dataset
+manifests, or vocabularies and writes `provenance.json` beside `metrics.json`.
 
 When training linear probes (e.g. for DNA-shape or EC level classification), compare your pretrained embeddings against:
 1. **One-Hot Codon Identity vectors** (proves learning beyond local codon lookup).

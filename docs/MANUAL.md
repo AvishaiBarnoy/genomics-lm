@@ -303,19 +303,31 @@ python -m scripts.sanity_kpis --run_dir runs/<RUN_ID>/checkpoints
 # exact and MMseqs2 protein-cluster leakage before packing and writes leakage_audit.json.
 python -m scripts.audit_duplicates --train_npz data/processed/train_bs256.npz --test_npz data/processed/test_bs256.npz
 
-# Generated-sequence nucleotide/protein nearest neighbors and training-match coverage
-python -m scripts.audit_generated_sequences --train-fasta data/frozen/train_cds.fasta --generated-fasta runs/<RUN_ID>/generated.fasta --output runs/<RUN_ID>/scores/generated_leakage_audit.json
+# Generated-sequence nucleotide/protein nearest neighbors and training-match coverage.
+# The corrected route derives train-only source records from the frozen manifest.
+python -m scripts.audit_generated_sequences --manifest data/processed/corrected/<FREEZE_ID>/genome/manifest.json --generated-fasta runs/<RUN_ID>/generated.fasta --output runs/<RUN_ID>/scores/generated_leakage_audit.json
 
 # Calculate baseline perplexities (Uniform, Unigram, Bigram, Trigram Markov baselines)
 python -m scripts.eval_ppl_baselines --test data/processed/test_bs256.npz --train data/processed/train_bs256.npz
 
-# Generate synonymous recoding and shuffled sequence controls for perplexity evaluation
-python -m scripts.generate_synonymous_controls --test_npz data/processed/test_bs256.npz --out_dir data/processed/controls
+# Generate manifest-bound controls without breaking packed X/Y target alignment.
+python -m scripts.generate_synonymous_controls \
+  --test_npz data/processed/corrected/<FREEZE_ID>/genome/test_bs256.npz \
+  --manifest data/processed/corrected/<FREEZE_ID>/genome/manifest.json \
+  --out_dir runs/<RUN_ID>/controls
+
+# Evaluate a derived control; repeat with each generated control and sidecar.
+python -m scripts.evaluate_test \
+  --run_dir runs/<RUN_ID> \
+  --test_npz runs/<RUN_ID>/controls/test_control_synonymous_bs256.npz \
+  --derived_provenance runs/<RUN_ID>/controls/test_control_synonymous_bs256.npz.provenance.json \
+  --manifest data/processed/corrected/<FREEZE_ID>/genome/manifest.json
 
 # Compare DNA-shape regression prediction performance against one-hot and random model baselines
 python -m scripts.eval_shape_baselines \
   --run_dir runs/<RUN_ID> --ckpt best.pt \
   --test_npz data/processed/global/<DATASET_ID>/test_bs256.npz \
+  --manifest data/processed/global/<DATASET_ID>/manifest.json \
   --packing-metadata data/processed/global/<DATASET_ID>/test_packing.tsv \
   --cds-metadata data/processed/global/<DATASET_ID>/cds_meta.tsv \
   --group-by genome --output-prefix runs/<RUN_ID>/scores/shape_genome_grouped
