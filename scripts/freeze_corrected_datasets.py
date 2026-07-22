@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -19,7 +21,9 @@ from src.codonlm.dataset_manifest import file_sha256, load_dataset_manifest
 
 
 FREEZE_SCHEMA_NAME = "codonlm_dataset_freeze"
-FREEZE_SCHEMA_VERSION = 1
+FREEZE_SCHEMA_VERSION = 2
+CONTRACT_SCHEMA_NAME = "codonlm_pipeline_freeze_contract"
+CONTRACT_SCHEMA_VERSION = 1
 GROUP_PROTOCOLS = ("genome", "genus")
 
 
@@ -115,12 +119,14 @@ def build_freeze_index(
     manifests: dict[str, tuple[dict[str, Any], Path]],
 ) -> dict[str, Any]:
     validate_protocol_manifests(manifests)
+    manifest_paths = [path.resolve() for _, path in manifests.values()]
+    freeze_root = Path(os.path.commonpath([path.parent for path in manifest_paths]))
     protocols = {}
     for protocol in GROUP_PROTOCOLS:
         manifest, manifest_path = manifests[protocol]
         protocols[protocol] = {
             "dataset_id": manifest["dataset"]["id"],
-            "manifest_path": str(manifest_path.resolve()),
+            "manifest_path": os.path.relpath(manifest_path.resolve(), freeze_root),
             "manifest_sha256": file_sha256(manifest_path),
             "record_counts": manifest["split_policy"]["record_counts"],
             "group_counts": manifest["split_policy"]["group_counts"],
@@ -131,15 +137,100 @@ def build_freeze_index(
     payload = {
         "schema": {"name": FREEZE_SCHEMA_NAME, "version": FREEZE_SCHEMA_VERSION},
         "config": {
-            "path": str(config_path.resolve()),
+            "path": os.path.relpath(config_path.resolve(), freeze_root),
             "sha256": file_sha256(config_path),
         },
         "split_seed": int(seed),
         "protocols": protocols,
     }
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-    payload["freeze_id"] = hashlib.sha256(encoded).hexdigest()
+    payload["freeze_id"] = freeze_identity(payload)
     return payload
+
+
+def freeze_identity(index: dict[str, Any]) -> str:
+    """Return a location-independent identity for a genome/genus freeze pair."""
+    payload = copy.deepcopy(index)
+    payload.pop("freeze_id", None)
+    payload.get("config", {}).pop("path", None)
+    for protocol in payload.get("protocols", {}).values():
+        protocol.pop("manifest_path", None)
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def freeze_contract(index: dict[str, Any], *, release: str) -> dict[str, Any]:
+    """Extract the portable, reviewable approval contract from a freeze index."""
+    return {
+        "schema": {
+            "name": CONTRACT_SCHEMA_NAME,
+            "version": CONTRACT_SCHEMA_VERSION,
+        },
+        "release": release,
+        "dataset_freeze_schema": index["schema"],
+        "dataset_freeze_id": index["freeze_id"],
+        "source_config_sha256": index["config"]["sha256"],
+        "split_seed": int(index["split_seed"]),
+        "protocols": {
+            protocol: {
+                key: index["protocols"][protocol][key]
+                for key in (
+                    "dataset_id",
+                    "manifest_sha256",
+                    "record_counts",
+                    "group_counts",
+                    "achieved_record_fractions",
+                )
+            }
+            for protocol in GROUP_PROTOCOLS
+        },
+    }
+
+
+def validate_freeze_contract(index: dict[str, Any], contract: dict[str, Any]) -> None:
+    schema = contract.get("schema", {})
+    if schema != {"name": CONTRACT_SCHEMA_NAME, "version": CONTRACT_SCHEMA_VERSION}:
+        raise ValueError(f"unsupported pipeline freeze contract schema: {schema!r}")
+    expected = freeze_contract(index, release=str(contract.get("release", "")))
+    if contract != expected:
+        raise ValueError("pipeline freeze contract does not match the dataset freeze")
+
+
+def load_and_validate_freeze(path: Path) -> dict[str, Any]:
+    """Validate a freeze index and every bound manifest/artifact."""
+    resolved = path.expanduser().resolve()
+    index = json.loads(resolved.read_text())
+    expected_schema = {"name": FREEZE_SCHEMA_NAME, "version": FREEZE_SCHEMA_VERSION}
+    if index.get("schema") != expected_schema:
+        raise ValueError(
+            f"unsupported dataset freeze schema: {index.get('schema')!r}; "
+            f"expected {expected_schema!r}"
+        )
+    if index.get("freeze_id") != freeze_identity(index):
+        raise ValueError("dataset freeze identity mismatch")
+
+    config_path = (resolved.parent / index["config"]["path"]).resolve()
+    if file_sha256(config_path) != index["config"]["sha256"]:
+        raise ValueError("dataset freeze source config hash mismatch")
+
+    manifests = {}
+    for protocol in GROUP_PROTOCOLS:
+        declared = index["protocols"][protocol]
+        manifest_path = (resolved.parent / declared["manifest_path"]).resolve()
+        if file_sha256(manifest_path) != declared["manifest_sha256"]:
+            raise ValueError(f"{protocol} manifest hash mismatch")
+        manifest = load_dataset_manifest(manifest_path)
+        if manifest["dataset"]["id"] != declared["dataset_id"]:
+            raise ValueError(f"{protocol} dataset identity mismatch")
+        for key in (
+            "record_counts",
+            "group_counts",
+            "achieved_record_fractions",
+        ):
+            if manifest["split_policy"][key] != declared[key]:
+                raise ValueError(f"{protocol} {key} mismatch")
+        manifests[protocol] = (manifest, manifest_path)
+    validate_protocol_manifests(manifests)
+    return index
 
 
 def _run_builder(
@@ -203,6 +294,11 @@ def main() -> None:
         action="store_true",
         help="Verify the pinned inventory without building derived datasets.",
     )
+    parser.add_argument(
+        "--finalize-existing",
+        action="store_true",
+        help="Rebuild only freeze.json from already completed protocol manifests.",
+    )
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -210,33 +306,41 @@ def main() -> None:
     print(f"[freeze] Verified {len(cfg['datasets'])} pinned source files.")
     if args.verify_sources_only:
         return
-    if shutil.which(args.mmseqs_executable) is None:
-        raise SystemExit(
-            f"[error] MMseqs2 executable not found: {args.mmseqs_executable}; "
-            "the scientific freeze cannot skip the homology gate"
-        )
-    if shutil.which(args.nucleotide_executable) is None:
-        raise SystemExit(
-            f"[error] nucleotide aligner not found: {args.nucleotide_executable}; "
-            "the scientific freeze cannot skip nucleotide nearest-neighbor mapping"
-        )
-
     output_root = Path(args.output_root)
     run_root = Path(args.run_root)
-    manifest_paths = {
-        protocol: _run_builder(
-            config_path=config_path,
-            freeze_id=args.freeze_id,
-            protocol=protocol,
-            seed=args.seed,
-            output_root=output_root,
-            run_root=run_root,
-            mmseqs_executable=args.mmseqs_executable,
-            nucleotide_executable=args.nucleotide_executable,
-            audit_threads=args.audit_threads,
-        )
-        for protocol in GROUP_PROTOCOLS
-    }
+    if args.finalize_existing:
+        manifest_paths = {
+            protocol: output_root / args.freeze_id / protocol / "manifest.json"
+            for protocol in GROUP_PROTOCOLS
+        }
+        missing = [str(path) for path in manifest_paths.values() if not path.is_file()]
+        if missing:
+            raise ValueError(f"cannot finalize missing protocol manifests: {missing}")
+    else:
+        if shutil.which(args.mmseqs_executable) is None:
+            raise SystemExit(
+                f"[error] MMseqs2 executable not found: {args.mmseqs_executable}; "
+                "the scientific freeze cannot skip the homology gate"
+            )
+        if shutil.which(args.nucleotide_executable) is None:
+            raise SystemExit(
+                f"[error] nucleotide aligner not found: {args.nucleotide_executable}; "
+                "the scientific freeze cannot skip nucleotide nearest-neighbor mapping"
+            )
+        manifest_paths = {
+            protocol: _run_builder(
+                config_path=config_path,
+                freeze_id=args.freeze_id,
+                protocol=protocol,
+                seed=args.seed,
+                output_root=output_root,
+                run_root=run_root,
+                mmseqs_executable=args.mmseqs_executable,
+                nucleotide_executable=args.nucleotide_executable,
+                audit_threads=args.audit_threads,
+            )
+            for protocol in GROUP_PROTOCOLS
+        }
     manifests = {
         protocol: (load_dataset_manifest(path), path)
         for protocol, path in manifest_paths.items()

@@ -2,9 +2,9 @@
 
 ## Status
 
-In progress. The corrected datasets, evaluator contracts, and generation protocol
-separation are complete. The program remains blocked on the formal pipeline freeze,
-immutable training configs, and the MPS policy gate.
+In progress. The corrected pipeline freeze, evaluator contracts, and generation
+protocol separation are complete. The program remains blocked on immutable training
+configs and the MPS policy gate.
 
 ## Phase 0: Close Pre-Training Gates
 

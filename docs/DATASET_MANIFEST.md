@@ -76,3 +76,31 @@ copies and report all protein-cluster crossings and nearest-neighbor identities.
 Protein homology is diagnostic here because homologous genes are expected across
 whole genomes and genera; strict blocking remains mandatory for explicitly
 homology-held-out evaluations.
+
+Freeze schema v2 computes its identity without storage paths, so relocating a
+byte-identical build does not change the aggregate freeze ID. To migrate or restore
+the index for already completed protocol artifacts without repeating the expensive
+alignment audits:
+
+```bash
+python -m scripts.freeze_corrected_datasets \
+  --config configs/corrected_codonlm_dataset_v1.yaml \
+  --freeze-id corrected-codonlm-v1 \
+  --seed 1337 \
+  --finalize-existing
+```
+
+The reviewed release contract is
+`configs/corrected_codonlm_freeze_v1.json`. Verify the complete local artifact tree,
+including every source, manifest, packed array, audit, vocabulary, and the approved
+dataset identities, before training:
+
+```bash
+python -m scripts.verify_dataset_freeze \
+  --freeze data/processed/corrected/corrected-codonlm-v1/freeze.json \
+  --expected configs/corrected_codonlm_freeze_v1.json
+```
+
+The first portable aggregate freeze ID is
+`1582505ae40445422711fa15918ee9c229caf84b1b3feba1a71f078259892249`.
+The underlying genome and genus dataset IDs are unchanged by the index migration.
