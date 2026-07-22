@@ -147,6 +147,29 @@ def dev(force_gpu: bool = False, requested: str = "auto"):
 
 
 def run_training(cfg: dict, args) -> None:
+    primary_contract = cfg.get("primary_training_contract")
+    if primary_contract is not None:
+        from src.codonlm.training.primary_contract import (
+            validate_primary_training_config,
+        )
+
+        contract_result = validate_primary_training_config(cfg)
+        requested_run_id = _normalize_run_id(args.run_id)
+        if requested_run_id and requested_run_id != contract_result["run_id"]:
+            raise ValueError(
+                "--run_id cannot override an immutable primary training config"
+            )
+        for name in ("train_npz", "val_npz", "test_npz", "transfer_from"):
+            if getattr(args, name, None) is not None:
+                raise ValueError(
+                    f"--{name} cannot override an immutable primary training config"
+                )
+        print(
+            "[contract] corrected primary config verified "
+            f"role={contract_result['role']} protocol={contract_result['protocol']} "
+            f"seed={contract_result['seed']}"
+        )
+
     resume_path = args.resume or cfg.pop("resume", None)
     if resume_path is not None:
         resume_path = str(resume_path)
@@ -1213,7 +1236,9 @@ def run_training(cfg: dict, args) -> None:
 
             if improved:
                 save_checkpoint_atomic(ckpt_payload, ckpt_dir / "best.pt")
-            elif no_improve >= int(cfg.get("early_stop_patience", 5)):
+            elif int(cfg.get("early_stop_patience", 5)) > 0 and no_improve >= int(
+                cfg.get("early_stop_patience", 5)
+            ):
                 print("[early-stopping] no improvement; stopping.")
                 break
     except NonfiniteGroupLimitError as exc:
@@ -1273,7 +1298,10 @@ def run_training(cfg: dict, args) -> None:
             print("\n" + "="*80)
             print("[OOM SAFEGUARD] Out-Of-Memory error detected during training loop execution!")
             print(f"Error detail: {exc}")
-            print("Attempting to save last.pt checkpoint and downscale batch size in the config...")
+            if primary_contract is None:
+                print("Attempting to save last.pt checkpoint and downscale batch size in the config...")
+            else:
+                print("Attempting to save last.pt without modifying the immutable config...")
             print("="*80 + "\n")
             
             try:
@@ -1284,7 +1312,7 @@ def run_training(cfg: dict, args) -> None:
             except Exception as save_exc:
                 print(f"[OOM SAFEGUARD] Failed to save checkpoint: {save_exc}")
                 
-            if hasattr(args, "config") and args.config:
+            if primary_contract is None and hasattr(args, "config") and args.config:
                 try:
                     import yaml
                     config_path = Path(args.config)
@@ -1305,6 +1333,11 @@ def run_training(cfg: dict, args) -> None:
                         print(f"[OOM SAFEGUARD] Config file {args.config} batch_size downscaled: {old_bs} -> {new_bs} (grad_accum_steps doubled: {old_gas} -> {new_gas})")
                 except Exception as yml_exc:
                     print(f"[OOM SAFEGUARD] Failed to update config: {yml_exc}")
+            elif primary_contract is not None:
+                print(
+                    "[OOM SAFEGUARD] Immutable primary config was not modified; "
+                    "a new versioned runtime contract is required to change batch size."
+                )
             raise exc
         else:
             print(f"[error] training failed: {exc}", file=sys.stderr)

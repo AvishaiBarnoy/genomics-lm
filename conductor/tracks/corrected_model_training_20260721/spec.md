@@ -2,8 +2,8 @@
 
 ## Status
 
-In progress. Dataset, evaluator, generation-protocol, and MPS gates pass. Immutable
-primary configs and a bounded pilot remain prerequisites for full training.
+In progress. Dataset, evaluator, generation-protocol, MPS, and immutable primary-
+config gates pass. A bounded MPS pilot remains the prerequisite for full training.
 
 ## Objective
 

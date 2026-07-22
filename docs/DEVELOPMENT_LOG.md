@@ -738,6 +738,15 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     collate function, so `uint8` NPY sidecars are converted to `torch.long` once per
     batch instead of materializing a separate `int64` NumPy copy per sample. Direct
     `dataset[i]` behavior remains unchanged for compatibility.
+*   **Immutable Corrected Primary Training Contracts (2026-07-23):** Added a bounded
+    genome pilot, two exposure-matched genome replicates, and one separately reported
+    genus-holdout config for the 10L/8H/d384 next-token-only model. A fail-closed
+    startup validator binds every config to the corrected dataset freeze and rejects
+    data, seed, architecture, objective, optimizer, scheduler, runtime, or output
+    drift, including legacy transfer and undeclared extension keys. Full runs use 10
+    complete epochs with early stopping disabled; the pilot uses resumable 30-minute
+    invocations until its first full validation. Immutable configs are never rewritten
+    by the OOM safeguard.
 
 ---
 *End of Log*
