@@ -34,6 +34,15 @@ This document captures the end-to-end journey of Genomics-LM. It details how we 
   next-token alignment and CDS boundaries, and emit hash-bound derivation sidecars
   that corrected test evaluation verifies before scoring.
 
+## 2026-07-22: Corrected Pipeline Freeze v1
+
+* Migrated the aggregate dataset freeze to a location-independent v2 identity while
+  preserving the genome- and genus-held-out dataset identities.
+* Recorded the reviewed `corrected-codonlm-v1` source, seed, manifest, record/group
+  count, and dataset identity contract in version control.
+* Added fail-closed verification of the full local source and artifact tree against
+  that contract, plus a metadata-only finalization path for completed dataset builds.
+
 ---
 
 ## 1. Stage 1: Toy Scale (The Grammar School)

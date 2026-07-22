@@ -1,0 +1,54 @@
+{
+  "dataset_freeze_id": "1582505ae40445422711fa15918ee9c229caf84b1b3feba1a71f078259892249",
+  "dataset_freeze_schema": {
+    "name": "codonlm_dataset_freeze",
+    "version": 2
+  },
+  "protocols": {
+    "genome": {
+      "achieved_record_fractions": {
+        "test": 0.07331613328209914,
+        "train": 0.8190152055772081,
+        "val": 0.10766866114069276
+      },
+      "dataset_id": "da3dfce28b7a46b8640d75c7cb417c867137a99e004ea359d85784ff0c269db9",
+      "group_counts": {
+        "test": 2,
+        "train": 20,
+        "val": 2
+      },
+      "manifest_sha256": "519e5e7ef42f66d9fa33a3bdc95e2160c71c952ee9ea6b958def3f645733005d",
+      "record_counts": {
+        "test": 6678,
+        "train": 74600,
+        "val": 9807
+      }
+    },
+    "genus": {
+      "achieved_record_fractions": {
+        "test": 0.1937096438242033,
+        "train": 0.7432004297350333,
+        "val": 0.06308992644076344
+      },
+      "dataset_id": "10f41e818182704bbe4f95fbd81eb8696047762a32f84d167a4101675945ab95",
+      "group_counts": {
+        "test": 2,
+        "train": 19,
+        "val": 2
+      },
+      "manifest_sha256": "910b586824434f84cea2bad98a3c7ce9edad12223d2b7d0dbf5fbd1e06980439",
+      "record_counts": {
+        "test": 17670,
+        "train": 67794,
+        "val": 5755
+      }
+    }
+  },
+  "release": "corrected-codonlm-v1",
+  "schema": {
+    "name": "codonlm_pipeline_freeze_contract",
+    "version": 1
+  },
+  "source_config_sha256": "0c8fdb7f5866609a4161116dfa573bbd475b9923639ff0676b671e8ac54c45ac",
+  "split_seed": 1337
+}

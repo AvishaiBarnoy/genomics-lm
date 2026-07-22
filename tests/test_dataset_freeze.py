@@ -9,7 +9,10 @@ import yaml
 
 from scripts.freeze_corrected_datasets import (
     build_freeze_index,
+    freeze_contract,
+    freeze_identity,
     load_and_validate_source_config,
+    validate_freeze_contract,
     validate_protocol_manifests,
 )
 
@@ -104,6 +107,32 @@ def test_freeze_index_binds_both_scientific_protocols(tmp_path):
     assert index["split_seed"] == 1337
     assert set(index["protocols"]) == {"genome", "genus"}
     assert index["protocols"]["genome"]["dataset_id"] == "genome-id"
+    assert index["schema"]["version"] == 2
+    assert index["freeze_id"] == freeze_identity(index)
+    assert not Path(index["config"]["path"]).is_absolute()
+    assert not Path(index["protocols"]["genome"]["manifest_path"]).is_absolute()
+
+    contract = freeze_contract(index, release="corrected-codonlm-v1")
+    validate_freeze_contract(index, contract)
+    contract["protocols"]["genome"]["dataset_id"] = "drifted"
+    with pytest.raises(ValueError, match="does not match"):
+        validate_freeze_contract(index, contract)
+
+    relocated = tmp_path / "relocated"
+    relocated.mkdir()
+    relocated_config = relocated / "sources.yaml"
+    relocated_config.write_bytes(config_path.read_bytes())
+    relocated_manifests = {}
+    for protocol in ("genome", "genus"):
+        path = relocated / f"{protocol}-manifest.json"
+        path.write_text(json.dumps(_protocol_manifest(protocol), sort_keys=True))
+        relocated_manifests[protocol] = (_protocol_manifest(protocol), path)
+    relocated_index = build_freeze_index(
+        config_path=relocated_config,
+        seed=1337,
+        manifests=relocated_manifests,
+    )
+    assert relocated_index["freeze_id"] == index["freeze_id"]
 
 
 def test_freeze_rejects_cross_protocol_source_drift(tmp_path):

@@ -1,9 +1,9 @@
 # Leakage-Controlled CodonLM Revalidation Plan
 
 ## Status
-In progress. Engineering gates, the local corrected dataset freeze, and evaluator
-contracts are complete; full retraining remains blocked on the formal pipeline
-freeze, runtime-policy selection, and immutable training configuration gate.
+In progress. Engineering gates, the corrected pipeline freeze, and evaluator
+contracts are complete; full retraining remains blocked on runtime-policy selection
+and the immutable training configuration gate.
 
 ## Phase 1: Governance and CI
 - [x] Relabel legacy results and unsupported claims (#87).
@@ -46,13 +46,13 @@ preflight completes without OOM, non-finite updates, provenance gaps, or leakage
   protein-cluster and nearest-neighbor reports under the grouped-holdout policy.
 - [x] Record manifest hashes, group/record/fragment/chunk/token counts, achieved
   split fractions, ambiguity statistics, and audit reports.
-- [ ] Tag the dataset schema and artifact generation as the pipeline freeze.
+- [x] Tag the dataset schema and artifact generation as the pipeline freeze.
 
-Local freeze `718417694607bed760fcb2335db1f65c96ef69cdae1612853e8778eef5ba8406`
+Portable freeze `1582505ae40445422711fa15918ee9c229caf84b1b3feba1a71f078259892249`
 contains genome dataset `da3dfce28b7a46b8640d75c7cb417c867137a99e004ea359d85784ff0c269db9`
 and genus dataset `10f41e818182704bbe4f95fbd81eb8696047762a32f84d167a4101675945ab95`.
-The freeze is a local acceptance artifact until this pipeline PR merges and a
-clean-checkout reproduction confirms the same identities.
+The tracked `corrected-codonlm-v1` contract verifies the full local artifact tree
+and rejects source, manifest, protocol, seed, or identity drift.
 
 Exit gate: a clean checkout can reproduce byte-identical manifests and all blocking
 audits pass. Any later semantic change creates a new dataset version.
