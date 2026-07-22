@@ -1,0 +1,71 @@
+primary_training_contract:
+  schema: codonlm_primary_training_config
+  version: 1
+  release: corrected-codonlm-v1
+  role: pilot
+  protocol: genome
+  dataset_freeze_id: 1582505ae40445422711fa15918ee9c229caf84b1b3feba1a71f078259892249
+  dataset_id: da3dfce28b7a46b8640d75c7cb417c867137a99e004ea359d85784ff0c269db9
+
+dataset_manifest: data/processed/corrected/corrected-codonlm-v1/genome/manifest.json
+itos_path: data/processed/corrected/corrected-codonlm-v1/genome/itos.txt
+train_npz: data/processed/corrected/corrected-codonlm-v1/genome/train_bs512.npz
+val_npz: data/processed/corrected/corrected-codonlm-v1/genome/val_bs512.npz
+test_npz: data/processed/corrected/corrected-codonlm-v1/genome/test_bs512.npz
+
+run_id: corrected-codonlm-v1-pilot-genome-seed1337
+seed: 1337
+dataloader_seed: 1337
+epochs: 1
+max_time_minutes: 30
+
+block_size: 512
+vocab_size: 68
+n_layer: 10
+n_head: 8
+n_embd: 384
+dropout: 0.1
+label_smoothing: 0.05
+tie_embeddings: true
+use_sdpa: true
+sep_mask_enabled: true
+n_kv_head: null
+use_rope: false
+use_swiglu: false
+use_shape_guidance: false
+unfreeze_encoder: false
+multi_offset_loss_enabled: false
+multi_offset_targets: []
+termination_loss_enabled: false
+replay_loss_enabled: false
+freeze_backbone: false
+eos_loss_weight: 1.0
+transfer_from: null
+
+batch_size: 4
+grad_accum_steps: 32
+lr: 0.0003
+lr_embedding: 0.0003
+min_lr: 0.00003
+weight_decay: 0.05
+warmup_steps: 100
+optimizer: adamw
+scheduler: cosine
+early_stop_patience: 0
+max_nonfinite_accumulation_groups: 0
+checkpoint_every_steps: 0
+checkpoint_every_minutes: 30
+save_epochs: false
+
+device: mps
+force_gpu: true
+amp: true
+use_checkpoint: true
+use_mmap: true
+bucket_batching: false
+num_workers: 0
+pin_memory: false
+compile: false
+
+out_dir: outputs/checkpoints
+scores_dir: outputs/scores

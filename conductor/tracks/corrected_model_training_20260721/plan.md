@@ -2,10 +2,10 @@
 
 ## Status
 
-In progress. Dataset, evaluator, generation-protocol, and MPS runtime gates are
-complete. Immutable primary configs are the final prerequisite before the bounded
-pilot. Internal CodonLM extensions and the external ProteinCritic are gated later and
-cannot be silently enabled in the primary run.
+In progress. Dataset, evaluator, generation-protocol, MPS runtime, and immutable
+primary-config gates are complete. The bounded MPS pilot is the final prerequisite
+before full primary training. Internal CodonLM extensions and the external
+ProteinCritic are gated later and cannot be silently enabled in the primary run.
 
 ## Phase 0: Freeze Primary Contracts
 
@@ -13,10 +13,10 @@ cannot be silently enabled in the primary run.
   reports, evaluator contracts, and generation protocols.
 - [x] Select the corrected MPS policy: batch 4, accumulation 32, checkpointing, AMP,
   MHA/SDPA, separator mask, and batch-aware mmap.
-- [ ] Add immutable genome-seed-1337, genome-seed-2027, and genus primary configs.
-- [ ] Pin the training-token budget, optimizer/scheduler, validation/checkpoint
+- [x] Add immutable genome-seed-1337, genome-seed-2027, and genus primary configs.
+- [x] Pin the training-token budget, optimizer/scheduler, validation/checkpoint
   cadence, output naming, and pilot limits.
-- [ ] Add config-contract tests requiring random initialization and rejecting shape,
+- [x] Add config-contract tests requiring random initialization and rejecting shape,
   offset, termination, replay, critic/energy, RoPE, SwiGLU, GQA, or other undeclared
   primary objectives and architectures.
 
