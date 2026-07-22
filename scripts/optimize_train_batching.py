@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import os
+import resource
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,11 @@ OOM_PATTERNS = (
     "allocation",
     "failed to allocate",
 )
+
+
+def _process_max_rss_bytes() -> int:
+    raw = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    return raw if sys.platform == "darwin" else raw * 1024
 
 
 def load_yaml(path: str | Path) -> dict[str, Any]:
@@ -227,7 +233,12 @@ def run_candidate_benchmark(
     train_paths = _path_list(cfg.get("train_npz", cfg.get("train_paths")))
     if not train_paths:
         raise ValueError("Config must define train_npz or train_paths")
-    train_ds, val_ds = build_codon_lm_datasets(train_paths, train_paths, use_mmap=bool(cfg.get("use_mmap", False)))
+    val_paths = _path_list(cfg.get("val_npz", cfg.get("val_paths"))) or train_paths
+    rss_start_bytes = _process_max_rss_bytes()
+    train_ds, val_ds = build_codon_lm_datasets(
+        train_paths, val_paths, use_mmap=bool(cfg.get("use_mmap", False))
+    )
+    rss_after_dataset_bytes = _process_max_rss_bytes()
     loader, _, _, _ = build_codon_lm_dataloaders(train_ds, val_ds, cfg)
     loader_iter = iter(loader)
 
@@ -342,6 +353,7 @@ def run_candidate_benchmark(
     tokens_per_sec = total_tokens / measured
     non_pad_tokens_per_sec = non_pad_tokens / measured
     train_len = len(train_ds)
+    process_peak_rss_bytes = _process_max_rss_bytes()
     return {
         "status": "ok",
         "device": str(device),
@@ -361,6 +373,10 @@ def run_candidate_benchmark(
         "wall_sec_per_optimizer_step": measured / max(optimizer_steps, 1),
         "peak_allocated_bytes": int(measured_stats["peak_allocated_bytes"]),
         "peak_driver_bytes": int(measured_stats["peak_driver_bytes"]),
+        "process_rss_start_bytes": rss_start_bytes,
+        "process_rss_after_dataset_bytes": rss_after_dataset_bytes,
+        "dataset_rss_delta_bytes": max(0, rss_after_dataset_bytes - rss_start_bytes),
+        "process_peak_rss_bytes": process_peak_rss_bytes,
         "amp_requested": bool(cfg.get("amp", True)),
         "amp_active": amp and mps_autocast_ok,
         "avg_step_ms": (sum(times) / max(len(times), 1)) * 1000.0,

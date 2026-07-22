@@ -169,6 +169,8 @@ def test_candidate_benchmark_counts_non_pad_tokens_and_partial_step(tmp_path):
 
     assert result["status"] == "ok"
     assert result["optimizer_steps"] == 2
+    assert result["process_peak_rss_bytes"] >= result["process_rss_start_bytes"]
+    assert result["dataset_rss_delta_bytes"] >= 0
     assert result["processed_tokens"] == 30
     assert result["non_pad_tokens"] == 24
     assert result["padding_fraction"] == pytest.approx(0.2)

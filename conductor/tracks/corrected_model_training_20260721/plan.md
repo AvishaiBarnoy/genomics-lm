@@ -3,8 +3,8 @@
 ## Status
 
 In progress. The corrected pipeline freeze, evaluator contracts, and generation
-protocol separation are complete. The program remains blocked on immutable training
-configs and the MPS policy gate.
+protocol separation are complete. The conservative corrected-data MPS policy is
+selected. The program remains blocked on immutable primary training configs.
 
 ## Phase 0: Close Pre-Training Gates
 
@@ -21,9 +21,12 @@ configs and the MPS policy gate.
 - [x] Resolve generation protocol issue #85 before generation comparisons.
 - [x] Implement and merge batch-aware memmap conversion with fixed/dynamic parity
   tests (#90).
-- [ ] Measure the merged #90 path on MPS and record useful-token throughput and
+- [x] Measure the merged #90 path on MPS and record useful-token throughput and
   memory evidence as part of the runtime policy gate.
-- [ ] Select the MPS runtime policy through an equal-token quality gate.
+- [x] Select the MPS runtime policy through the predeclared runtime/quality gate.
+  The compute candidates failed the 1.5x runtime entry threshold, so no candidate
+  entered equal-token quality validation and the reference compute policy was
+  retained with batch-aware mmap.
 - [ ] Add immutable corrected primary configs and config-contract tests.
 
 Exit gate: the frozen artifacts reproduce, all leakage gates pass, evaluator fixtures

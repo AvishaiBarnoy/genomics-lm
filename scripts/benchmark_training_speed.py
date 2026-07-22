@@ -115,6 +115,10 @@ def write_results(path: str | Path, results: list[dict[str, Any]]) -> None:
         "wall_sec_per_optimizer_step",
         "peak_allocated_bytes",
         "peak_driver_bytes",
+        "process_rss_start_bytes",
+        "process_rss_after_dataset_bytes",
+        "dataset_rss_delta_bytes",
+        "process_peak_rss_bytes",
         "error",
     ]
     with (out_dir / "results.csv").open("w", newline="") as handle:

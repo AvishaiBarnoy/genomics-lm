@@ -207,6 +207,12 @@ python -m scripts.benchmark_training_speed \
 For a materially different dataset or model, copy the Stage 2.6 matrix manifest,
 point `base_config` at the new training YAML, and adjust its named overrides.
 
+The frozen corrected genome dataset was measured separately using
+`configs/corrected_mps_runtime_matrix.yaml`. The accepted policy and raw evidence are
+documented in `docs/CORRECTED_MPS_RUNTIME_GATE.md`: batch-aware mmap is enabled, but
+batch 4, accumulation 32, and activation checkpointing are retained because the
+compute candidates did not meet the predeclared runtime promotion threshold.
+
 When resuming mid-epoch, do not force a new sweep unless needed. If `--force`
 selects a different `batch_size` or `grad_accum_steps` than the checkpoint used,
 the trainer restores model/optimizer state but ignores the old mid-epoch skip

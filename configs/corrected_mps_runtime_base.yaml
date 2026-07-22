@@ -1,0 +1,43 @@
+# Throughput/quality-gate base for the frozen genome-held-out corrected dataset.
+# This is not a full-training authorization or a scientific result config.
+dataset_manifest: data/processed/corrected/corrected-codonlm-v1/genome/manifest.json
+itos_path: data/processed/corrected/corrected-codonlm-v1/genome/itos.txt
+train_npz: data/processed/corrected/corrected-codonlm-v1/genome/train_bs512.npz
+val_npz: data/processed/corrected/corrected-codonlm-v1/genome/val_bs512.npz
+test_npz: data/processed/corrected/corrected-codonlm-v1/genome/test_bs512.npz
+
+block_size: 512
+vocab_size: 68
+n_layer: 10
+n_head: 8
+n_embd: 384
+dropout: 0.1
+label_smoothing: 0.05
+use_sdpa: true
+sep_mask_enabled: true
+transfer_from: null
+
+batch_size: 4
+grad_accum_steps: 32
+epochs: 1
+lr: 0.0003
+min_lr: 0.00003
+weight_decay: 0.05
+warmup_steps: 100
+optimizer: adamw
+scheduler: cosine
+early_stop_patience: 2
+
+seed: 1337
+dataloader_seed: 1337
+device: mps
+force_gpu: true
+amp: true
+use_checkpoint: true
+use_mmap: true
+bucket_batching: false
+num_workers: 0
+pin_memory: false
+
+out_dir: runs/corrected_mps_runtime_base/checkpoints
+scores_dir: runs/corrected_mps_runtime_base/scores
