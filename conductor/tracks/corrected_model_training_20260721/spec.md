@@ -2,8 +2,8 @@
 
 ## Status
 
-Planned. Dataset freeze and evaluator validation are prerequisites; no full training
-run is authorized until their gates pass.
+In progress. Dataset, evaluator, generation-protocol, and MPS gates pass. Immutable
+primary configs and a bounded pilot remain prerequisites for full training.
 
 ## Objective
 
@@ -27,6 +27,9 @@ which models are trained, how they are compared, and when an extension is promot
    than merely forcing a decoder stop?
 5. Does DNA-shape conditioning add information beyond codon identity and local
    nucleotide-context controls?
+6. Can a homology-controlled, calibrated ProteinCritic provide valid external
+   family, function, stability, or structural ranking on heldout and generated
+   proteins?
 
 ## Prerequisite Gates
 
@@ -39,8 +42,10 @@ Full training is blocked until all of the following are true:
   homology reports complete under the declared grouped-holdout policy.
 - Every final evaluator consumes explicit frozen artifacts and emits provenance.
 - CPU integration and MPS train/save/resume preflights pass.
-- The MPS runtime policy is selected by an equal-token quality comparison without
-  changing model architecture or objectives.
+- The fail-closed corrected MPS runtime policy is selected without changing model
+  architecture or objectives.
+- Immutable primary configs exclude every optional internal head and external
+  guidance objective, and a bounded MPS pilot passes.
 
 ## Stage 1: Primary Basic CodonLM
 
@@ -56,8 +61,7 @@ next-codon prediction.
   shorter context.
 - Dropout 0.1, including attention-probability dropout during training.
 - Vocabulary resolved exclusively from the frozen tokenizer artifact.
-- Standard multi-head or grouped-query attention selected only through the MPS
-  runtime/quality gate.
+- Standard multi-head attention under the selected MPS runtime policy.
 
 ### Excluded from the primary model
 
@@ -94,7 +98,19 @@ Failure to outperform the best simple intrinsic baseline pauses extension traini
 and triggers a data, objective, optimization, and evaluation audit. Extensions must
 not be used to conceal a failed primary model.
 
-## Stage 3: Multi-Offset Long-Range Extension
+## Stage 3: Corrected External ProteinCritic
+
+ProteinCritic is a separate bidirectional protein-sequence classifier, not a CodonLM
+head. Its family, function, stability, and structural outputs may be used only after
+its protein sources, labels, homology-clustered splits, architecture, checkpoint, and
+calibration artifacts are frozen and validated.
+
+Retrain one selected critic architecture under this protocol. Report class balance,
+cluster leakage, per-head discrimination, calibration, confidence intervals, and
+out-of-distribution behavior on generated proteins. Legacy critic checkpoints remain
+exploratory and cannot decide corrected CodonLM promotion.
+
+## Stage 4: Multi-Offset Long-Range Extension
 
 Multi-offset heads predict future tokens such as `n+4`, `n+8`, `n+16`, and `n+32`
 from the causal hidden state. They are auxiliary training signals intended to retain
@@ -109,9 +125,13 @@ Promotion requires:
 - Primary next-token validation loss no more than 2% worse than the matched control.
 - No termination, stability, memory, or non-finite-update regression.
 - Improvement with confidence intervals in at least one predeclared long-range or
-  downstream metric.
+downstream metric.
 
-## Stage 4: Termination and Length Extension
+The protocol must state whether `n+2` is included and whether offset distributions
+are auxiliary losses only or are consumed by an inference-time merged-prior decoder.
+These heads do not automatically change ordinary next-token sampling.
+
+## Stage 5: Termination and Length Extension
 
 The termination head predicts distance-to-stop categories. Generated-prefix replay
 may expose it to off-distribution states encountered during autoregressive decoding.
@@ -129,7 +149,7 @@ Promotion requires improved natural terminal-stop and hard-cap rates without sho
 peptide collapse, material perplexity regression, or degradation in sequence-quality
 controls.
 
-## Stage 5: Biophysical Shape-Guided Extension
+## Stage 6: Biophysical Shape-Guided Extension
 
 The biophysical extension conditions causal token representations on a nucleotide
 shape encoder. It tests whether explicit local physical descriptors add information
@@ -151,6 +171,22 @@ corrected held-out claims.
 Promotion requires paired confidence intervals and improvement over one-hot codon,
 random-model, 5-mer, and 7-mer controls under gene/genome-grouped folds. Parameter
 movement alone is not evidence of useful co-adaptation.
+
+## Stage 7: Combined Model and External Generation
+
+Only independently promoted internal extensions may be combined. Raw sampling,
+syntax constraints, decoder bias, ReD, ProteinCritic guidance, and EBM guidance are
+separate inference protocols with matched prompts, seeds, and budgets. External
+guidance is not an intrinsic generator improvement and cannot be reported as one.
+
+## Legacy Capability Inventory
+
+- The historical separate-heads replay lineage contains multi-offset heads,
+  termination prediction, and replay training, but no biophysical shape encoder.
+- The historical shape-guided lineage contains shape conditioning and termination
+  prediction, but no multi-offset heads.
+- No historical checkpoint is an approved all-extension model, and none may
+  initialize the corrected primary result.
 
 ## Artifact Contract
 

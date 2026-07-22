@@ -84,6 +84,22 @@ packing policy creates a new dataset version and invalidates dependent training 
 - Use the MPS runtime configuration only after its equal-token quality gate passes.
 - Preserve configs, manifests, logs, checkpoints, consumed-token counters, wall time,
   and peak-memory metrics for every run.
+- Train the primary next-token-only model before any optional CodonLM head is
+  enabled; a bounded pilot must pass before the full primary runs.
+- Treat multi-offset, termination/replay, and biophysical conditioning as separate
+  internal ablations before combining any of them.
+
+## ProteinCritic Revalidation Protocol
+
+ProteinCritic is external to CodonLM and does not block primary intrinsic training or
+evaluation. It does block any corrected claim based on critic family, function,
+stability, structure, ranking, filtering, or guidance.
+
+Before such use, freeze protein sources and labels, split translated proteins by
+sequence-homology clusters, retrain one selected critic architecture, calibrate each
+declared head, measure generated-protein out-of-distribution behavior, and bind the
+checkpoint to its dataset and evaluation artifacts. Legacy critic results remain
+exploratory.
 
 ## Corrected Evaluation Protocol
 1. Compare uniform, unigram, bigram, trigram, and CodonLM loss, perplexity, and
@@ -95,6 +111,9 @@ packing policy creates a new dataset version and invalidates dependent training 
    class-aware confidence intervals.
 5. Audit generated sequences against training nucleotide and protein records before
    making novelty or memorization claims.
+6. Report raw, syntax-constrained, decoder-biased, ReD, critic-guided, and EBM-guided
+   generation as distinct protocols; do not attribute an external intervention to
+   the underlying generator.
 
 ## Promotion Criteria
 Corrected results may replace legacy headlines only when:
@@ -114,9 +133,14 @@ Those results do not satisfy this track's scientific promotion criteria. Context
 ablation intended for corrected claims must use the frozen corrected datasets and
 the evaluation protocol defined here.
 
+The [corrected model training track](../corrected_model_training_20260721/) owns the
+ordered primary, critic, extension, combined-candidate, and publication gates.
+
 ## Non-Goals
 - Retrofitting corrected claims onto legacy checkpoints or embeddings.
 - Changing model size or adding objectives during the controlled revalidation.
+- Treating legacy ProteinCritic outputs as corrected evidence or automatically
+  bundling every implemented extension into one model.
 - Treating smoke runs, validation subsets, or CPU execution as final MPS evidence.
 - Requiring generation-protocol or memmap optimizations (#85 and #90) before the
   first corrected intrinsic and probe report.
