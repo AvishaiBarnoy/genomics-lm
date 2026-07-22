@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-07-22",
+  "environment": {
+    "device": "Apple M2",
+    "memory_bytes": 8589934592,
+    "macos": "26.5.1 (25F80)",
+    "pytorch": "2.12.0",
+    "backend": "mps"
+  },
+  "provenance": {
+    "git_base_sha": "1899cbeafed4fc69464fb41c551b04cf4dec30e4",
+    "dataset_freeze_id": "1582505ae40445422711fa15918ee9c229caf84b1b3feba1a71f078259892249",
+    "genome_dataset_id": "da3dfce28b7a46b8640d75c7cb417c867137a99e004ea359d85784ff0c269db9",
+    "base_config_sha256": "431c1d7aeff1fc3dac7ceb97a387aec9d44bf36602ec04d51f26b9f7d299c782",
+    "matrix_config_sha256": "3092bd24a496fd4b7646c65d14baa749381d0969bea79d08594475c1a60510d5"
+  },
+  "protocol": {
+    "warmup_microbatches": 20,
+    "measured_microbatches": 100,
+    "seed": 1337,
+    "effective_sequence_batch": 128,
+    "command": "caffeinate -i python -m scripts.benchmark_training_speed --matrix configs/corrected_mps_runtime_matrix.yaml --out runs/corrected_mps_runtime_gate"
+  },
+  "results": [
+    {
+      "name": "reference_preloaded_b4_checkpoint",
+      "batch_size": 4,
+      "grad_accum_steps": 32,
+      "use_checkpoint": true,
+      "use_mmap": false,
+      "non_pad_tokens_per_sec": 2891.8848963944088,
+      "padding_fraction": 0.24721679687499998,
+      "dataset_rss_delta_bytes": 508624896,
+      "process_peak_rss_bytes": 718536704,
+      "mps_peak_allocated_bytes": 1158596096,
+      "mps_peak_driver_bytes": 2450194432,
+      "estimated_epoch_seconds": 8527.401066600652
+    },
+    {
+      "name": "reference_mmap_b4_checkpoint",
+      "batch_size": 4,
+      "grad_accum_steps": 32,
+      "use_checkpoint": true,
+      "use_mmap": true,
+      "non_pad_tokens_per_sec": 2899.941277953018,
+      "padding_fraction": 0.24721679687499998,
+      "dataset_rss_delta_bytes": 1064960,
+      "process_peak_rss_bytes": 512704512,
+      "mps_peak_allocated_bytes": 1158596096,
+      "mps_peak_driver_bytes": 2450194432,
+      "estimated_epoch_seconds": 8503.710932866525
+    },
+    {
+      "name": "mmap_b4_no_checkpoint",
+      "batch_size": 4,
+      "grad_accum_steps": 32,
+      "use_checkpoint": false,
+      "use_mmap": true,
+      "non_pad_tokens_per_sec": 3807.4311184158473,
+      "padding_fraction": 0.24721679687499998,
+      "dataset_rss_delta_bytes": 557056,
+      "process_peak_rss_bytes": 435666944,
+      "mps_peak_allocated_bytes": 405809152,
+      "mps_peak_driver_bytes": 3591061504,
+      "estimated_epoch_seconds": 6476.876818788087
+    },
+    {
+      "name": "mmap_b8_no_checkpoint",
+      "batch_size": 8,
+      "grad_accum_steps": 16,
+      "use_checkpoint": false,
+      "use_mmap": true,
+      "non_pad_tokens_per_sec": 1104.8280140517288,
+      "padding_fraction": 0.23943603515625,
+      "dataset_rss_delta_bytes": 819200,
+      "process_peak_rss_bytes": 457621504,
+      "mps_peak_allocated_bytes": 425416704,
+      "mps_peak_driver_bytes": 4713021440,
+      "estimated_epoch_seconds": 22551.15757893287
+    }
+  ],
+  "acceptance": {
+    "minimum_candidate_speedup": 1.5,
+    "mmap_throughput_ratio_vs_preloaded": 1.0027858583059976,
+    "mmap_dataset_rss_reduction_fraction": 0.9979061976549414,
+    "b4_no_checkpoint_speedup_vs_mmap_reference": 1.3129338677862468,
+    "b4_no_checkpoint_driver_memory_ratio": 1.4656230775403214,
+    "b8_no_checkpoint_speedup_vs_mmap_reference": 0.38098289177482725,
+    "quality_gate_status": "not_entered_candidate_failed_runtime_gate"
+  },
+  "selected_policy": {
+    "batch_size": 4,
+    "grad_accum_steps": 32,
+    "use_checkpoint": true,
+    "use_mmap": true,
+    "amp": true,
+    "n_kv_head": null,
+    "use_sdpa": true,
+    "sep_mask_enabled": true,
+    "bucket_batching": false,
+    "decision": "reference_runtime_retained_with_batch_aware_mmap"
+  }
+}

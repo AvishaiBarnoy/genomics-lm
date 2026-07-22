@@ -1,0 +1,28 @@
+base_config: configs/corrected_mps_runtime_base.yaml
+warmup_steps: 20
+measure_steps: 100
+variants:
+  - name: reference_preloaded_b4_checkpoint
+    overrides:
+      batch_size: 4
+      grad_accum_steps: 32
+      use_checkpoint: true
+      use_mmap: false
+  - name: reference_mmap_b4_checkpoint
+    overrides:
+      batch_size: 4
+      grad_accum_steps: 32
+      use_checkpoint: true
+      use_mmap: true
+  - name: mmap_b4_no_checkpoint
+    overrides:
+      batch_size: 4
+      grad_accum_steps: 32
+      use_checkpoint: false
+      use_mmap: true
+  - name: mmap_b8_no_checkpoint
+    overrides:
+      batch_size: 8
+      grad_accum_steps: 16
+      use_checkpoint: false
+      use_mmap: true

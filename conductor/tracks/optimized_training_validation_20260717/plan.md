@@ -1,7 +1,20 @@
 # Optimized Training Quality Validation & Context Ablation Plan
 
 ## Status
-Planned.
+Corrected-data runtime decision complete. The original legacy Stage 2.6 paired
+fine-tuning experiment was not promoted into the corrected program.
+
+## Corrected-Data Disposition
+
+The frozen genome-held-out dataset was benchmarked on the target M2/8 GB host after
+the batch-aware mmap merge. Mmap was throughput-neutral and reduced dataset-loading
+RSS by 99.79%, so it was promoted. Checkpointing off at batch 4 reached only 1.31x
+the mmap reference and increased driver memory by about 47%; batch 8 was slower.
+Neither compute candidate met the predeclared 1.5x runtime entry gate, so spending
+training tokens on their quality phase could not promote them. The corrected program
+therefore retains batch 4, accumulation 32, activation checkpointing, AMP, MHA, and
+the separator mask, with batch-aware mmap enabled. Evidence is recorded in
+`docs/CORRECTED_MPS_RUNTIME_GATE.md`.
 
 ## Purpose
 Turn the July 2026 MPS throughput benchmark into a production training policy without

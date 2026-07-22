@@ -2,8 +2,8 @@
 
 ## Status
 In progress. Engineering gates, the corrected pipeline freeze, and evaluator
-contracts are complete; full retraining remains blocked on runtime-policy selection
-and the immutable training configuration gate.
+contracts are complete; full retraining remains blocked on the immutable training
+configuration gate.
 
 ## Phase 1: Governance and CI
 - [x] Relabel legacy results and unsupported claims (#87).
@@ -70,9 +70,8 @@ Exit gate: all evaluators consume explicit frozen artifacts, reject incompatible
 inputs, preserve grouping, and emit machine-readable provenance.
 
 ## Phase 6: Train Corrected Models
-- [ ] Select the MPS runtime policy through the equal-token quality gate in the
-  optimized training validation track; record the selected policy without changing
-  architecture or objectives.
+- [x] Select the MPS runtime policy through the optimized training validation gate;
+  record the fail-closed reference policy without changing architecture or objectives.
 - [ ] Train genome-held-out models from random initialization at seeds `1337` and
   `2027` with matched non-PAD token exposure.
 - [ ] Run a separately labeled genus-held-out training protocol.
@@ -97,5 +96,5 @@ passing manifests, no invalid updates, and complete checkpoint/resume provenance
 ## Deferred Follow-Ups
 - [x] Separate raw, CDS-constrained, and guided generation protocols (#85).
 - [x] Implement batch-aware memmap conversion with fixed/dynamic parity tests (#90).
-- [ ] Record whether the merged batch-aware path improves useful-token throughput on
+- [x] Record whether the merged batch-aware path improves useful-token throughput on
   MPS without a memory regression before freezing the runtime policy.

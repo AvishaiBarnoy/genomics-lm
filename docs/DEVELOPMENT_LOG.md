@@ -43,6 +43,16 @@ This document captures the end-to-end journey of Genomics-LM. It details how we 
 * Added fail-closed verification of the full local source and artifact tree against
   that contract, plus a metadata-only finalization path for completed dataset builds.
 
+## 2026-07-22: Corrected MPS Runtime Policy
+
+* Benchmarked preloaded and batch-aware mmap loading plus checkpoint/batch variants
+  on the frozen corrected genome dataset using the 10L8H width-384 primary family.
+* Batch-aware mmap preserved useful-token throughput while reducing dataset-loading
+  RSS from about 509 MB to 1 MB.
+* Checkpointing off at batch 4 improved throughput by only 1.31x and increased MPS
+  driver memory by about 47%; batch 8 slowed sharply. Both failed the predeclared
+  1.5x runtime entry gate, so the reference compute policy was retained with mmap.
+
 ---
 
 ## 1. Stage 1: Toy Scale (The Grammar School)
