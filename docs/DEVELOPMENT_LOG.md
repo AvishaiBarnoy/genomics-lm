@@ -53,6 +53,17 @@ This document captures the end-to-end journey of Genomics-LM. It details how we 
   driver memory by about 47%; batch 8 slowed sharply. Both failed the predeclared
   1.5x runtime entry gate, so the reference compute policy was retained with mmap.
 
+## 2026-07-23: Corrected Training Phase Expansion
+
+* Separated immutable configuration, bounded pilot, primary training, and primary
+  evaluation into explicit gates before optional objectives are enabled.
+* Added a corrected ProteinCritic revalidation phase with protein-homology splits,
+  calibration, provenance, and generated-protein OOD evaluation requirements.
+* Ordered multi-offset, termination/replay, and biophysical guidance as independent
+  ablations, followed by a combined candidate only for promoted components.
+* Classified critic, EBM, ReD, decoder bias, and syntax constraints as external
+  generation interventions rather than intrinsic generator features.
+
 ---
 
 ## 1. Stage 1: Toy Scale (The Grammar School)

@@ -69,9 +69,11 @@ audits pass. Any later semantic change creates a new dataset version.
 Exit gate: all evaluators consume explicit frozen artifacts, reject incompatible
 inputs, preserve grouping, and emit machine-readable provenance.
 
-## Phase 6: Train Corrected Models
+## Phase 6: Freeze Configs, Pilot, and Train the Primary Models
 - [x] Select the MPS runtime policy through the optimized training validation gate;
   record the fail-closed reference policy without changing architecture or objectives.
+- [ ] Freeze immutable basic-model configs and pass a bounded MPS train/checkpoint/
+  resume pilot before authorizing full training.
 - [ ] Train genome-held-out models from random initialization at seeds `1337` and
   `2027` with matched non-PAD token exposure.
 - [ ] Run a separately labeled genus-held-out training protocol.
@@ -81,13 +83,49 @@ inputs, preserve grouping, and emit machine-readable provenance.
 Exit gate: two genome-held-out seeds and the declared genus-held-out run finish with
 passing manifests, no invalid updates, and complete checkpoint/resume provenance.
 
-## Phase 7: Evaluate and Publish
+## Phase 7: Evaluate and Promote the Primary Model
 - [ ] Produce the uniform/unigram/bigram/trigram/CodonLM intrinsic table with loss,
   perplexity, bits/codon, token count, and improvement over the best simple baseline.
 - [ ] Extract corrected causal embeddings and rerun EC, essentiality, AMR, and
   DNA-shape evaluations under their controlled splits and shared controls.
-- [ ] Run nucleotide/protein nearest-neighbor and training-match coverage audits for
-  generated sequences before reporting memorization or novelty.
+- [ ] Run raw/constrained generation plus nucleotide/protein nearest-neighbor and
+  training-match coverage audits before reporting memorization or novelty.
+- [ ] Record a primary go/no-go decision before training optional extensions.
+
+Exit gate: the primary model beats the best simple intrinsic baseline and all
+reported downstream evidence uses corrected checkpoints and controlled splits.
+
+## Phase 8: Revalidate ProteinCritic
+- [ ] Freeze protein sources, task labels/vocabularies, preprocessing, and
+  homology-clustered train/validation/test artifacts.
+- [ ] Retrain one selected bidirectional attention-pooled critic architecture for
+  the declared family, function, stability, and structural tasks.
+- [ ] Report leakage, class balance, discrimination, calibration, confidence
+  intervals, and generated-protein OOD behavior for every head.
+- [ ] Version and provenance-bind any critic allowed to support corrected evaluation
+  or generation guidance.
+
+Exit gate: legacy critic outputs remain exploratory until the corrected critic passes;
+critic failure does not invalidate primary intrinsic results but blocks critic-based
+claims and interventions.
+
+## Phase 9: Run Internal Extension Ablations
+- [ ] Test multi-offset `n+x` heads with declared offsets, weights, backbone policy,
+  and auxiliary-versus-decoder usage.
+- [ ] Test termination prediction before adding generated-prefix replay or decoder
+  bias.
+- [ ] Test frozen and jointly trained biophysical shape encoders against sequence
+  controls.
+- [ ] Promote each extension independently before training a combined candidate.
+
+Exit gate: every accepted extension has replicated attributable gains without a
+material primary-quality, memory, runtime, termination, or leakage regression.
+
+## Phase 10: Evaluate Interventions and Publish
+- [ ] Keep raw, constrained, decoder-biased, ReD, critic-guided, and EBM-guided
+  generation as separate matched protocols.
+- [ ] Combine only independently promoted internal extensions and rerun the complete
+  intrinsic, downstream, generation, memorization, runtime, and provenance suite.
 - [ ] Publish a versioned report with exact commands, hashes, per-seed and aggregate
   results, confidence intervals, limitations, and failed gates.
 - [ ] Update README and benchmark documents from the versioned report while retaining
