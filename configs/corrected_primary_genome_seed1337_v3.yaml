@@ -1,6 +1,6 @@
 primary_training_contract:
   schema: codonlm_primary_training_config
-  version: 2
+  version: 3
   release: corrected-codonlm-v1
   role: primary
   protocol: genome

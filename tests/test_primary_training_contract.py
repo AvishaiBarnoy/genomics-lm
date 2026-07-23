@@ -12,10 +12,10 @@ from src.codonlm.training.primary_contract import (
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIGS = (
-    "corrected_primary_pilot_genome_seed1337_v2.yaml",
-    "corrected_primary_genome_seed1337_v2.yaml",
-    "corrected_primary_genome_seed2027_v2.yaml",
-    "corrected_primary_genus_seed1337_v2.yaml",
+    "corrected_primary_pilot_genome_seed1337_v3.yaml",
+    "corrected_primary_genome_seed1337_v3.yaml",
+    "corrected_primary_genome_seed2027_v3.yaml",
+    "corrected_primary_genus_seed1337_v3.yaml",
 )
 
 
@@ -26,7 +26,7 @@ def test_tracked_primary_configs_pass_contract(name):
 
 
 def _genome_config():
-    path = ROOT / "configs" / "corrected_primary_genome_seed1337_v2.yaml"
+    path = ROOT / "configs" / "corrected_primary_genome_seed1337_v3.yaml"
     return yaml.safe_load(path.read_text())
 
 
@@ -62,10 +62,10 @@ def test_contract_rejects_undeclared_objective_or_architecture_key():
 
 def test_genome_replicates_differ_only_in_seed_identity():
     first = yaml.safe_load(
-        (ROOT / "configs" / "corrected_primary_genome_seed1337_v2.yaml").read_text()
+        (ROOT / "configs" / "corrected_primary_genome_seed1337_v3.yaml").read_text()
     )
     second = yaml.safe_load(
-        (ROOT / "configs" / "corrected_primary_genome_seed2027_v2.yaml").read_text()
+        (ROOT / "configs" / "corrected_primary_genome_seed2027_v3.yaml").read_text()
     )
     for cfg in (first, second):
         cfg.pop("seed")

@@ -4,10 +4,10 @@ The corrected primary CodonLM is frozen in four versioned configs:
 
 | Config | Purpose | Limit |
 | --- | --- | --- |
-| `corrected_primary_pilot_genome_seed1337_v2.yaml` | MPS pilot and resume gate | one epoch, 30 minutes per invocation |
-| `corrected_primary_genome_seed1337_v2.yaml` | primary genome replicate 1 | 10 complete epochs |
-| `corrected_primary_genome_seed2027_v2.yaml` | primary genome replicate 2 | 10 complete epochs |
-| `corrected_primary_genus_seed1337_v2.yaml` | separate harder genus holdout | 10 complete epochs |
+| `corrected_primary_pilot_genome_seed1337_v3.yaml` | MPS pilot and resume gate | one epoch, 30 minutes per invocation |
+| `corrected_primary_genome_seed1337_v3.yaml` | primary genome replicate 1 | 10 complete epochs |
+| `corrected_primary_genome_seed2027_v3.yaml` | primary genome replicate 2 | 10 complete epochs |
+| `corrected_primary_genus_seed1337_v3.yaml` | separate harder genus holdout | 10 complete epochs |
 
 The two genome replicates differ only in random seed and run identity. They consume
 the same frozen training transitions for 10 full epochs, with early stopping disabled,
@@ -27,7 +27,7 @@ Validate a config without loading the large local dataset:
 
 ```bash
 python -m scripts.validate_primary_training_config \
-  configs/corrected_primary_pilot_genome_seed1337_v2.yaml
+  configs/corrected_primary_pilot_genome_seed1337_v3.yaml
 ```
 
 Marked configs are also validated automatically before the trainer loads data or
@@ -43,7 +43,7 @@ Start the bounded pilot on Apple Silicon:
 
 ```bash
 caffeinate -i python -m src.codonlm.train_codon_lm \
-  --config configs/corrected_primary_pilot_genome_seed1337_v2.yaml
+  --config configs/corrected_primary_pilot_genome_seed1337_v3.yaml
 ```
 
 The 30-minute limit is per process invocation. The pilot retains the full primary
@@ -53,7 +53,7 @@ mid-epoch checkpoint. Resume from the committed accumulation-group boundary:
 
 ```bash
 caffeinate -i python -m src.codonlm.train_codon_lm \
-  --config configs/corrected_primary_pilot_genome_seed1337_v2.yaml \
+  --config configs/corrected_primary_pilot_genome_seed1337_v3.yaml \
   --resume runs/corrected-codonlm-v1-pilot-genome-seed1337/checkpoints/last.pt
 ```
 
@@ -62,9 +62,9 @@ Repeat the resume command until the one-epoch pilot completes validation and wri
 groups, optimizer/scheduler advancement, committed-token continuity, peak memory,
 throughput, dataset/vocabulary provenance, and the observed epoch wall time.
 
-Training-loss sums, counts, and the first finite loss are checkpointed with each
-partial epoch, so the final epoch training loss covers all resumed segments rather
-than only the last process invocation.
+Only metrics belonging to optimizer-committed accumulation groups are checkpointed.
+Pending groups are replayed after resume without double-counting their loss. Thus the
+final epoch training loss covers every committed microbatch exactly once.
 
 ## Full Runs
 
@@ -72,7 +72,7 @@ After pilot approval, run each primary config without overrides:
 
 ```bash
 caffeinate -i python -m src.codonlm.train_codon_lm \
-  --config configs/corrected_primary_genome_seed1337_v2.yaml
+  --config configs/corrected_primary_genome_seed1337_v3.yaml
 ```
 
 Use the same `--resume runs/<run-id>/checkpoints/last.pt` pattern after an interrupted
