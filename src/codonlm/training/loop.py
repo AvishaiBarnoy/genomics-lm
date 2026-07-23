@@ -724,6 +724,12 @@ def run_training(cfg: dict, args) -> None:
         "microbatches": 0,
         "initial_loss": None,
     }
+    pending_train_metrics = {
+        "total_loss_sum": 0.0,
+        "next_loss_sum": 0.0,
+        "microbatches": 0,
+        "initial_loss": None,
+    }
 
     try:
         if transfer_path:
@@ -1035,6 +1041,25 @@ def run_training(cfg: dict, args) -> None:
                     accumulation_health.complete_group()
                     consumed_train_tokens += pending_train_tokens
                     pending_train_tokens = 0
+                    epoch_train_metrics["total_loss_sum"] += pending_train_metrics[
+                        "total_loss_sum"
+                    ]
+                    epoch_train_metrics["next_loss_sum"] += pending_train_metrics[
+                        "next_loss_sum"
+                    ]
+                    epoch_train_metrics["microbatches"] += pending_train_metrics[
+                        "microbatches"
+                    ]
+                    if epoch_train_metrics["initial_loss"] is None:
+                        epoch_train_metrics["initial_loss"] = pending_train_metrics[
+                            "initial_loss"
+                        ]
+                    pending_train_metrics.update(
+                        total_loss_sum=0.0,
+                        next_loss_sum=0.0,
+                        microbatches=0,
+                        initial_loss=None,
+                    )
                     step += 1
                     current_resume_microbatch_idx = batch_idx + 1
                     if use_cosine:
@@ -1058,6 +1083,12 @@ def run_training(cfg: dict, args) -> None:
                     if split == "train":
                         discarded = accumulation_health.abort_group(optim)
                         pending_train_tokens = 0
+                        pending_train_metrics.update(
+                            total_loss_sum=0.0,
+                            next_loss_sum=0.0,
+                            microbatches=0,
+                            initial_loss=None,
+                        )
                         current_resume_microbatch_idx = batch_idx + 1
                         print(
                             "[train] aborted nonfinite accumulation group "
@@ -1072,6 +1103,17 @@ def run_training(cfg: dict, args) -> None:
                     continue
                 optimizer_stepped = False
                 if split=="train":
+                    loss_value = float(loss.detach().item())
+                    next_loss_value = float(next_loss.detach().item())
+                    if (
+                        epoch_train_metrics["initial_loss"] is None
+                        and pending_train_metrics["initial_loss"] is None
+                    ):
+                        pending_train_metrics["initial_loss"] = loss_value
+                        print(f"[train] initial_loss={loss_value:.6f}")
+                    pending_train_metrics["total_loss_sum"] += loss_value
+                    pending_train_metrics["next_loss_sum"] += next_loss_value
+                    pending_train_metrics["microbatches"] += 1
                     loss.backward()
                     pending_train_tokens += int(yb.ne(PAD_ID).sum().item())
                     accumulation_health.record_finite_microbatch()
@@ -1081,18 +1123,9 @@ def run_training(cfg: dict, args) -> None:
                 periodic_save_due = (
                     optimizer_stepped and periodic_ckpt.should_save(step)
                 )
-                total += loss.item()
-                next_total += float(next_loss.detach().item())
-                if split == "train":
-                    if epoch_train_metrics["initial_loss"] is None:
-                        epoch_train_metrics["initial_loss"] = float(loss.detach().item())
-                        print(
-                            "[train] initial_loss="
-                            f"{epoch_train_metrics['initial_loss']:.6f}"
-                        )
-                    epoch_train_metrics["total_loss_sum"] = total
-                    epoch_train_metrics["next_loss_sum"] = next_total
-                    epoch_train_metrics["microbatches"] = n + 1
+                if split != "train":
+                    total += loss.item()
+                    next_total += float(next_loss.detach().item())
                 if term_loss is not None:
                     term_total += float(term_loss.detach().item())
                     term_count += 1
@@ -1110,6 +1143,11 @@ def run_training(cfg: dict, args) -> None:
             
             if split == "train" and accumulation_health.active_microbatches:
                 step_optimizer(accumulation_health.active_microbatches)
+
+            if split == "train":
+                total = float(epoch_train_metrics["total_loss_sum"])
+                next_total = float(epoch_train_metrics["next_loss_sum"])
+                n = int(epoch_train_metrics["microbatches"])
 
             offset_avgs = {
                 offset: (offset_totals[offset] / max(offset_counts[offset], 1))
@@ -1168,6 +1206,12 @@ def run_training(cfg: dict, args) -> None:
             resume_microbatch_idx = 0
             if skip_for_epoch == 0:
                 epoch_train_metrics.update(
+                    total_loss_sum=0.0,
+                    next_loss_sum=0.0,
+                    microbatches=0,
+                    initial_loss=None,
+                )
+                pending_train_metrics.update(
                     total_loss_sum=0.0,
                     next_loss_sum=0.0,
                     microbatches=0,

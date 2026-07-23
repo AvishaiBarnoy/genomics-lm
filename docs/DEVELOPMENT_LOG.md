@@ -755,7 +755,11 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     its one-epoch cosine schedule was compressed to 500 rather than the primary 5,000
     steps, and resumed epoch training loss covered only the final segment. Contract
     schema v2 pins the shared 5,000-step horizon and checkpoints cumulative epoch
-    loss state; the diagnostic run does not authorize full training.
+    loss state; the diagnostic run does not authorize full training. The first
+    schema-v2 segment verified the corrected scheduler (LR `2.99995e-4` at step 113)
+    but found 3,645 metric microbatches recorded at a 3,616-microbatch optimizer
+    boundary. Schema v3 keeps pending loss state outside checkpoints and commits token
+    and loss counters atomically; schema-v2 checkpoints must not be resumed.
 
 ---
 *End of Log*

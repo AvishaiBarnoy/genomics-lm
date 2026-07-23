@@ -9,7 +9,7 @@ import yaml
 
 
 SCHEMA_NAME = "codonlm_primary_training_config"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 RELEASE = "corrected-codonlm-v1"
 DATASET_FREEZE_ID = "1582505ae40445422711fa15918ee9c229caf84b1b3feba1a71f078259892249"
 

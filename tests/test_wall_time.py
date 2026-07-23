@@ -1,10 +1,9 @@
-import os
 import sys
 import yaml
 import numpy as np
-import pytest
 import subprocess
 import json
+import torch
 from pathlib import Path
 
 def test_train_codon_lm_wall_time_limit(tmp_path):
@@ -17,7 +16,7 @@ def test_train_codon_lm_wall_time_limit(tmp_path):
         "n_embd": 16,
         "dropout": 0.0,
         "batch_size": 1,
-        "grad_accum_steps": 1,
+        "grad_accum_steps": 4,
         "lr": 0.001,
         "weight_decay": 0.0,
         "epochs": 10,
@@ -90,6 +89,11 @@ def test_train_codon_lm_wall_time_limit(tmp_path):
         
         meta = json.loads(meta_json.read_text())
         assert meta["status"] == "stopped"
+        checkpoint = torch.load(last_pt, map_location="cpu", weights_only=False)
+        assert (
+            checkpoint["epoch_train_metrics"]["microbatches"]
+            == checkpoint["epoch_microbatch_idx"]
+        )
     finally:
         if runs_dir.exists():
             shutil.rmtree(runs_dir)

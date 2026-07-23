@@ -28,7 +28,10 @@ architecture, exposure, or provenance.
 The first lifecycle run completed on 2026-07-23 with exact resume counters, zero
 invalid groups, stable MPS memory, and validation loss `4.031`, but exposed a
 compressed one-epoch cosine horizon and segment-only training-loss reporting. Those
-results are diagnostic only; repeat Phase 1 under config-contract schema v2.
+results are diagnostic only. A schema-v2 segment then verified the 5,000-step
+scheduler but found that pending, uncommitted microbatch losses entered checkpoint
+metrics. Repeat Phase 1 under schema v3, which commits token and loss accounting at
+the same accumulation-group boundary.
 
 - [ ] Train from random initialization on a bounded portion of the frozen
   genome-held-out stream using the exact primary model and runtime policy.

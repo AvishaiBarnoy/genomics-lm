@@ -104,6 +104,7 @@ def test_nonfinite_abort_checkpoint_and_resume_preserve_step_counters(
     assert checkpoint["consumed_train_tokens"] == 0
     assert checkpoint["scheduler"]["last_epoch"] == 0
     assert checkpoint["epoch_microbatch_idx"] == 2
+    assert checkpoint["epoch_train_metrics"]["microbatches"] == 0
     assert checkpoint["accumulation_health"] == {
         "active_microbatches": 0,
         "nonfinite_microbatches": 1,
@@ -129,5 +130,6 @@ def test_nonfinite_abort_checkpoint_and_resume_preserve_step_counters(
     assert resumed["consumed_train_tokens"] == 12
     assert resumed["scheduler"]["last_epoch"] == 2
     assert resumed["epoch_microbatch_idx"] == 0
+    assert resumed["epoch_train_metrics"]["microbatches"] == 3
     assert resumed["accumulation_health"]["aborted_groups"] == 1
     assert resumed["accumulation_health"]["discarded_finite_microbatches"] == 1
