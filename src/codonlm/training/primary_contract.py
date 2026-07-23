@@ -9,7 +9,7 @@ import yaml
 
 
 SCHEMA_NAME = "codonlm_primary_training_config"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 RELEASE = "corrected-codonlm-v1"
 DATASET_FREEZE_ID = "1582505ae40445422711fa15918ee9c229caf84b1b3feba1a71f078259892249"
 
@@ -56,6 +56,7 @@ COMMON_VALUES: dict[str, Any] = {
     "warmup_steps": 100,
     "optimizer": "adamw",
     "scheduler": "cosine",
+    "scheduler_total_steps": 5000,
     "early_stop_patience": 0,
     "max_nonfinite_accumulation_groups": 0,
     "checkpoint_every_steps": 0,

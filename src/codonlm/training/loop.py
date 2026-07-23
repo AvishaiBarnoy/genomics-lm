@@ -676,7 +676,10 @@ def run_training(cfg: dict, args) -> None:
     else:
         max_epochs = int(epochs_cfg)
     steps_per_epoch = math.ceil(len(train_loader) / max(1, gacc))
-    total_steps = max(1, steps_per_epoch * max_epochs)
+    computed_total_steps = max(1, steps_per_epoch * max_epochs)
+    total_steps = int(cfg.get("scheduler_total_steps", computed_total_steps))
+    if total_steps <= 0:
+        raise ValueError("scheduler_total_steps must be positive")
     use_cosine = scheduler_name == "cosine"
     if use_cosine:
         warmup_for_lambda = max(1, warmup_steps)
@@ -715,6 +718,12 @@ def run_training(cfg: dict, args) -> None:
     current_epoch_idx = 0
     current_microbatch_idx = 0
     current_resume_microbatch_idx = 0
+    epoch_train_metrics = {
+        "total_loss_sum": 0.0,
+        "next_loss_sum": 0.0,
+        "microbatches": 0,
+        "initial_loss": None,
+    }
 
     try:
         if transfer_path:
@@ -810,6 +819,10 @@ def run_training(cfg: dict, args) -> None:
             accumulation_health.load_state_dict(
                 ckpt_resume.get("accumulation_health")
             )
+            saved_epoch_metrics = ckpt_resume.get("epoch_train_metrics") or {}
+            for key in epoch_train_metrics:
+                if key in saved_epoch_metrics:
+                    epoch_train_metrics[key] = saved_epoch_metrics[key]
             checkpoint_batch_size = ckpt_resume.get("batch_size")
             checkpoint_grad_accum = ckpt_resume.get("grad_accum_steps")
             if checkpoint_batch_size is not None and int(checkpoint_batch_size) != int(cfg["batch_size"]):
@@ -877,6 +890,7 @@ def run_training(cfg: dict, args) -> None:
                 "train_batches": int(len(train_loader)),
                 "accumulation_health": accumulation_health.state_dict(),
                 "max_nonfinite_accumulation_groups": max_nonfinite_groups,
+                "epoch_train_metrics": dict(epoch_train_metrics),
             }
             if use_shape_guidance and encoder is not None:
                 payload["encoder"] = encoder.state_dict()
@@ -894,7 +908,13 @@ def run_training(cfg: dict, args) -> None:
             nonlocal consumed_train_tokens, pending_train_tokens
             mps_autocast_ok = True
             model.train(split=="train")
-            total, next_total, term_total, replay_total, n = 0.0, 0.0, 0.0, 0.0, 0
+            if split == "train":
+                total = float(epoch_train_metrics["total_loss_sum"])
+                next_total = float(epoch_train_metrics["next_loss_sum"])
+                n = int(epoch_train_metrics["microbatches"])
+            else:
+                total, next_total, n = 0.0, 0.0, 0
+            term_total, replay_total = 0.0, 0.0
             term_count = 0
             replay_count = 0
             offset_totals = {offset: 0.0 for offset in multi_offset_weights}
@@ -1050,16 +1070,29 @@ def run_training(cfg: dict, args) -> None:
                                 f"{max_nonfinite_groups}: {accumulation_health.aborted_groups}"
                             )
                     continue
+                optimizer_stepped = False
                 if split=="train":
                     loss.backward()
                     pending_train_tokens += int(yb.ne(PAD_ID).sum().item())
                     accumulation_health.record_finite_microbatch()
                     if accumulation_health.active_microbatches == gacc:
                         step_optimizer(accumulation_health.active_microbatches)
-                        if split == "train" and periodic_ckpt.should_save(step):
-                            save_last_checkpoint(epoch_idx, reason="periodic")
+                        optimizer_stepped = True
+                periodic_save_due = (
+                    optimizer_stepped and periodic_ckpt.should_save(step)
+                )
                 total += loss.item()
                 next_total += float(next_loss.detach().item())
+                if split == "train":
+                    if epoch_train_metrics["initial_loss"] is None:
+                        epoch_train_metrics["initial_loss"] = float(loss.detach().item())
+                        print(
+                            "[train] initial_loss="
+                            f"{epoch_train_metrics['initial_loss']:.6f}"
+                        )
+                    epoch_train_metrics["total_loss_sum"] = total
+                    epoch_train_metrics["next_loss_sum"] = next_total
+                    epoch_train_metrics["microbatches"] = n + 1
                 if term_loss is not None:
                     term_total += float(term_loss.detach().item())
                     term_count += 1
@@ -1070,6 +1103,8 @@ def run_training(cfg: dict, args) -> None:
                     offset_totals[offset] += float(offset_loss.detach().item())
                     offset_counts[offset] += 1
                 n += 1
+                if periodic_save_due:
+                    save_last_checkpoint(epoch_idx, reason="periodic")
                 sample_runtime_memory()
                 wall_timer.check()
             
@@ -1131,6 +1166,13 @@ def run_training(cfg: dict, args) -> None:
             epoch_idx = epoch + 1
             skip_for_epoch = resume_microbatch_idx if epoch == start_epoch else 0
             resume_microbatch_idx = 0
+            if skip_for_epoch == 0:
+                epoch_train_metrics.update(
+                    total_loss_sum=0.0,
+                    next_loss_sum=0.0,
+                    microbatches=0,
+                    initial_loss=None,
+                )
             train_loss, train_next_loss, train_term_loss, train_replay_term_loss, train_skips, train_offsets, train_health = one_pass(
                 "train",
                 train_loader,

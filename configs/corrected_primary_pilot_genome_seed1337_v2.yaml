@@ -1,8 +1,8 @@
 primary_training_contract:
   schema: codonlm_primary_training_config
-  version: 1
+  version: 2
   release: corrected-codonlm-v1
-  role: primary
+  role: pilot
   protocol: genome
   dataset_freeze_id: 1582505ae40445422711fa15918ee9c229caf84b1b3feba1a71f078259892249
   dataset_id: da3dfce28b7a46b8640d75c7cb417c867137a99e004ea359d85784ff0c269db9
@@ -13,11 +13,11 @@ train_npz: data/processed/corrected/corrected-codonlm-v1/genome/train_bs512.npz
 val_npz: data/processed/corrected/corrected-codonlm-v1/genome/val_bs512.npz
 test_npz: data/processed/corrected/corrected-codonlm-v1/genome/test_bs512.npz
 
-run_id: corrected-codonlm-v1-genome-seed1337
+run_id: corrected-codonlm-v1-pilot-genome-seed1337
 seed: 1337
 dataloader_seed: 1337
-epochs: 10
-max_time_minutes: null
+epochs: 1
+max_time_minutes: 30
 
 block_size: 512
 vocab_size: 68
@@ -51,6 +51,7 @@ weight_decay: 0.05
 warmup_steps: 100
 optimizer: adamw
 scheduler: cosine
+scheduler_total_steps: 5000
 early_stop_patience: 0
 max_nonfinite_accumulation_groups: 0
 checkpoint_every_steps: 0

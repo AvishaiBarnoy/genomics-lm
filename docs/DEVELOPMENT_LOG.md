@@ -747,6 +747,15 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     complete epochs with early stopping disabled; the pilot uses resumable 30-minute
     invocations until its first full validation. Immutable configs are never rewritten
     by the OOM safeguard.
+*   **Primary Pilot Diagnostic Run (2026-07-23):** Completed one frozen genome epoch
+    over seven resumable MPS invocations: 500 optimizer/scheduler steps, 25,238,438
+    committed non-PAD tokens, zero invalid accumulation groups, validation loss
+    4.031 (PPL 56.31), and stable 1.16 GB peak tensor / 2.45 GB peak driver MPS
+    allocation. The run correctly exposed two contract defects before full training:
+    its one-epoch cosine schedule was compressed to 500 rather than the primary 5,000
+    steps, and resumed epoch training loss covered only the final segment. Contract
+    schema v2 pins the shared 5,000-step horizon and checkpoints cumulative epoch
+    loss state; the diagnostic run does not authorize full training.
 
 ---
 *End of Log*
