@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-07-23",
+  "decision": "pass",
+  "scope": "training_lifecycle_and_runtime_only",
+  "provenance": {
+    "git_sha": "b934e0acc4a6b76bf0aff25907f26a22a34f81b8",
+    "config": "configs/corrected_primary_pilot_genome_seed1337_v3.yaml",
+    "config_sha256": "8144f4da545b34d27b85849895bf1e392fd2be477a2841cad738c4d361c2e4c8",
+    "dataset_freeze_id": "1582505ae40445422711fa15918ee9c229caf84b1b3feba1a71f078259892249",
+    "genome_dataset_id": "da3dfce28b7a46b8640d75c7cb417c867137a99e004ea359d85784ff0c269db9",
+    "run_id": "corrected-codonlm-v1-pilot-genome-seed1337"
+  },
+  "runtime": {
+    "device": "mps",
+    "hardware": "Apple M2 with 8 GB unified memory",
+    "invocations": 6,
+    "wall_time_seconds": 9349.5,
+    "process_max_rss_raw": 728072192,
+    "mps_peak_allocated_bytes": 1159627264,
+    "mps_peak_driver_bytes": 2450227200
+  },
+  "training": {
+    "epochs": 1,
+    "train_microbatches": 15996,
+    "optimizer_steps": 500,
+    "scheduler_steps": 500,
+    "scheduler_total_steps": 5000,
+    "committed_nonpad_tokens": 25238438,
+    "initial_loss": 223.34454345703125,
+    "train_loss": 18.152612870083537,
+    "final_learning_rate": 0.00029558480651026894,
+    "nonfinite_microbatches": 0,
+    "aborted_accumulation_groups": 0,
+    "discarded_finite_microbatches": 0
+  },
+  "validation": {
+    "microbatches": 2080,
+    "loss": 3.933806186112074,
+    "perplexity": 51.101
+  },
+  "resume_boundaries": [
+    {
+      "committed_microbatches": 3520,
+      "optimizer_step": 110,
+      "committed_nonpad_tokens": 5557284
+    },
+    {
+      "committed_microbatches": 7072,
+      "optimizer_step": 221,
+      "committed_nonpad_tokens": 11158433
+    },
+    {
+      "committed_microbatches": 10528,
+      "optimizer_step": 329,
+      "committed_nonpad_tokens": 16627698
+    },
+    {
+      "committed_microbatches": 13216,
+      "optimizer_step": 413,
+      "committed_nonpad_tokens": 20864291
+    },
+    {
+      "committed_microbatches": 15904,
+      "optimizer_step": 497,
+      "committed_nonpad_tokens": 25098947
+    }
+  ],
+  "checkpoint_artifacts": {
+    "tracked": false,
+    "best_sha256": "38a1522b867362c734cfa9fbe42460ef2ee150a63052617b71a164c9738ab2ec",
+    "last_sha256": "f055da5e45cb5dfb4f89a0edba19aab49a4474b6a9634affae4b1201b1df1379"
+  },
+  "acceptance": {
+    "exact_token_count": true,
+    "exact_optimizer_scheduler_count": true,
+    "exact_resume_metric_boundaries": true,
+    "full_validation_completed": true,
+    "best_and_last_checkpoints_created": true,
+    "finite_training": true,
+    "memory_stable": true,
+    "phase_1_status": "complete",
+    "next_phase": "full_genome_seed1337"
+  }
+}
