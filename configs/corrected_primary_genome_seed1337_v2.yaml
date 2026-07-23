@@ -1,6 +1,6 @@
 primary_training_contract:
   schema: codonlm_primary_training_config
-  version: 1
+  version: 2
   release: corrected-codonlm-v1
   role: primary
   protocol: genome
@@ -13,9 +13,9 @@ train_npz: data/processed/corrected/corrected-codonlm-v1/genome/train_bs512.npz
 val_npz: data/processed/corrected/corrected-codonlm-v1/genome/val_bs512.npz
 test_npz: data/processed/corrected/corrected-codonlm-v1/genome/test_bs512.npz
 
-run_id: corrected-codonlm-v1-genome-seed2027
-seed: 2027
-dataloader_seed: 2027
+run_id: corrected-codonlm-v1-genome-seed1337
+seed: 1337
+dataloader_seed: 1337
 epochs: 10
 max_time_minutes: null
 
@@ -51,6 +51,7 @@ weight_decay: 0.05
 warmup_steps: 100
 optimizer: adamw
 scheduler: cosine
+scheduler_total_steps: 5000
 early_stop_patience: 0
 max_nonfinite_accumulation_groups: 0
 checkpoint_every_steps: 0

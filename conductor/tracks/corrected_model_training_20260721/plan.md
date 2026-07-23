@@ -25,6 +25,11 @@ architecture, exposure, or provenance.
 
 ## Phase 1: Run the Bounded Primary Pilot
 
+The first lifecycle run completed on 2026-07-23 with exact resume counters, zero
+invalid groups, stable MPS memory, and validation loss `4.031`, but exposed a
+compressed one-epoch cosine horizon and segment-only training-loss reporting. Those
+results are diagnostic only; repeat Phase 1 under config-contract schema v2.
+
 - [ ] Train from random initialization on a bounded portion of the frozen
   genome-held-out stream using the exact primary model and runtime policy.
 - [ ] Verify initial loss scale, finite gradients, committed non-PAD tokens,
