@@ -2,10 +2,10 @@
 
 ## Status
 
-In progress. Dataset, evaluator, generation-protocol, MPS runtime, and immutable
-primary-config gates are complete. The bounded MPS pilot is the final prerequisite
-before full primary training. Internal CodonLM extensions and the external
-ProteinCritic are gated later and cannot be silently enabled in the primary run.
+In progress. Dataset, evaluator, generation-protocol, MPS runtime, immutable
+primary-config, and bounded MPS pilot gates are complete. Full primary training is
+authorized next. Internal CodonLM extensions and the external ProteinCritic are
+gated later and cannot be silently enabled in the primary run.
 
 ## Phase 0: Freeze Primary Contracts
 
@@ -30,18 +30,21 @@ invalid groups, stable MPS memory, and validation loss `4.031`, but exposed a
 compressed one-epoch cosine horizon and segment-only training-loss reporting. Those
 results are diagnostic only. A schema-v2 segment then verified the 5,000-step
 scheduler but found that pending, uncommitted microbatch losses entered checkpoint
-metrics. Repeat Phase 1 under schema v3, which commits token and loss accounting at
-the same accumulation-group boundary.
+metrics. Schema v3 then completed the full frozen epoch across six MPS invocations:
+500 optimizer/scheduler steps, 25,238,438 committed tokens, exact metric boundaries,
+zero invalid groups, validation loss `3.934` (PPL `51.10`), and stable 1.16 GB
+allocated / 2.45 GB driver MPS memory. Evidence is recorded in
+`docs/CORRECTED_PRIMARY_PILOT.md`.
 
-- [ ] Train from random initialization on a bounded portion of the frozen
+- [x] Train from random initialization on a bounded portion of the frozen
   genome-held-out stream using the exact primary model and runtime policy.
-- [ ] Verify initial loss scale, finite gradients, committed non-PAD tokens,
+- [x] Verify initial loss scale, finite gradients, committed non-PAD tokens,
   optimizer/scheduler counters, validation, and wall-time estimates.
-- [ ] Verify `last`/`best` checkpoint creation and exact resume without replaying or
+- [x] Verify `last`/`best` checkpoint creation and exact resume without replaying or
   omitting committed updates.
-- [ ] Record peak host/MPS memory, throughput, non-finite groups, termination reason,
+- [x] Record peak host/MPS memory, throughput, non-finite groups, termination reason,
   and resolved provenance.
-- [ ] Approve the immutable configs for full training or revise them through a new
+- [x] Approve the immutable configs for full training or revise them through a new
   versioned config contract and repeat the pilot.
 
 Exit gate: pilot and resume complete on MPS without OOM, non-finite update,

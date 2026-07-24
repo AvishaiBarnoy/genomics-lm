@@ -760,6 +760,18 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     but found 3,645 metric microbatches recorded at a 3,616-microbatch optimizer
     boundary. Schema v3 keeps pending loss state outside checkpoints and commits token
     and loss counters atomically; schema-v2 checkpoints must not be resumed.
+*   **Corrected Primary Pilot Acceptance (2026-07-23):** After PR #120 merged,
+    completed the schema-v3 frozen genome pilot from random initialization across six
+    controlled MPS invocations. The run applied exactly 500 optimizer/scheduler steps
+    over 15,996 microbatches and 25,238,438 committed non-PAD tokens. Every
+    intermediate checkpoint's cumulative metric count exactly matched its committed
+    resume boundary; seen but uncommitted work was excluded and recomputed. Training
+    completed with zero non-finite microbatches or aborted groups, 1.16 GB peak MPS
+    allocation, 2.45 GB peak MPS driver memory, cumulative train loss 18.153, and full
+    validation loss 3.934 (PPL 51.10). Both best and last checkpoints were produced,
+    and the LR remained aligned to the 5,000-step primary horizon. Phase 1 is complete
+    and the immutable full genome seed-1337 run is authorized next. Compact evidence
+    is stored in `docs/benchmarks/corrected_primary_pilot_genome_seed1337.json`.
 
 ---
 *End of Log*
