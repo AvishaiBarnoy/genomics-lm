@@ -93,6 +93,12 @@ For every test evaluation, calculate and compare model performance against Unifo
    genus-held-out dataset and a distinct output prefix.
 2. Report the **excess bits per codon** ($\Delta H$) and the perplexity drop over the 2nd-order Markov (Trigram) baseline.
 
+The baseline evaluator resets trigram history after `<SEP>` so its accessible
+context matches the model's segment mask. If CodonLM does not beat bigram and
+trigram, run the context diagnostic in
+`docs/CONTEXT_LEARNING_DIAGNOSTICS.md` before downstream evaluation or extension
+training.
+
 Evaluate the corrected model on the same manifest-bound test artifact:
 
 ```bash
@@ -102,7 +108,20 @@ python -m scripts.evaluate_test \
 ```
 
 Corrected checkpoints fail if the explicit manifest is missing or if its dataset or
-vocabulary identity differs from the checkpoint.
+vocabulary identity differs from the checkpoint. `test_nll` and `test_ppl` are
+computed from ordinary unsmoothed cross-entropy and are directly comparable with the
+simple baselines. `test_objective_loss` separately records cross-entropy with the
+checkpoint's configured label smoothing.
+
+Evaluate a distinct final checkpoint without overwriting the selected-best result:
+
+```bash
+python -m scripts.evaluate_test \
+  --run_dir runs/<RUN_ID> \
+  --manifest data/processed/corrected/<FREEZE_ID>/genome/manifest.json \
+  --checkpoint-name last.pt \
+  --metric-prefix last_test
+```
 
 ---
 

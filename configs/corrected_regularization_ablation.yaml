@@ -1,0 +1,32 @@
+schema_version: 1
+experiment: corrected-codonlm-v1-regularization-ablation
+base_config: configs/corrected_primary_genome_seed1337_v3.yaml
+seed: 1337
+epochs: 2
+scheduler_total_steps: 1000
+expected_nonpad_tokens: 50476876
+allowed_overrides:
+  - label_smoothing
+  - dropout
+  - tie_embeddings
+variants:
+  - name: reference
+    overrides:
+      label_smoothing: 0.05
+      dropout: 0.10
+      tie_embeddings: true
+  - name: no_smoothing
+    overrides:
+      label_smoothing: 0.00
+      dropout: 0.10
+      tie_embeddings: true
+  - name: no_smoothing_low_dropout
+    overrides:
+      label_smoothing: 0.00
+      dropout: 0.05
+      tie_embeddings: true
+  - name: no_smoothing_low_dropout_untied
+    overrides:
+      label_smoothing: 0.00
+      dropout: 0.05
+      tie_embeddings: false

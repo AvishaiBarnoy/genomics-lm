@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from src.codonlm.checkpoints import build_codon_model_from_cfg, load_codon_checkpoint
@@ -73,23 +74,46 @@ def _find_test_npz(
 
 @torch.no_grad()
 def evaluate(
-    model: torch.nn.Module, device: torch.device, loader: DataLoader
-) -> tuple[float, float, int]:
-    total_loss = 0.0
+    model: torch.nn.Module,
+    device: torch.device,
+    loader: DataLoader,
+    *,
+    label_smoothing: float = 0.0,
+) -> tuple[float, float, float, int]:
+    total_nll = 0.0
+    total_objective = 0.0
     total_tokens = 0
     for xb, yb in loader:
         xb = xb.to(device)
         yb = yb.to(device)
-        logits, loss = model(xb, yb)
-        if loss is None:
-            continue
-        # reconstruct valid token count (ignore_index=0)
+        logits, _ = model(xb)
         valid = (yb != 0).sum().item()
-        total_loss += float(loss.item()) * max(1, valid)
-        total_tokens += max(1, valid)
-    mean_nll = total_loss / max(1, total_tokens)
+        if valid == 0:
+            continue
+        flat_logits = logits.float().reshape(-1, logits.size(-1))
+        flat_targets = yb.reshape(-1)
+        total_nll += float(
+            F.cross_entropy(
+                flat_logits,
+                flat_targets,
+                ignore_index=0,
+                reduction="sum",
+            ).item()
+        )
+        total_objective += float(
+            F.cross_entropy(
+                flat_logits,
+                flat_targets,
+                ignore_index=0,
+                reduction="sum",
+                label_smoothing=float(label_smoothing),
+            ).item()
+        )
+        total_tokens += valid
+    mean_nll = total_nll / max(1, total_tokens)
+    mean_objective = total_objective / max(1, total_tokens)
     ppl = float(math.exp(min(20.0, mean_nll)))
-    return mean_nll, ppl, total_tokens
+    return mean_nll, ppl, mean_objective, total_tokens
 
 
 def main() -> None:
@@ -110,14 +134,28 @@ def main() -> None:
         type=Path,
         help="Provenance sidecar when --test_npz is derived from the frozen test set.",
     )
+    ap.add_argument(
+        "--checkpoint-name",
+        default="best.pt",
+        help="Checkpoint filename under the run directory (default: best.pt).",
+    )
+    ap.add_argument(
+        "--metric-prefix",
+        default="test",
+        help="Metrics key prefix, for example 'test' or 'last_test'.",
+    )
     ap.add_argument("--batch_size", type=int, default=None, help="evaluation batch size")
     args = ap.parse_args()
+    if not args.metric_prefix.replace("_", "").isalnum():
+        raise ValueError("--metric-prefix must contain only letters, numbers, and underscores")
 
     # accept run_id or run_dir
     run_id, run_dir = resolve_run(args.run_id, args.run_dir)
     repo_root = Path(__file__).resolve().parents[1]
 
-    state_dict, cfg, checkpoint_path = load_codon_checkpoint(run_dir)
+    state_dict, cfg, checkpoint_path = load_codon_checkpoint(
+        run_dir, ckpt_name=args.checkpoint_name
+    )
     model = build_codon_model_from_cfg(cfg)
     model.load_state_dict(state_dict, strict=False)
     model.to(dev()).eval()
@@ -154,19 +192,37 @@ def main() -> None:
     if batch_size is None:
         batch_size = int(cfg.get("eval_batch_size", 16 if dev().type == "mps" else 64))
     loader = DataLoader(ds, batch_size=batch_size, collate_fn=collate_fn)
-    nll, ppl, evaluated_tokens = evaluate(model, dev(), loader)
-    print(f"[test] loss={nll:.4f} ppl={ppl:.2f}")
+    label_smoothing = float(cfg.get("label_smoothing", 0.0))
+    nll, ppl, objective_loss, evaluated_tokens = evaluate(
+        model,
+        dev(),
+        loader,
+        label_smoothing=label_smoothing,
+    )
+    print(
+        f"[test] nll={nll:.4f} ppl={ppl:.2f} "
+        f"objective={objective_loss:.4f} label_smoothing={label_smoothing:.4f}"
+    )
 
     metrics_path = run_dir / "scores" / "metrics.json"
+    prefix = args.metric_prefix
 
     write_merge_metrics(
         metrics_path,
         {
-            "test_loss": float(nll),
-            "test_ppl": float(ppl),
-            "test_evaluated_tokens": int(evaluated_tokens),
-            "test_evaluation_provenance": {
-                "schema_version": 1,
+            f"{prefix}_loss": float(nll),
+            f"{prefix}_nll": float(nll),
+            f"{prefix}_ppl": float(ppl),
+            f"{prefix}_objective_loss": float(objective_loss),
+            f"{prefix}_label_smoothing": label_smoothing,
+            f"{prefix}_evaluated_tokens": int(evaluated_tokens),
+            f"{prefix}_evaluation_provenance": {
+                "schema_version": 2,
+                "loss_definition": {
+                    "nll": "unsmoothed_cross_entropy",
+                    "perplexity": "exp(unsmoothed_cross_entropy)",
+                    "objective": "cross_entropy_with_configured_label_smoothing",
+                },
                 "dataset_manifest": manifest_provenance or {"status": "legacy_unverified"},
                 "checkpoint_dataset": checkpoint_dataset,
                 "checkpoint": artifact_provenance(checkpoint_path),

@@ -2,10 +2,12 @@
 
 ## Status
 
-In progress. Dataset, evaluator, generation-protocol, MPS runtime, immutable
-primary-config, and bounded MPS pilot gates are complete. Full primary training is
-authorized next. Internal CodonLM extensions and the external ProteinCritic are
-gated later and cannot be silently enabled in the primary run.
+In progress, with the intrinsic gate paused for diagnosis. Dataset, evaluator,
+generation-protocol, MPS runtime, immutable primary-config, and bounded MPS pilot
+gates are complete. The genome seed-1337 primary run completed, but its unsmoothed
+test PPL `48.267` did not beat the trigram baseline `42.037`, and natural sequence
+was indistinguishable from the codon-order shuffle. Internal CodonLM extensions and
+the external ProteinCritic remain gated and cannot conceal this failure.
 
 ## Phase 0: Freeze Primary Contracts
 
@@ -52,7 +54,7 @@ counter/provenance mismatch, or an unexplained loss anomaly.
 
 ## Phase 2: Train the Primary Basic Model
 
-- [ ] Train the genome-held-out primary model at seed `1337`.
+- [x] Train the genome-held-out primary model at seed `1337`.
 - [ ] Train the identical genome-held-out primary model at seed `2027`.
 - [ ] Train the separately labelled genus-held-out primary model from random
   initialization.
@@ -64,6 +66,15 @@ Exit gate: all primary runs finish without leakage, OOM, invalid update, counter
 mismatch, or provenance failure.
 
 ## Phase 3: Evaluate and Decide on the Primary Model
+
+Interim seed-1337 intrinsic evaluation is recorded in
+`docs/CORRECTED_PRIMARY_INTRINSIC_EVALUATION.md`. It beats unigram but not bigram
+or trigram and therefore fails the promotion gate. Pause dependent downstream and
+generation evaluation. The mask audit passed; context ablation showed all useful
+gain saturating at four input tokens, with no gain from longer context and a paired
+`+0.13819` nats/token deficit to trigram. Run the predeclared regularization matrix
+before considering an architecture extension. The checklist remains open until all
+Phase 2 runs and matched evaluations are complete.
 
 - [ ] Evaluate uniform, unigram, bigram, trigram, and CodonLM on identical test
   tokens; report loss, perplexity, bits/codon, and improvement over the best baseline.

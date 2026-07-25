@@ -772,6 +772,30 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     and the LR remained aligned to the 5,000-step primary horizon. Phase 1 is complete
     and the immutable full genome seed-1337 run is authorized next. Compact evidence
     is stored in `docs/benchmarks/corrected_primary_pilot_genome_seed1337.json`.
+*   **Corrected Genome Seed-1337 Training and Intrinsic Gate (2026-07-25):**
+    Completed the ten-epoch random-initialized primary run with exactly 5,000
+    optimizer/scheduler steps, 252,384,380 committed non-PAD tokens, and zero
+    invalid accumulation groups. Smoothed validation selected epoch 4. A corrected
+    unsmoothed evaluation over 2,228,589 frozen genome-held-out test tokens gave PPL
+    48.267 for epoch 4 and 48.687 for epoch 10. Epoch 4 beats the unigram baseline
+    (49.167) but not bigram (43.815) or trigram (42.037). Its natural-sequence PPL
+    was indistinguishable from an exact-composition codon-order shuffle (48.259),
+    while uniform synonymous recoding increased PPL to 67.878. The result indicates
+    codon-composition learning without demonstrated sequential advantage. The
+    primary promotion gate is paused for context, packing/mask, loss-decomposition,
+    and paired-uncertainty diagnostics before downstream or extension claims.
+*   **Primary Context Diagnosis (2026-07-25):** Corrected the trigram evaluator to
+    reset history after `<SEP>`; the aggregate baseline remained PPL 42.037, showing
+    the rare cross-boundary defect did not explain the gap. The checkpoint passed an
+    independent causal/segment-mask audit. Evaluation-only attention windows gave
+    PPL 51.328 at one input token, 48.425 at two, 48.268 at four, and 48.267 at full
+    context. CodonLM therefore uses a short neighborhood but gains nothing beyond
+    four tokens and remains decisively worse than trigram (`+0.138191` nats/token;
+    95% packed-window bootstrap CI `[+0.136469, +0.139874]`). Loss decomposition
+    also exposed severe post-separator and stop-codon weaknesses. Added a fail-closed
+    four-condition, two-epoch regularization matrix covering label smoothing,
+    dropout, and tied embeddings. Architecture extensions remain blocked until this
+    ordinary next-token optimization ablation is evaluated.
 
 ---
 *End of Log*
