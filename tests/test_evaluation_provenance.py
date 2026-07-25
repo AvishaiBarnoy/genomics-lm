@@ -126,6 +126,9 @@ def test_corrected_test_evaluation_emits_frozen_provenance(tmp_path):
     assert provenance["dataset_manifest"]["dataset_id"] == manifest["dataset"]["id"]
     assert provenance["checkpoint_dataset"]["status"] == "checkpoint_manifest_verified"
     assert report["test_evaluated_tokens"] > 0
+    assert report["test_loss"] == report["test_nll"]
+    assert report["test_ppl"] == pytest.approx(np.exp(report["test_nll"]))
+    assert provenance["loss_definition"]["nll"] == "unsmoothed_cross_entropy"
 
     without_manifest = subprocess.run(
         command[:5] + command[7:],
@@ -135,6 +138,39 @@ def test_corrected_test_evaluation_emits_frozen_provenance(tmp_path):
     )
     assert without_manifest.returncode != 0
     assert "explicit frozen dataset manifest" in without_manifest.stderr
+
+
+def test_corrected_test_evaluation_namespaces_checkpoint_metrics(tmp_path):
+    manifest_path, _, run_dir = _corrected_run(tmp_path)
+    best = torch.load(run_dir / "checkpoints" / "best.pt", map_location="cpu")
+    torch.save(best, run_dir / "checkpoints" / "last.pt")
+    command = [
+        "python",
+        "-m",
+        "scripts.evaluate_test",
+        "--run_dir",
+        str(run_dir),
+        "--manifest",
+        str(manifest_path),
+        "--checkpoint-name",
+        "last.pt",
+        "--metric-prefix",
+        "last_test",
+        "--batch_size",
+        "2",
+    ]
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "FORCE_CPU": "1"},
+    )
+    assert result.returncode == 0, result.stderr
+
+    report = json.loads((run_dir / "scores" / "metrics.json").read_text())
+    assert report["last_test_ppl"] == pytest.approx(np.exp(report["last_test_nll"]))
+    checkpoint = report["last_test_evaluation_provenance"]["checkpoint"]
+    assert checkpoint["path"].endswith("last.pt")
 
 
 def test_corrected_test_evaluation_accepts_verified_derived_control(tmp_path):
