@@ -772,6 +772,18 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     and the LR remained aligned to the 5,000-step primary horizon. Phase 1 is complete
     and the immutable full genome seed-1337 run is authorized next. Compact evidence
     is stored in `docs/benchmarks/corrected_primary_pilot_genome_seed1337.json`.
+*   **Corrected Genome Seed-1337 Training and Intrinsic Gate (2026-07-25):**
+    Completed the ten-epoch random-initialized primary run with exactly 5,000
+    optimizer/scheduler steps, 252,384,380 committed non-PAD tokens, and zero
+    invalid accumulation groups. Smoothed validation selected epoch 4. A corrected
+    unsmoothed evaluation over 2,228,589 frozen genome-held-out test tokens gave PPL
+    48.267 for epoch 4 and 48.687 for epoch 10. Epoch 4 beats the unigram baseline
+    (49.167) but not bigram (43.815) or trigram (42.037). Its natural-sequence PPL
+    was indistinguishable from an exact-composition codon-order shuffle (48.259),
+    while uniform synonymous recoding increased PPL to 67.878. The result indicates
+    codon-composition learning without demonstrated sequential advantage. The
+    primary promotion gate is paused for context, packing/mask, loss-decomposition,
+    and paired-uncertainty diagnostics before downstream or extension claims.
 
 ---
 *End of Log*
