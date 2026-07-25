@@ -70,8 +70,11 @@ mismatch, or provenance failure.
 Interim seed-1337 intrinsic evaluation is recorded in
 `docs/CORRECTED_PRIMARY_INTRINSIC_EVALUATION.md`. It beats unigram but not bigram
 or trigram and therefore fails the promotion gate. Pause dependent downstream and
-generation evaluation while running the predeclared intrinsic diagnostics. The
-checklist remains open until all Phase 2 runs and matched evaluations are complete.
+generation evaluation. The mask audit passed; context ablation showed all useful
+gain saturating at four input tokens, with no gain from longer context and a paired
+`+0.13819` nats/token deficit to trigram. Run the predeclared regularization matrix
+before considering an architecture extension. The checklist remains open until all
+Phase 2 runs and matched evaluations are complete.
 
 - [ ] Evaluate uniform, unigram, bigram, trigram, and CodonLM on identical test
   tokens; report loss, perplexity, bits/codon, and improvement over the best baseline.

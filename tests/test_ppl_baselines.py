@@ -66,3 +66,31 @@ def test_unseen_contexts_are_smoothed(tmp_path):
     results, tokens, _ = evaluate_baselines(test, fit_baselines(train, 6), 6)
     assert tokens == 1
     assert all(np.isfinite(item["perplexity"]) for item in results.values())
+
+
+def test_trigram_history_resets_after_separator(tmp_path):
+    train = tmp_path / "train.npz"
+    first = np.array([[1, 4]], dtype=np.int32)
+    second = np.array([[5, 4]], dtype=np.int32)
+    targets = np.array([[0, 2]], dtype=np.int32)
+    np.savez(train, X=first, Y=targets)
+    reset = frozenset({4})
+
+    reset_counts = fit_baselines(train, 6, reset_token_ids=reset)
+    leaked_counts = fit_baselines(train, 6)
+
+    reset_key = (0, 4)
+    assert reset_counts[2][reset_key][2] == 1
+    assert (1, 4) in leaked_counts[2]
+
+    test_a = tmp_path / "test_a.npz"
+    test_b = tmp_path / "test_b.npz"
+    np.savez(test_a, X=first, Y=targets)
+    np.savez(test_b, X=second, Y=targets)
+    result_a, _, _ = evaluate_baselines(
+        test_a, reset_counts, 6, reset_token_ids=reset
+    )
+    result_b, _, _ = evaluate_baselines(
+        test_b, reset_counts, 6, reset_token_ids=reset
+    )
+    assert result_a["Trigram"] == result_b["Trigram"]
