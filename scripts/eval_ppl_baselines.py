@@ -51,7 +51,20 @@ def _artifact_hashes(path: Path) -> dict[str, str]:
     return {str(file.resolve()): _hash(file) for file in files if file.exists()}
 
 
-def fit_baselines(train_path: Path, vocab_size: int, alpha: float = 0.01):
+def _previous2(x: np.ndarray, position: int, reset_token_ids: frozenset[int]) -> int:
+    previous = int(x[position])
+    if position == 0 or previous in reset_token_ids:
+        return PAD_ID
+    return int(x[position - 1])
+
+
+def fit_baselines(
+    train_path: Path,
+    vocab_size: int,
+    alpha: float = 0.01,
+    *,
+    reset_token_ids: frozenset[int] = frozenset(),
+):
     if alpha <= 0:
         raise ValueError("alpha must be positive")
     unigram = np.zeros(vocab_size, dtype=np.int64)
@@ -64,7 +77,7 @@ def fit_baselines(train_path: Path, vocab_size: int, alpha: float = 0.01):
                 continue
             unigram[target] += 1
             bigram[previous][target] += 1
-            previous2 = int(x[position - 1]) if position else PAD_ID
+            previous2 = _previous2(x, position, reset_token_ids)
             trigram[(previous2, previous)][target] += 1
     if int(unigram.sum()) == 0:
         raise ValueError(f"training dataset has no evaluable non-PAD targets: {train_path}")
@@ -77,7 +90,14 @@ def _probability(counts, target: int, alpha: float, active_size: int) -> float:
     return (count + alpha) / (total + alpha * active_size)
 
 
-def evaluate_baselines(test_path, counts, vocab_size: int, alpha: float = 0.01):
+def evaluate_baselines(
+    test_path,
+    counts,
+    vocab_size: int,
+    alpha: float = 0.01,
+    *,
+    reset_token_ids: frozenset[int] = frozenset(),
+):
     unigram, bigram, trigram = counts
     active_size = vocab_size - 1
     nll = {name: 0.0 for name in MODEL_NAMES}
@@ -88,7 +108,7 @@ def evaluate_baselines(test_path, counts, vocab_size: int, alpha: float = 0.01):
             if target == PAD_ID:
                 continue
             tokens += 1
-            previous2 = int(x[position - 1]) if position else PAD_ID
+            previous2 = _previous2(x, position, reset_token_ids)
             nll["Uniform"] += math.log(active_size)
             nll["Unigram"] -= math.log(_probability(unigram, target, alpha, active_size))
             nll["Bigram"] -= math.log(
@@ -151,8 +171,22 @@ def main() -> None:
     contract = resolve_vocabulary_contract(
         [train, test], configured_path=args.itos, configured_size=None
     )
-    counts = fit_baselines(train, contract.size, args.alpha)
-    results, tokens, best = evaluate_baselines(test, counts, contract.size, args.alpha)
+    reset_token_ids = frozenset(
+        index for index, token in enumerate(contract.tokens) if token == "<SEP>"
+    )
+    counts = fit_baselines(
+        train,
+        contract.size,
+        args.alpha,
+        reset_token_ids=reset_token_ids,
+    )
+    results, tokens, best = evaluate_baselines(
+        test,
+        counts,
+        contract.size,
+        args.alpha,
+        reset_token_ids=reset_token_ids,
+    )
     report = {
         "schema_version": 1,
         "train": str(train.resolve()),
@@ -166,6 +200,11 @@ def main() -> None:
         "dataset_manifest": manifest_provenance,
         "vocabulary": contract.provenance(),
         "smoothing": {"method": "additive", "alpha": args.alpha},
+        "context_boundary": {
+            "method": "reset_history_after_tokens",
+            "token_ids": sorted(reset_token_ids),
+            "tokens": [contract.tokens[index] for index in sorted(reset_token_ids)],
+        },
         "evaluated_tokens": tokens,
         "best_simple_baseline": best,
         "results": results,

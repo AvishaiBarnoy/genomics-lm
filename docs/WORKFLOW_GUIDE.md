@@ -93,6 +93,12 @@ For every test evaluation, calculate and compare model performance against Unifo
    genus-held-out dataset and a distinct output prefix.
 2. Report the **excess bits per codon** ($\Delta H$) and the perplexity drop over the 2nd-order Markov (Trigram) baseline.
 
+The baseline evaluator resets trigram history after `<SEP>` so its accessible
+context matches the model's segment mask. If CodonLM does not beat bigram and
+trigram, run the context diagnostic in
+`docs/CONTEXT_LEARNING_DIAGNOSTICS.md` before downstream evaluation or extension
+training.
+
 Evaluate the corrected model on the same manifest-bound test artifact:
 
 ```bash

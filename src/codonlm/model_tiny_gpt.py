@@ -270,7 +270,38 @@ class TinyGPT(nn.Module):
             "use_shape_guidance": bool(self.use_shape_guidance),
         }
 
-    def forward(self, idx, targets=None, return_aux: bool = False, shape_embeddings=None):
+    def build_attention_mask(
+        self, idx: torch.Tensor, attention_window: int | None = None
+    ) -> torch.Tensor | None:
+        """Build the same causal/segment mask used by forward, optionally local."""
+        _, length = idx.shape
+        if attention_window is not None and int(attention_window) < 1:
+            raise ValueError("attention_window must be at least 1")
+        if self.sep_id is None and attention_window is None:
+            return None
+
+        positions = torch.arange(length, device=idx.device)
+        distance = positions.unsqueeze(1) - positions.unsqueeze(0)
+        causal_mask = distance >= 0
+        if attention_window is not None:
+            causal_mask = causal_mask & (distance < int(attention_window))
+        attn_mask = causal_mask.unsqueeze(0).unsqueeze(0)
+        if self.sep_id is not None:
+            segment_ids = torch.cumsum(idx == int(self.sep_id), dim=1)
+            segment_mask = (
+                segment_ids.unsqueeze(-1) == segment_ids.unsqueeze(-2)
+            ).unsqueeze(1)
+            attn_mask = attn_mask & segment_mask
+        return attn_mask
+
+    def forward(
+        self,
+        idx,
+        targets=None,
+        return_aux: bool = False,
+        shape_embeddings=None,
+        attention_window: int | None = None,
+    ):
         B, T = idx.shape
         x = self.tok_emb(idx)
         if not self.use_rope:
@@ -280,13 +311,7 @@ class TinyGPT(nn.Module):
             x = x + self.shape_proj(shape_embeddings)
         x = self.drop(x)
 
-        attn_mask = None
-        if self.sep_id is not None:
-            sep = (idx == int(self.sep_id))
-            seg = torch.cumsum(sep, dim=1)
-            seg_mask = (seg.unsqueeze(-1) == seg.unsqueeze(-2)).unsqueeze(1)  # (B,1,T,T)
-            causal_mask = torch.tril(torch.ones(T, T, device=idx.device)).unsqueeze(0).unsqueeze(0) > 0  # (1,1,T,T)
-            attn_mask = causal_mask & seg_mask  # Pre-combined mask (B,1,T,T)
+        attn_mask = self.build_attention_mask(idx, attention_window)
 
         if self.use_checkpoint and self.training:
             for blk in self.blocks:
@@ -326,7 +351,9 @@ class TinyGPT(nn.Module):
             return logits, loss, aux
         return logits, loss
 
-    def forward_hidden(self, idx, shape_embeddings=None):
+    def forward_hidden(
+        self, idx, shape_embeddings=None, attention_window: int | None = None
+    ):
         B, T = idx.shape
         x = self.tok_emb(idx)
         if not self.use_rope:
@@ -336,13 +363,7 @@ class TinyGPT(nn.Module):
             x = x + self.shape_proj(shape_embeddings)
         x = self.drop(x)
 
-        attn_mask = None
-        if self.sep_id is not None:
-            sep = (idx == int(self.sep_id))
-            seg = torch.cumsum(sep, dim=1)
-            seg_mask = (seg.unsqueeze(-1) == seg.unsqueeze(-2)).unsqueeze(1)  # (B,1,T,T)
-            causal_mask = torch.tril(torch.ones(T, T, device=idx.device)).unsqueeze(0).unsqueeze(0) > 0  # (1,1,T,T)
-            attn_mask = causal_mask & seg_mask  # Pre-combined mask (B,1,T,T)
+        attn_mask = self.build_attention_mask(idx, attention_window)
 
         for blk in self.blocks:
             x = blk(x, attn_mask=attn_mask)

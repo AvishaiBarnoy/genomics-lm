@@ -59,24 +59,60 @@ composition rather than sequential ordering. The synonymous control shows strong
 sensitivity to native codon usage. The protein-shuffle control is not an isolated
 protein-order test because its construction also chooses random synonymous codons.
 
+## Context Diagnosis
+
+The manifest-bound context sweep passed the independently reconstructed causal and
+separator-mask audit. Resetting trigram history after `<SEP>` did not change its
+aggregate result to six decimals, so the original cross-boundary trigram defect was
+real but too rare to explain the baseline gap.
+
+| Input attention window | NLL | PPL |
+| ---: | ---: | ---: |
+| 1 | 3.938233 | 51.328 |
+| 2 | 3.880021 | 48.425 |
+| 4 | 3.876767 | 48.268 |
+| 8 | 3.876762 | 48.268 |
+| 32 | 3.876746 | 48.267 |
+| 128 | 3.876747 | 48.267 |
+| Full | 3.876740 | 48.267 |
+
+The checkpoint uses short context: increasing the window from one to two input
+tokens improves PPL by 2.90, and four tokens capture essentially the entire
+full-context result. There is no measurable benefit beyond four input tokens.
+Despite using local context, CodonLM remains worse than the explicit bigram and
+trigram estimators.
+
+The paired CodonLM-minus-trigram difference is `+0.138191` nats/token with a 95%
+packed-window bootstrap interval of `[+0.136469, +0.139874]`. This excludes run
+noise as an explanation.
+
+Boundary losses are disproportionately high:
+
+- prediction immediately after `<SEP>`: PPL `993.5` over 2,160 tokens;
+- all segment starts: PPL `107.6` over 7,872 tokens;
+- stop codons: PPL `473.9` over 8,387 tokens;
+- ordinary codons: PPL `47.36` over 2,159,052 tokens.
+
+Those rare boundary classes do not account for the full baseline gap, but they
+identify a separate grammar weakness. Windows containing chunk continuations are
+not worse than other windows (`47.42` versus `48.87` PPL), so chunk continuation is
+not the immediate failure mode.
+
 ## Decision
 
 The Phase 3 promotion criterion requires CodonLM to outperform the best simple
 intrinsic baseline on identical held-out tokens. Seed 1337 fails that criterion.
 Do not use this checkpoint to support corrected downstream or generative claims yet.
 
-Before deciding between retraining and architectural changes:
+The mask, context, decomposition, and paired-uncertainty diagnostics are complete.
+They show connected but underused local context rather than a disconnected
+Transformer. The next experiment is the predeclared matched regularization matrix:
+current regularization, no label smoothing, no smoothing plus lower dropout, and
+the same condition with untied embeddings.
 
-1. Produce token-class, position, and CDS-span loss decompositions for CodonLM and
-   the Markov baselines.
-2. Run matched context ablations that retain zero, one, two, and progressively more
-   preceding codons.
-3. Verify that packing spans and separator masks expose the intended within-CDS
-   context during training and evaluation.
-4. Quantify paired per-token uncertainty for CodonLM-minus-trigram NLL.
-5. Test a predeclared no-label-smoothing or reduced-label-smoothing training
-   ablation only if diagnostics show contextual signal is being suppressed rather
-   than absent from the data.
+Do not add a convolutional branch, `n+x` heads, or another architecture extension
+until that matrix determines whether ordinary next-token optimization can beat the
+count baselines.
 
 Genome seed 2027 should not be treated as a remedy for this effect: replication can
 estimate variance, but it is unlikely to close a 0.138-nat/codon gap without a
