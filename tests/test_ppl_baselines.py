@@ -1,10 +1,12 @@
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from scripts.eval_ppl_baselines import evaluate_baselines, fit_baselines
+from scripts.eval_ppl_baselines import evaluate_baselines, fit_baselines, main
+from scripts.training_preflight import _write_fixture
 from src.codonlm.training.vocabulary import (
     VocabularyContractError,
     resolve_vocabulary_contract,
@@ -94,3 +96,38 @@ def test_trigram_history_resets_after_separator(tmp_path):
         test_b, reset_counts, 6, reset_token_ids=reset
     )
     assert result_a["Trigram"] == result_b["Trigram"]
+
+
+def test_validation_baselines_bind_validation_manifest_artifact(
+    tmp_path, monkeypatch
+):
+    manifest_path, _ = _write_fixture(tmp_path / "freeze")
+    output = tmp_path / "validation_baselines"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "eval_ppl_baselines.py",
+            "--train",
+            str(manifest_path.parent / "train.npz"),
+            "--test",
+            str(manifest_path.parent / "val.npz"),
+            "--split",
+            "validation",
+            "--itos",
+            str(manifest_path.parent / "itos.txt"),
+            "--manifest",
+            str(manifest_path),
+            "--output-prefix",
+            str(output),
+        ],
+    )
+
+    main()
+
+    report = json.loads(output.with_suffix(".json").read_text())
+    assert report["evaluation_split"] == "validation"
+    assert set(report["dataset_manifest"]["bound_artifacts"]) == {
+        "train_tokens",
+        "val_tokens",
+    }

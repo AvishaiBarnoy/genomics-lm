@@ -76,6 +76,28 @@ configs intentionally omit `primary_training_contract`.
 Do not run the matrix until the context and mask diagnostic completes. A masking or
 packing defect invalidates a regularization comparison.
 
+### Result
+
+All four variants completed 1,000 optimizer steps and `50,476,876` non-PAD
+training tokens from random initialization. Manifest-bound unsmoothed evaluation
+used the same `3,228,255` validation targets:
+
+| Variant | Validation NLL | Validation PPL |
+| --- | ---: | ---: |
+| Reference | 3.895214 | 49.167 |
+| No smoothing | 3.891479 | 48.983 |
+| No smoothing, dropout 0.05 | 3.910927 | 49.945 |
+| No smoothing, dropout 0.05, untied embeddings | 3.811323 | 45.210 |
+| Bigram baseline | 3.782536 | 43.927 |
+| Trigram baseline | 3.748532 | 42.459 |
+
+Untying the input and output embeddings produced the only substantial improvement,
+reducing PPL by about 8% relative to the reference. Removing smoothing alone was
+nearly neutral, and lower dropout with tied embeddings was worse. The selected
+diagnostic variant still trails both Markov baselines, so it is an optimization
+candidate rather than a promoted primary model. Exact checkpoint and dataset hashes
+are recorded in `docs/benchmarks/corrected_regularization_ablation.json`.
+
 ## Local Convolution Versus `n+x`
 
 A causal convolutional branch summarizes recent input tokens before the ordinary

@@ -34,6 +34,7 @@ def _corrected_run(tmp_path: Path):
         "n_embd": 16,
         "dropout": 0.0,
         "use_sdpa": True,
+        "val_npz": [str(manifest_path.parent / "val.npz")],
         "test_npz": [str(manifest_path.parent / "test.npz")],
         "dataset_manifest": {
             "dataset_id": manifest["dataset"]["id"],
@@ -171,6 +172,40 @@ def test_corrected_test_evaluation_namespaces_checkpoint_metrics(tmp_path):
     assert report["last_test_ppl"] == pytest.approx(np.exp(report["last_test_nll"]))
     checkpoint = report["last_test_evaluation_provenance"]["checkpoint"]
     assert checkpoint["path"].endswith("last.pt")
+
+
+def test_corrected_validation_evaluation_binds_validation_artifact(tmp_path):
+    manifest_path, manifest, run_dir = _corrected_run(tmp_path)
+    command = [
+        "python",
+        "-m",
+        "scripts.evaluate_test",
+        "--run_dir",
+        str(run_dir),
+        "--split",
+        "validation",
+        "--manifest",
+        str(manifest_path),
+        "--batch_size",
+        "2",
+    ]
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "FORCE_CPU": "1"},
+    )
+    assert result.returncode == 0, result.stderr
+
+    report = json.loads((run_dir / "scores" / "metrics.json").read_text())
+    assert report["validation_ppl"] == pytest.approx(
+        np.exp(report["validation_nll"])
+    )
+    provenance = report["validation_evaluation_provenance"]
+    assert provenance["dataset_manifest"]["dataset_id"] == manifest["dataset"]["id"]
+    assert set(provenance["dataset_manifest"]["bound_artifacts"]) == {"val_tokens"}
+    assert provenance["val_tokens"]["path"].endswith("val.npz")
+    assert "test_tokens" not in provenance
 
 
 def test_corrected_test_evaluation_accepts_verified_derived_control(tmp_path):

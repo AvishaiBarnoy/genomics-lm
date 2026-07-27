@@ -76,6 +76,15 @@ gain saturating at four input tokens, with no gain from longer context and a pai
 before considering an architecture extension. The checklist remains open until all
 Phase 2 runs and matched evaluations are complete.
 
+The four-condition regularization matrix is complete. At identical two-epoch
+exposure, the untied/no-smoothing/dropout-0.05 variant reached validation PPL
+`45.210`, compared with `49.167` for the reference. It remains behind the validation
+bigram (`43.927`) and trigram (`42.459`), so the primary gate remains failed. Carry
+the untied variant into a matched effective-batch-size ablation before considering
+an architectural intervention.
+
+- [x] Complete the matched regularization ablation and evaluate best checkpoints
+  with manifest-bound unsmoothed validation NLL.
 - [ ] Evaluate uniform, unigram, bigram, trigram, and CodonLM on identical test
   tokens; report loss, perplexity, bits/codon, and improvement over the best baseline.
 - [ ] Extract causal embeddings with dataset/checkpoint/vocabulary/code provenance.

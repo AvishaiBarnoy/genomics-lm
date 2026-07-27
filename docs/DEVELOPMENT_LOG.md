@@ -796,6 +796,16 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     four-condition, two-epoch regularization matrix covering label smoothing,
     dropout, and tied embeddings. Architecture extensions remain blocked until this
     ordinary next-token optimization ablation is evaluated.
+*   **Corrected Regularization Ablation (2026-07-27):** Completed four
+    random-initialized, two-epoch runs at exactly 1,000 optimizer steps and
+    50,476,876 non-PAD tokens each, with no invalid accumulation groups. Added
+    manifest-bound validation evaluation so hyperparameters can be selected without
+    exposing the final test split. Unsmoothed validation PPL was 49.167 for the
+    reference, 48.983 without smoothing, 49.945 without smoothing at dropout 0.05,
+    and 45.210 for the dropout-0.05 untied-embedding variant. The selected variant
+    improves materially but remains behind validation bigram (43.927) and trigram
+    (42.459), so the primary promotion gate remains failed. The next diagnostic is
+    an effective-batch-size ablation using the untied configuration.
 
 ---
 *End of Log*
