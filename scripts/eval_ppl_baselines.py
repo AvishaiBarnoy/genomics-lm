@@ -154,6 +154,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--train", "--train_npz", dest="train", required=True)
     parser.add_argument("--test", "--test_npz", dest="test", required=True)
+    parser.add_argument(
+        "--split",
+        choices=("test", "validation"),
+        default="test",
+        help="Manifest role of the evaluation input (default: test).",
+    )
     parser.add_argument("--itos", help="Vocabulary artifact; defaults to dataset-adjacent itos.txt")
     parser.add_argument("--manifest", type=Path, help="Dataset manifest to hash into provenance")
     parser.add_argument("--config", type=Path, help="Evaluation/run config to hash into provenance")
@@ -163,9 +169,12 @@ def main() -> None:
     train, test = Path(args.train), Path(args.test)
     manifest_provenance = {"status": "legacy_unverified"}
     if args.manifest is not None:
+        evaluation_role = (
+            "val_tokens" if args.split == "validation" else "test_tokens"
+        )
         _, manifest_provenance = bind_dataset_manifest(
             args.manifest,
-            expected_artifacts={"train_tokens": train, "test_tokens": test},
+            expected_artifacts={"train_tokens": train, evaluation_role: test},
             require_scientific=False,
         )
     contract = resolve_vocabulary_contract(
@@ -189,6 +198,7 @@ def main() -> None:
     )
     report = {
         "schema_version": 1,
+        "evaluation_split": args.split,
         "train": str(train.resolve()),
         "test": str(test.resolve()),
         "dataset_sha256": {**_artifact_hashes(train), **_artifact_hashes(test)},

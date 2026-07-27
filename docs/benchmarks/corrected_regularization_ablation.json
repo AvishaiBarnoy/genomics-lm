@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "experiment": "corrected-codonlm-v1-regularization-ablation",
+  "evaluation_split": "validation",
+  "evaluated_tokens": 3228255,
+  "expected_train_nonpad_tokens_per_variant": 50476876,
+  "optimizer_steps_per_variant": 1000,
+  "matrix_sha256": "eecab64e722b343b7194c2f4ba2133a7208351ae5e476cd620908e88f92e146b",
+  "validation_tokens_sha256": "7b2cf01adaac41f13b2bedce1e15da2370b703bae449092d92d4e51939a8f142",
+  "results": {
+    "reference": {
+      "checkpoint_sha256": "c8d23568eab040c28fd71f8bec896912c6114f84fbc4afa5349cb78d7b8e3ba7",
+      "dropout": 0.1,
+      "label_smoothing": 0.05,
+      "tie_embeddings": true,
+      "validation_nll": 3.8952135440383038,
+      "validation_objective_loss": 3.9291823231029612,
+      "validation_ppl": 49.16655146568979
+    },
+    "no_smoothing": {
+      "checkpoint_sha256": "d6c97d8ebb6e28da3d8431bce5c9d1975811de4be13fee058719c5d56e3a88d1",
+      "dropout": 0.1,
+      "label_smoothing": 0.0,
+      "tie_embeddings": true,
+      "validation_nll": 3.8914789055929595,
+      "validation_objective_loss": 3.8914789055929595,
+      "validation_ppl": 48.98327462175625
+    },
+    "no_smoothing_low_dropout": {
+      "checkpoint_sha256": "7b0c1f75e0cf9509d31118433c78b67de25528ad8dc6088cecf670be536c9dd5",
+      "dropout": 0.05,
+      "label_smoothing": 0.0,
+      "tie_embeddings": true,
+      "validation_nll": 3.91092660317358,
+      "validation_objective_loss": 3.91092660317358,
+      "validation_ppl": 49.945209928739104
+    },
+    "no_smoothing_low_dropout_untied": {
+      "checkpoint_sha256": "d93fc328b048e377fae8bcebcf3ee2e6d4bfb8b4321a082a72553f3e4d60cc67",
+      "dropout": 0.05,
+      "label_smoothing": 0.0,
+      "tie_embeddings": false,
+      "validation_nll": 3.8113232964190407,
+      "validation_objective_loss": 3.8113232964190407,
+      "validation_ppl": 45.21022582960136
+    }
+  },
+  "validation_baselines": {
+    "bigram_nll": 3.7825355020478693,
+    "bigram_ppl": 43.92727835987551,
+    "trigram_nll": 3.7485324057200664,
+    "trigram_ppl": 42.458724072604106,
+    "unigram_nll": 3.8921827504970525,
+    "unigram_ppl": 49.01776338593121
+  },
+  "decision": {
+    "selected_variant": "no_smoothing_low_dropout_untied",
+    "status": "optimization_candidate_only",
+    "primary_gate_passed": false,
+    "next_step": "matched effective-batch-size ablation"
+  }
+}

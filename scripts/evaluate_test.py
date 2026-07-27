@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Evaluate test cross-entropy and perplexity for a trained run.
+Evaluate validation or test cross-entropy and perplexity for a trained run.
 
 Usage:
   python -m scripts.evaluate_test --run_dir outputs/checkpoints/<RUN_ID>
@@ -72,6 +72,16 @@ def _find_test_npz(
     return repo_root / f"data/processed/test_bs{cfg['block_size']}.npz"
 
 
+def _find_validation_npz(cfg: dict, repo_root: Path) -> Path:
+    val_npz_cfg = cfg.get("val_npz")
+    if isinstance(val_npz_cfg, list) and val_npz_cfg:
+        val_npz_cfg = val_npz_cfg[0]
+    if not val_npz_cfg:
+        raise ValueError("validation evaluation requires val_npz in the run config")
+    path = Path(val_npz_cfg)
+    return path if path.is_absolute() else repo_root / path
+
+
 @torch.no_grad()
 def evaluate(
     model: torch.nn.Module,
@@ -121,6 +131,12 @@ def main() -> None:
     ap.add_argument("--run_dir", help="outputs/checkpoints/<RUN_ID>")
     ap.add_argument("--run_id", help="Run id (alternative to --run_dir)")
     ap.add_argument(
+        "--split",
+        choices=("test", "validation"),
+        default="test",
+        help="Frozen dataset split to evaluate (default: test).",
+    )
+    ap.add_argument(
         "--data_dir", help="override test NPZ directory (contains test_bs*.npz)"
     )
     ap.add_argument("--test_npz", type=Path, help="explicit test or control dataset")
@@ -141,13 +157,18 @@ def main() -> None:
     )
     ap.add_argument(
         "--metric-prefix",
-        default="test",
-        help="Metrics key prefix, for example 'test' or 'last_test'.",
+        default=None,
+        help="Metrics key prefix; defaults to the selected split name.",
     )
     ap.add_argument("--batch_size", type=int, default=None, help="evaluation batch size")
     args = ap.parse_args()
-    if not args.metric_prefix.replace("_", "").isalnum():
+    metric_prefix = args.metric_prefix or args.split
+    if not metric_prefix.replace("_", "").isalnum():
         raise ValueError("--metric-prefix must contain only letters, numbers, and underscores")
+    if args.split == "validation" and args.test_npz is not None:
+        raise ValueError("--test_npz cannot be used with --split validation")
+    if args.split == "validation" and args.derived_provenance is not None:
+        raise ValueError("--derived_provenance is only supported for the test split")
 
     # accept run_id or run_dir
     run_id, run_dir = resolve_run(args.run_id, args.run_dir)
@@ -161,14 +182,21 @@ def main() -> None:
     model.to(dev()).eval()
 
     data_dir_opt = Path(args.data_dir) if args.data_dir else None
-    test_npz = args.test_npz or _find_test_npz(run_id, cfg, repo_root, data_dir_opt)
-    test_npz = test_npz.expanduser().resolve()
+    if args.split == "validation":
+        evaluation_npz = _find_validation_npz(cfg, repo_root)
+        artifact_role = "val_tokens"
+    else:
+        evaluation_npz = args.test_npz or _find_test_npz(
+            run_id, cfg, repo_root, data_dir_opt
+        )
+        artifact_role = "test_tokens"
+    evaluation_npz = evaluation_npz.expanduser().resolve()
     manifest_provenance = None
     derived_provenance = None
     if args.manifest is not None:
         if args.derived_provenance is None:
             _, manifest_provenance = bind_dataset_manifest(
-                args.manifest, expected_artifacts={"test_tokens": test_npz}
+                args.manifest, expected_artifacts={artifact_role: evaluation_npz}
             )
         else:
             manifest, manifest_provenance = bind_dataset_manifest(args.manifest)
@@ -176,7 +204,7 @@ def main() -> None:
                 manifest, args.manifest.expanduser().resolve(), "test_tokens"
             )
             derived_provenance = bind_derived_dataset(
-                test_npz,
+                evaluation_npz,
                 args.derived_provenance,
                 manifest_provenance=manifest_provenance,
                 source_artifact_path=source_test,
@@ -184,7 +212,7 @@ def main() -> None:
     elif args.derived_provenance is not None:
         raise ValueError("--derived_provenance requires --manifest")
     checkpoint_dataset = bind_checkpoint_dataset(cfg, manifest_provenance)
-    ds = PackedDataset(test_npz)
+    ds = PackedDataset(evaluation_npz)
 
     collate_fn = dynamic_lm_collate_fn if getattr(ds, "is_dynamic", False) else None
 
@@ -200,12 +228,12 @@ def main() -> None:
         label_smoothing=label_smoothing,
     )
     print(
-        f"[test] nll={nll:.4f} ppl={ppl:.2f} "
+        f"[{args.split}] nll={nll:.4f} ppl={ppl:.2f} "
         f"objective={objective_loss:.4f} label_smoothing={label_smoothing:.4f}"
     )
 
     metrics_path = run_dir / "scores" / "metrics.json"
-    prefix = args.metric_prefix
+    prefix = metric_prefix
 
     write_merge_metrics(
         metrics_path,
@@ -226,7 +254,7 @@ def main() -> None:
                 "dataset_manifest": manifest_provenance or {"status": "legacy_unverified"},
                 "checkpoint_dataset": checkpoint_dataset,
                 "checkpoint": artifact_provenance(checkpoint_path),
-                "test_tokens": artifact_provenance(test_npz),
+                artifact_role: artifact_provenance(evaluation_npz),
                 "derived_dataset": derived_provenance,
             },
             "timestamp": datetime.now(timezone.utc).isoformat(),

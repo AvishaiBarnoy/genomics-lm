@@ -1,5 +1,18 @@
 # Corrected Primary Intrinsic Evaluation
 
+For checkpoint or hyperparameter selection, evaluate the frozen validation split
+without touching the final test split:
+
+```bash
+python -m scripts.evaluate_test \
+  --run_dir runs/<run-id> \
+  --split validation \
+  --manifest data/processed/corrected/corrected-codonlm-v1/genome/manifest.json
+```
+
+This records ordinary unsmoothed NLL and perplexity under `validation_*` keys and
+binds the selected file to the manifest's `val_tokens` artifact.
+
 ## Status
 
 Interim seed-1337 result recorded on 2026-07-25. The first corrected primary
