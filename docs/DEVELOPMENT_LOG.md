@@ -806,6 +806,16 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     improves materially but remains behind validation bigram (43.927) and trigram
     (42.459), so the primary promotion gate remains failed. The next diagnostic is
     an effective-batch-size ablation using the untied configuration.
+*   **Effective-Batch Diagnostic Launch (2026-07-27):** Reused the completed
+    no-smoothing, dropout-0.05, untied effective-batch-128 run as the matched anchor
+    and launched effective-batch-64 and effective-batch-32 conditions sequentially
+    on MPS. Physical batch remains four; accumulation changes from 32 to 16 and 8,
+    while the two-epoch scheduler horizons change from 1,000 to 2,000 and 4,000
+    optimizer steps. All conditions use seed 1337 and exactly 50,476,876 expected
+    non-PAD tokens. Selection remains validation-only. Documented the next
+    architecture decision order and the distinction between short codon/DNA-shape
+    context and long-range protein/RNA structure; lower PPL is treated as necessary
+    sequence-model evidence rather than sufficient structural validation.
 
 ---
 *End of Log*

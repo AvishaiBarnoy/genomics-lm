@@ -98,6 +98,97 @@ diagnostic variant still trails both Markov baselines, so it is an optimization
 candidate rather than a promoted primary model. Exact checkpoint and dataset hashes
 are recorded in `docs/benchmarks/corrected_regularization_ablation.json`.
 
+## Effective-Batch Ablation
+
+The selected regularization condition fixes:
+
+```yaml
+label_smoothing: 0.0
+dropout: 0.05
+tie_embeddings: false
+batch_size: 4
+```
+
+The completed effective-batch-128 condition is reused as the anchor. Two additional
+random-initialized conditions change only accumulation and the token-aligned
+scheduler horizon:
+
+| Effective batch | Accumulation | Optimizer steps over two epochs |
+| ---: | ---: | ---: |
+| 128 | 32 | 1,000 |
+| 64 | 16 | 2,000 |
+| 32 | 8 | 4,000 |
+
+Every condition uses seed 1337 and processes `50,476,876` non-PAD tokens. Physical
+batch size remains four, so device activation memory is approximately matched.
+This is a token- and compute-exposure comparison: smaller effective batches receive
+more frequent, noisier optimizer updates. It does not establish that a smaller
+batch has a universally better asymptotic optimum.
+
+Selection uses manifest-bound unsmoothed validation NLL. The frozen test split
+remains unavailable. A useful result must improve on the batch-128 PPL of `45.210`;
+the primary promotion gate additionally requires beating validation bigram
+(`43.927`) and trigram (`42.459`).
+
+## Candidate Architecture Interventions
+
+Architecture changes remain gated on the effective-batch result. The proposed order
+is:
+
+1. Add a zero-initialized causal convolutional residual with local kernels such as
+   3, 5, and 9 codons. This directly represents short transitions while preserving
+   the initial Transformer function.
+2. Evaluate a separately labelled Markov-residual hybrid that adds a learned
+   Transformer correction to fixed trigram logits. This is useful for practical PPL
+   but cannot demonstrate that the Transformer independently learned trigram
+   structure.
+3. Factor next-codon probability into next-amino-acid and synonymous-codon terms.
+   Report both components so protein-sequence prediction is not conflated with
+   organism-specific synonymous choice.
+4. Consider multi-scale local/global attention and segment-relative position resets
+   only after the narrower local intervention is measured.
+
+Multi-offset `n+x` heads supervise distant targets and are not a substitute for
+learning the ordinary next-token transition. Width, depth, RoPE, and SwiGLU do not
+specifically target the observed failure and remain lower priority.
+
+## Biological Context Length
+
+There is no single biological correlation length. The trigram estimator models
+`P(x_t | x_(t-2), x_(t-1))`: two preceding codons, or six preceding nucleotides,
+condition the next codon. This is a minimal test of context-dependent sequence
+grammar, not a structural model.
+
+Relevant scales differ by mechanism:
+
+| Mechanism | Representative scale |
+| --- | --- |
+| Codon-pair preference | Two adjacent codons |
+| Local DNA shape | A sliding pentamer, about 5 bp |
+| Ribosome-protected mRNA | Roughly 20-30 nt, about 7-10 codons |
+| Local protein secondary-structure prediction | Commonly local windows around 13-17 residues |
+| Protein tertiary contacts | Often tens to hundreds of residues apart |
+| RNA secondary structure | Can pair positions tens to hundreds of nucleotides apart |
+
+Primary studies support non-random adjacent codon preferences and context-dependent
+translation speed ([Buchan et al., 2006](https://pmc.ncbi.nlm.nih.gov/articles/PMC1363775/);
+[Chevance et al., 2014](https://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1004392)).
+The DNAshape method predicts local shape from sliding pentamers
+([Zhou et al., 2013](https://pmc.ncbi.nlm.nih.gov/articles/PMC3692085/)).
+Ribosome profiling observes protected fragments around 20-30 nt, but footprint
+length is not itself a statistical correlation length
+([Lareau et al., 2014](https://pmc.ncbi.nlm.nih.gov/articles/PMC4052883/)).
+Protein secondary structure contains short-range information, while complete folds
+depend strongly on nonlocal contacts
+([Crooks and Brenner, 2004](https://academic.oup.com/bioinformatics/article/20/10/1603/237316);
+[Adhikari et al., 2017](https://link.springer.com/article/10.1186/s12859-017-1807-5)).
+
+Lower PPL is therefore necessary for demonstrating improved sequence modeling but
+is not evidence of structural recovery by itself. The structural hypothesis must be
+tested through order-destroying sequence controls, context ablations, grouped
+DNA-shape baselines, homology-controlled protein evaluations, and explicit controls
+for amino-acid, codon, GC, and taxonomic composition.
+
 ## Local Convolution Versus `n+x`
 
 A causal convolutional branch summarizes recent input tokens before the ordinary
