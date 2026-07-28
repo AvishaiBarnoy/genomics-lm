@@ -53,6 +53,14 @@ def _parse_windows(value: str) -> list[int | None]:
     return windows
 
 
+def _evaluation_artifact_role(split: str) -> str:
+    if split == "test":
+        return "test_tokens"
+    if split == "validation":
+        return "val_tokens"
+    raise ValueError(f"unsupported evaluation split: {split}")
+
+
 def _packing_window_flags(path: Path | None, n_windows: int) -> np.ndarray:
     flags = np.zeros(n_windows, dtype=bool)
     if path is None:
@@ -192,7 +200,10 @@ def diagnose(args: argparse.Namespace) -> dict:
     test_path = args.test.expanduser().resolve()
     _, manifest_provenance = bind_dataset_manifest(
         args.manifest,
-        expected_artifacts={"train_tokens": train_path, "test_tokens": test_path},
+        expected_artifacts={
+            "train_tokens": train_path,
+            _evaluation_artifact_role(args.split): test_path,
+        },
     )
     contract = resolve_vocabulary_contract(
         [train_path, test_path],
@@ -364,6 +375,7 @@ def diagnose(args: argparse.Namespace) -> dict:
     return {
         "schema_version": 1,
         "status": "diagnostic_complete",
+        "evaluation_split": args.split,
         "checkpoint": artifact_provenance(checkpoint_path),
         "checkpoint_dataset": checkpoint_dataset,
         "dataset_manifest": manifest_provenance,
@@ -443,6 +455,12 @@ def main() -> None:
     parser.add_argument("--checkpoint-name", default="best.pt")
     parser.add_argument("--train", type=Path, required=True)
     parser.add_argument("--test", type=Path, required=True)
+    parser.add_argument(
+        "--split",
+        choices=("test", "validation"),
+        default="test",
+        help="Manifest role of the evaluation input (default: test).",
+    )
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--itos", type=Path)
     parser.add_argument("--packing-tsv", type=Path)

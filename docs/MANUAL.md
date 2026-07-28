@@ -64,7 +64,12 @@ You can configure training runs using YAML files under `configs/`. Complete temp
     *   `lr`: Peak learning rate.
     *   `min_lr`: End-of-cycle minimum learning rate for cosine scheduler.
     *   `weight_decay`: L2 regularization decay strength.
-    *   `warmup_steps`: Iterations of linear learning rate warmup.
+    *   `warmup_steps`: Fixed optimizer updates of linear learning-rate warmup.
+    *   `warmup_fraction`: Alternative scheduler-relative warmup in `[0, 1)`.
+        Configure only one of these fields. A fraction preserves the same warmup
+        share when effective batch size changes the scheduler horizon; for example,
+        `0.10` resolves to 100, 200, and 400 updates for horizons of 1,000, 2,000,
+        and 4,000 steps.
 *   **Training Loops:**
     *   `batch_size`: Physical batch size per device step.
     *   `grad_accum_steps`: Accumulate gradients over this many steps to simulate large batch sizes.

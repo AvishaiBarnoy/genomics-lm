@@ -816,6 +816,34 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     architecture decision order and the distinction between short codon/DNA-shape
     context and long-range protein/RNA structure; lower PPL is treated as necessary
     sequence-model evidence rather than sufficient structural validation.
+*   **Effective-Batch Diagnostic Result (2026-07-28):** Both MPS runs completed
+    their declared two-epoch exposure with zero invalid accumulation groups.
+    Manifest-bound unsmoothed validation PPL was 45.210 at effective batch 128,
+    43.112 at batch 64, and 48.752 at batch 32. Batch 64 beats the validation
+    bigram baseline (43.927) by 0.018723 nats/token but remains 0.015280 nats/token
+    behind trigram (42.459), so the primary promotion gate remains failed. Its best
+    checkpoint is epoch 1 and epoch 2 regressed to PPL 44.305. Batch 32's degradation
+    rejects a monotonic update-frequency explanation and motivates a narrow
+    batch-64 learning-rate ablation before a local-convolution architecture change.
+*   **Batch-64 Context Reassessment (2026-07-28):** Extended the context diagnostic
+    to bind the frozen validation artifact without exposing test data. The selected
+    checkpoint gave PPL 78.474, 62.773, 53.635, 48.411, 45.452, 43.912, 43.344,
+    43.189, and 43.112 at context windows 1, 2, 4, 8, 16, 32, 64, 128, and full.
+    Unlike the original tied checkpoint, it uses substantial 32-128-codon context.
+    Its remaining trigram deficit is statistically robust at +0.015280 nats/token
+    (95% packed-window bootstrap CI +0.014204 to +0.016337). Chunk-continuation
+    windows are not worse, while stop-codon PPL remains high at 484.316. The next
+    step remains batch-64 learning-rate optimization; architecture changes must
+    preserve the newly demonstrated long-context gain.
+*   **Adaptive Warmup and Batch-64 LR Sweep (2026-07-28):** Added
+    `warmup_fraction` as a mutually exclusive alternative to fixed `warmup_steps`.
+    It resolves against the scheduler horizon and records the result in checkpoint
+    configuration, allowing 10% warmup to scale from 100 to 200 to 400 updates as
+    token-matched effective-batch experiments move from 1,000 to 2,000 to 4,000
+    steps. Launched three fresh batch-64 MPS runs at peak learning rates `3e-4`,
+    `2.25e-4`, and `1.5e-4`, all with 200/2,000 warmup steps. Embedding LR changes
+    with backbone LR and minimum LR stays at 10% of peak. The earlier batch-64 run
+    is not reused because its fixed 100-step warmup is not matched.
 
 ---
 *End of Log*

@@ -63,6 +63,26 @@ class NonfiniteGroupLimitError(RuntimeError):
     """Raised when aborted accumulation groups exceed the configured tolerance."""
 
 
+def resolve_warmup_steps(cfg: dict, total_steps: int) -> int:
+    """Resolve a fixed or scheduler-relative warmup without ambiguous precedence."""
+    if total_steps <= 0:
+        raise ValueError("scheduler_total_steps must be positive")
+    fraction = cfg.get("warmup_fraction")
+    if fraction is None:
+        steps = int(cfg.get("warmup_steps", 200))
+        if steps < 0:
+            raise ValueError("warmup_steps must be non-negative")
+        return steps
+    if "warmup_steps" in cfg:
+        raise ValueError("configure only one of warmup_steps or warmup_fraction")
+    fraction = float(fraction)
+    if not 0.0 <= fraction < 1.0:
+        raise ValueError("warmup_fraction must be in [0, 1)")
+    if fraction == 0.0:
+        return 0
+    return max(1, int(round(total_steps * fraction)))
+
+
 @dataclass
 class AccumulationHealth:
     """Checkpointable counters for gradient-accumulation group integrity."""
@@ -656,7 +676,6 @@ def run_training(cfg: dict, args) -> None:
     max_nonfinite_groups = int(cfg.get("max_nonfinite_accumulation_groups", 3))
     if max_nonfinite_groups < -1:
         raise ValueError("max_nonfinite_accumulation_groups must be -1 or greater")
-    warmup_steps = int(cfg.get("warmup_steps", 200))
     min_lr = float(cfg.get("min_lr", 1e-5))
     base_lr = float(cfg["lr"])
 
@@ -680,6 +699,13 @@ def run_training(cfg: dict, args) -> None:
     total_steps = int(cfg.get("scheduler_total_steps", computed_total_steps))
     if total_steps <= 0:
         raise ValueError("scheduler_total_steps must be positive")
+    warmup_steps = resolve_warmup_steps(cfg, total_steps)
+    cfg["resolved_warmup_steps"] = warmup_steps
+    if "warmup_fraction" in cfg:
+        print(
+            f"[scheduler] warmup_fraction={float(cfg['warmup_fraction']):.6f} "
+            f"resolved_warmup_steps={warmup_steps}/{total_steps}"
+        )
     use_cosine = scheduler_name == "cosine"
     if use_cosine:
         warmup_for_lambda = max(1, warmup_steps)

@@ -130,10 +130,94 @@ remains unavailable. A useful result must improve on the batch-128 PPL of `45.21
 the primary promotion gate additionally requires beating validation bigram
 (`43.927`) and trigram (`42.459`).
 
+### Result
+
+All conditions completed their declared optimizer steps and exactly `50,476,876`
+non-PAD training tokens without nonfinite microbatches, aborted accumulation groups,
+or discarded finite work.
+
+| Effective batch | Best epoch | Validation NLL | Validation PPL |
+| ---: | ---: | ---: | ---: |
+| 128 | 2 | 3.811323 | 45.210 |
+| 64 | 1 | 3.763812 | 43.112 |
+| 32 | 2 | 3.886750 | 48.752 |
+| Bigram | - | 3.782536 | 43.927 |
+| Trigram | - | 3.748532 | 42.459 |
+
+Batch 64 reduces PPL by 4.64% relative to batch 128 and beats bigram by `0.018723`
+nats/token. It still trails trigram by `0.015280` nats/token, so the primary gate
+remains failed. Batch 32 is substantially worse. The batch-64 checkpoint selected
+epoch 1; epoch 2 regressed to PPL `44.305`.
+
+The result rejects a monotonic "more updates is better" explanation. Because the
+learning rate remained `3e-4` while batch size decreased, gradient noise and update
+magnitude changed together. The batch-32 degradation and batch-64 epoch-2 regression
+justify a narrow learning-rate ablation at effective batch 64 before introducing a
+new architecture. Exact results and checkpoint hashes are recorded in
+`docs/benchmarks/corrected_effective_batch_ablation.json`.
+
+### Adaptive warmup and learning-rate sweep
+
+Fixed warmup steps are not comparable when accumulation changes the number of
+optimizer updates per token. Training now supports `warmup_fraction` as a
+fail-closed alternative to `warmup_steps`. The resolved count is:
+
+```text
+round(scheduler_total_steps * warmup_fraction)
+```
+
+The two fields cannot be configured together. A 10% policy gives 100, 200, and 400
+warmup steps for the 1,000-, 2,000-, and 4,000-step horizons, keeping warmup aligned
+to training exposure.
+
+The active batch-64 learning-rate matrix uses three fresh random-initialized runs:
+
+| Peak LR | Minimum LR | Warmup | Total steps |
+| ---: | ---: | ---: | ---: |
+| 3.00e-4 | 3.00e-5 | 200 | 2,000 |
+| 2.25e-4 | 2.25e-5 | 200 | 2,000 |
+| 1.50e-4 | 1.50e-5 | 200 | 2,000 |
+
+Both backbone and embedding learning rates change together, and minimum LR remains
+10% of peak so the cosine scheduler shape is matched. The earlier `3e-4` batch-64
+checkpoint is not reused as the anchor because it used only 100 warmup steps.
+
+### Selected-checkpoint context diagnosis
+
+The batch-64 winner changes the earlier context conclusion:
+
+| Input attention window | Validation PPL |
+| ---: | ---: |
+| 1 | 78.474 |
+| 2 | 62.773 |
+| 4 | 53.635 |
+| 8 | 48.411 |
+| 16 | 45.452 |
+| 32 | 43.912 |
+| 64 | 43.344 |
+| 128 | 43.189 |
+| Full | 43.112 |
+
+The original tied checkpoint saturated by four input tokens. The selected untied
+batch-64 checkpoint instead gains strongly through 32 codons, continues improving
+through 64-128, and retains a small full-context gain. It therefore demonstrates
+genuine longer-context use, although it still trails trigram. The paired
+CodonLM-minus-trigram deficit is `+0.015280` nats/token with a 95% packed-window
+bootstrap interval of `[+0.014204, +0.016337]`, so the remaining gap is small but
+statistically robust.
+
+Chunk continuations are not the failure source: their PPL is `42.808`, compared
+with `43.295` for other windows. Stop-codon prediction remains a distinct weakness
+at PPL `484.316`. These results weaken the case for immediately adding a purely
+local convolution. Finish the batch-64 learning-rate ablation first; if the trigram
+gap remains, use transition-level error analysis to decide between a local residual,
+amino-acid/codon factorization, and other targeted interventions.
+
 ## Candidate Architecture Interventions
 
-Architecture changes remain gated on the effective-batch result. The proposed order
-is:
+Architecture changes remain gated on the batch-64 learning-rate result. The
+selected model now uses 32-128 codons of context, so interventions must preserve
+that gain. The proposed order is:
 
 1. Add a zero-initialized causal convolutional residual with local kernels such as
    3, 5, and 9 codons. This directly represents short transitions while preserving
