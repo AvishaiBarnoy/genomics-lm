@@ -852,6 +852,13 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     0.035919 nats/token. Added `docs/PERPLEXITY_BASELINES.md` to distinguish the
     theoretical uniform threshold from empirical Markov thresholds and to state
     what crossing each threshold does and does not establish.
+*   **Batch-64 LR `1.5e-4` Replication Launch (2026-07-29):** Launched a fresh
+    seed-2027 replication of the selected seed-1337 checkpoint on MPS. The frozen
+    dataset, two-epoch 50,476,876-token exposure, effective batch 64, untied
+    embeddings, zero label smoothing, dropout 0.05, LR `1.5e-4`, minimum LR
+    `1.5e-5`, and 200/2,000 adaptive warmup schedule are unchanged. Only model and
+    data-loader seeds, run ID, and provenance contract differ. Validation remains
+    the selection split and the frozen test split remains untouched.
 
 ---
 *End of Log*
