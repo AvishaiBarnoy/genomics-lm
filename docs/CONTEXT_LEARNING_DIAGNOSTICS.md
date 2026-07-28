@@ -156,6 +156,32 @@ justify a narrow learning-rate ablation at effective batch 64 before introducing
 new architecture. Exact results and checkpoint hashes are recorded in
 `docs/benchmarks/corrected_effective_batch_ablation.json`.
 
+### Adaptive warmup and learning-rate sweep
+
+Fixed warmup steps are not comparable when accumulation changes the number of
+optimizer updates per token. Training now supports `warmup_fraction` as a
+fail-closed alternative to `warmup_steps`. The resolved count is:
+
+```text
+round(scheduler_total_steps * warmup_fraction)
+```
+
+The two fields cannot be configured together. A 10% policy gives 100, 200, and 400
+warmup steps for the 1,000-, 2,000-, and 4,000-step horizons, keeping warmup aligned
+to training exposure.
+
+The active batch-64 learning-rate matrix uses three fresh random-initialized runs:
+
+| Peak LR | Minimum LR | Warmup | Total steps |
+| ---: | ---: | ---: | ---: |
+| 3.00e-4 | 3.00e-5 | 200 | 2,000 |
+| 2.25e-4 | 2.25e-5 | 200 | 2,000 |
+| 1.50e-4 | 1.50e-5 | 200 | 2,000 |
+
+Both backbone and embedding learning rates change together, and minimum LR remains
+10% of peak so the cosine scheduler shape is matched. The earlier `3e-4` batch-64
+checkpoint is not reused as the anchor because it used only 100 warmup steps.
+
 ### Selected-checkpoint context diagnosis
 
 The batch-64 winner changes the earlier context conclusion:

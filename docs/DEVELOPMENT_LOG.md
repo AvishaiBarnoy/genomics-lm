@@ -835,6 +835,15 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     windows are not worse, while stop-codon PPL remains high at 484.316. The next
     step remains batch-64 learning-rate optimization; architecture changes must
     preserve the newly demonstrated long-context gain.
+*   **Adaptive Warmup and Batch-64 LR Sweep (2026-07-28):** Added
+    `warmup_fraction` as a mutually exclusive alternative to fixed `warmup_steps`.
+    It resolves against the scheduler horizon and records the result in checkpoint
+    configuration, allowing 10% warmup to scale from 100 to 200 to 400 updates as
+    token-matched effective-batch experiments move from 1,000 to 2,000 to 4,000
+    steps. Launched three fresh batch-64 MPS runs at peak learning rates `3e-4`,
+    `2.25e-4`, and `1.5e-4`, all with 200/2,000 warmup steps. Embedding LR changes
+    with backbone LR and minimum LR stays at 10% of peak. The earlier batch-64 run
+    is not reused because its fixed 100-step warmup is not matched.
 
 ---
 *End of Log*

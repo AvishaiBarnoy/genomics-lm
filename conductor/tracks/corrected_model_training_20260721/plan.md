@@ -90,9 +90,10 @@ an architectural intervention.
   conditions at 2,000 and 4,000 optimizer steps respectively. Keep physical batch,
   seed, data order, model, learning rate, two-epoch token exposure, and validation
   selection fixed.
-- [ ] Run a narrow effective-batch-64 learning-rate ablation. The `3e-4` condition
-  beats bigram at epoch 1 but regresses at epoch 2; compare lower predeclared rates
-  at matched seed, token exposure, scheduler shape, and validation-only selection.
+- [~] Run a narrow effective-batch-64 learning-rate ablation. Compare peak rates
+  `3e-4`, `2.25e-4`, and `1.5e-4` in fresh runs. Use scheduler-relative 10% warmup
+  (200/2,000 steps), scale embedding and minimum rates with the backbone rate, and
+  hold seed, token exposure, scheduler shape, and validation-only selection fixed.
 - [x] Run validation context ablation and a paired packed-window trigram comparison
   for the selected batch-64 checkpoint. Context gains continue through 32-128
   codons; the trigram deficit is `+0.015280` nats/token with 95% CI
