@@ -844,6 +844,14 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     `2.25e-4`, and `1.5e-4`, all with 200/2,000 warmup steps. Embedding LR changes
     with backbone LR and minimum LR stays at 10% of peak. The earlier batch-64 run
     is not reused because its fixed 100-step warmup is not matched.
+*   **Batch-64 LR Sweep Result (2026-07-29):** All three adaptive-warmup runs
+    completed 2,000 optimizer steps and 50,476,876 non-PAD tokens with zero invalid
+    accumulation groups. Independent unsmoothed validation PPL was 46.157 at
+    `3e-4`, 46.103 at `2.25e-4`, and 40.961 at `1.5e-4`. The selected epoch-1
+    `1.5e-4` checkpoint beats the segment-aware trigram baseline (42.459) by
+    0.035919 nats/token. Added `docs/PERPLEXITY_BASELINES.md` to distinguish the
+    theoretical uniform threshold from empirical Markov thresholds and to state
+    what crossing each threshold does and does not establish.
 
 ---
 *End of Log*
