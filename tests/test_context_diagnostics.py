@@ -6,6 +6,7 @@ import pytest
 
 from scripts.diagnose_context_learning import (
     _bootstrap_paired_rows,
+    _evaluation_artifact_role,
     _packing_window_flags,
     _parse_windows,
     _trigram_nll,
@@ -16,6 +17,13 @@ def test_context_window_parser_preserves_full_and_rejects_zero():
     assert _parse_windows("1,2,full,2") == [1, 2, None]
     with pytest.raises(ValueError, match="positive"):
         _parse_windows("0,full")
+
+
+def test_context_diagnostic_maps_validation_manifest_role():
+    assert _evaluation_artifact_role("test") == "test_tokens"
+    assert _evaluation_artifact_role("validation") == "val_tokens"
+    with pytest.raises(ValueError, match="unsupported"):
+        _evaluation_artifact_role("train")
 
 
 def test_packing_window_flags_identify_continuations(tmp_path: Path):

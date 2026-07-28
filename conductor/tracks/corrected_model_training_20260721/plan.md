@@ -85,13 +85,21 @@ an architectural intervention.
 
 - [x] Complete the matched regularization ablation and evaluate best checkpoints
   with manifest-bound unsmoothed validation NLL.
-- [~] Run the token-matched effective-batch ablation. Reuse the completed
+- [x] Run the token-matched effective-batch ablation. Reuse the completed
   batch-128 untied condition and train random-initialized batch-64 and batch-32
   conditions at 2,000 and 4,000 optimizer steps respectively. Keep physical batch,
   seed, data order, model, learning rate, two-epoch token exposure, and validation
   selection fixed.
+- [ ] Run a narrow effective-batch-64 learning-rate ablation. The `3e-4` condition
+  beats bigram at epoch 1 but regresses at epoch 2; compare lower predeclared rates
+  at matched seed, token exposure, scheduler shape, and validation-only selection.
+- [x] Run validation context ablation and a paired packed-window trigram comparison
+  for the selected batch-64 checkpoint. Context gains continue through 32-128
+  codons; the trigram deficit is `+0.015280` nats/token with 95% CI
+  `[+0.014204, +0.016337]`.
 - [ ] If optimization still trails trigram, predeclare a zero-initialized local
-  causal-convolution ablation before testing broader architecture changes. Keep any
+  causal-convolution or amino-acid/codon-factorization ablation based on
+  transition-level errors. Preserve the demonstrated long-context gain and keep any
   explicit Markov-logit residual separately labelled as a hybrid model.
 - [ ] Evaluate uniform, unigram, bigram, trigram, and CodonLM on identical test
   tokens; report loss, perplexity, bits/codon, and improvement over the best baseline.
