@@ -74,10 +74,18 @@ def main() -> None:
     parser.add_argument("--protein-window", type=int, default=10)
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument("--mmseqs-executable", default="mmseqs")
+    parser.add_argument("--minimap2-executable", default="minimap2")
+    parser.add_argument("--nucleotide-preset", default="asm20")
     parser.add_argument(
         "--split-memory-limit",
         default=None,
         help="MMseqs2 memory per target-database split, for example 3G.",
+    )
+    parser.add_argument(
+        "--training-batch-size",
+        type=int,
+        default=5000,
+        help="Maximum training records in each explicit MMseqs2 target batch.",
     )
     args = parser.parse_args()
 
@@ -94,7 +102,10 @@ def main() -> None:
         protein_window=args.protein_window,
         threads=args.threads,
         executable=args.mmseqs_executable,
+        nucleotide_executable=args.minimap2_executable,
+        nucleotide_preset=args.nucleotide_preset,
         split_memory_limit=args.split_memory_limit,
+        training_batch_size=args.training_batch_size,
     )
     report["dataset_manifest"] = manifest_provenance
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")

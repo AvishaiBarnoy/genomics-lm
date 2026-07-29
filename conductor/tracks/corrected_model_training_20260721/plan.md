@@ -141,8 +141,12 @@ an architectural intervention.
   raw sampling has 0% natural stops and 100% hard-cap failures, while the
   target-length CDS constraint also has 0% natural stops. Generated GC rises to
   74-76% versus 52.9% in held-out sources. Exact indexed 10/20-codon coverage is
-  zero. The item remains open only because exhaustive nucleotide/protein nearest
-  neighbors are blocked by MMseqs2 memory on the 8 GB host.
+  zero. The exhaustive nucleotide/protein audit now completes with minimap2 plus
+  bounded MMseqs2 target batches. Stop-probability diagnostics show termination
+  ranks near 61 at natural gene ends; top-k 5/20 removes termination from the
+  sampling support. A 10-prompt pilot restores 90% natural stopping for both seeds
+  at temperature 1.0 without top-k truncation. Run the larger corrected decoder
+  baseline before promoting termination/replay training.
 - [ ] Publish per-seed and aggregate primary results with confidence intervals and
   limitations, then record a go/no-go decision for extensions.
 
