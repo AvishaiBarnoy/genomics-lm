@@ -131,6 +131,10 @@ an architectural intervention.
   grouped folds and seeds). Locked test balanced accuracy improved to 0.501/0.469
   from 0.322/0.349, but the representation still does not consistently beat both
   random controls; AMR-specific pretraining benefit remains unproven.
+  The corrected linear DNA-shape gate also fails. Across two checkpoint seeds,
+  final and layer-2 states are substantially worse than matched random-Transformer,
+  one-hot, and local-sequence controls under both two-genome transfer and
+  five-fold gene-grouped sensitivity protocols.
 - [ ] Run raw and syntax-constrained generation with memorization and nucleotide/
   protein nearest-neighbor audits; do not use critic scores for promotion yet.
 - [ ] Publish per-seed and aggregate primary results with confidence intervals and

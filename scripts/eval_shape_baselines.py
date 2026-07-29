@@ -32,14 +32,29 @@ PROPERTIES = (
 METHODS = ("one_hot", "local_5mer", "local_7mer", "random", "pretrained")
 
 
-def extract_hidden_states(model, input_ids):
+def extract_hidden_states(model, input_ids, hidden_layer: int | str = "final"):
     forward_hidden = getattr(model, "forward_hidden", None)
     if not callable(forward_hidden):
         raise TypeError(f"{type(model).__name__} lacks the verified forward_hidden API")
     if getattr(model, "use_shape_guidance", False):
         raise RuntimeError("shape-guided models require the dedicated artifact-aware extractor")
     with torch.no_grad():
-        return forward_hidden(input_ids).squeeze(0).cpu().numpy()
+        if hidden_layer == "final":
+            hidden = forward_hidden(input_ids)
+        else:
+            iterator = getattr(model, "iter_hidden_states", None)
+            if not callable(iterator):
+                raise TypeError(
+                    f"{type(model).__name__} lacks the verified iter_hidden_states API"
+                )
+            hidden = None
+            for layer, state in iterator(input_ids):
+                if layer == hidden_layer:
+                    hidden = state
+                    break
+            if hidden is None:
+                raise ValueError(f"hidden layer {hidden_layer} is unavailable")
+        return hidden.squeeze(0).cpu().numpy()
 
 
 def make_group_folds(groups: np.ndarray, n_splits: int, seed: int):
@@ -101,16 +116,79 @@ def _read_genomes(path: Path | None):
         }
 
 
+def select_window_indices(
+    spans,
+    genomes,
+    group_by: str,
+    max_windows: int,
+    seed: int,
+):
+    """Select windows deterministically while balancing declared biological groups."""
+    available = sorted(spans)
+    if max_windows <= 0 or max_windows >= len(available):
+        selected = available
+    elif group_by == "window":
+        rng = np.random.default_rng(seed)
+        selected = sorted(rng.choice(available, size=max_windows, replace=False).tolist())
+    else:
+        by_group = defaultdict(list)
+        for window_index in available:
+            for span in spans[window_index]:
+                source = span["source_id"]
+                group = genomes[source] if group_by == "genome" else source
+                by_group[group].append(window_index)
+        rng = np.random.default_rng(seed)
+        queues = {}
+        for group, indices in sorted(by_group.items()):
+            unique = np.asarray(sorted(set(indices)), dtype=np.int64)
+            queues[group] = list(rng.permutation(unique))
+        selected_order, selected_set = [], set()
+        while len(selected_order) < max_windows:
+            progressed = False
+            for group in sorted(queues):
+                while queues[group] and queues[group][-1] in selected_set:
+                    queues[group].pop()
+                if not queues[group]:
+                    continue
+                window_index = int(queues[group].pop())
+                selected_order.append(window_index)
+                selected_set.add(window_index)
+                progressed = True
+                if len(selected_order) == max_windows:
+                    break
+            if not progressed:
+                break
+        selected = sorted(selected_order)
+    selected_group_counts = defaultdict(int)
+    for window_index in selected:
+        window_groups = set()
+        for span in spans[window_index]:
+            source = span["source_id"]
+            if group_by == "genome":
+                if source not in genomes:
+                    raise ValueError(f"missing genome for source_id={source}")
+                window_groups.add(genomes[source])
+            elif group_by == "gene":
+                window_groups.add(source)
+            else:
+                window_groups.add(f"window:{window_index}")
+        for group in window_groups:
+            selected_group_counts[group] += 1
+    return selected, dict(sorted(selected_group_counts.items()))
+
+
 def collect_features(
-    windows, spans, genomes, tokens, pretrained, random_model, group_by, max_windows
+    windows, spans, genomes, tokens, pretrained, random_model, group_by,
+    window_indices, hidden_layer,
 ):
     pretrained_rows, random_rows, token_rows = [], [], []
     mer5_rows, mer7_rows, groups, sample_ids = [], [], [], []
     targets = {name: [] for name in PROPERTIES}
-    for window_index, sequence in enumerate(windows[:max_windows]):
+    for window_index in window_indices:
+        sequence = windows[window_index]
         input_ids = torch.as_tensor(sequence, dtype=torch.long).unsqueeze(0)
-        hidden_pre = extract_hidden_states(pretrained, input_ids)
-        hidden_random = extract_hidden_states(random_model, input_ids)
+        hidden_pre = extract_hidden_states(pretrained, input_ids, hidden_layer)
+        hidden_random = extract_hidden_states(random_model, input_ids, hidden_layer)
         for span_index, span in enumerate(spans.get(window_index, [])):
             start, end = int(span["window_token_start"]), int(span["window_token_end"])
             positions = [pos for pos in range(start, min(end, len(sequence))) if int(sequence[pos]) >= 4]
@@ -211,9 +289,21 @@ def main():
     parser.add_argument("--group-by", choices=("window", "gene", "genome"), default="gene")
     parser.add_argument("--n-splits", type=int, default=5)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--max-seqs", "--max_seqs", dest="max_seqs", type=int, default=50)
+    parser.add_argument("--random-model-seed", type=int, default=19)
+    parser.add_argument(
+        "--hidden-layer",
+        default="final",
+        help="Representation stage: final or an integer block index.",
+    )
+    parser.add_argument(
+        "--max-windows", "--max-seqs", "--max_seqs",
+        dest="max_windows", type=int, default=50,
+    )
     parser.add_argument("--output-prefix", required=True, type=Path)
     args = parser.parse_args()
+    hidden_layer = (
+        "final" if args.hidden_layer == "final" else int(args.hidden_layer)
+    )
     if args.group_by == "genome" and args.cds_metadata is None:
         parser.error("--cds-metadata is required for --group-by genome")
     run_id, run_dir = resolve_run(args.run_id, args.run_dir)
@@ -235,16 +325,22 @@ def main():
     )
     tokens = load_token_list(run_dir)
     pretrained, spec = load_model(run_dir, ckpt_name=args.ckpt)
+    torch.manual_seed(args.random_model_seed)
     random_model = build_model(spec).eval()
     checkpoint_path = run_dir / "checkpoints" / args.ckpt
     if not checkpoint_path.exists():
         checkpoint_path = run_dir / args.ckpt
     vocabulary_path = run_dir / "itos.txt"
     test_path = Path(args.test_npz)
+    windows = _load_windows(test_path)
+    spans = _read_spans(args.packing_metadata)
+    genomes = _read_genomes(args.cds_metadata)
+    selected_windows, selected_window_group_counts = select_window_indices(
+        spans, genomes, args.group_by, args.max_windows, args.seed
+    )
     features, targets, groups, sample_ids = collect_features(
-        _load_windows(test_path), _read_spans(args.packing_metadata),
-        _read_genomes(args.cds_metadata), tokens, pretrained, random_model,
-        args.group_by, args.max_seqs,
+        windows, spans, genomes, tokens, pretrained, random_model,
+        args.group_by, selected_windows, hidden_layer,
     )
     folds, assignments = make_group_folds(groups, args.n_splits, args.seed)
     results, aggregate, paired = evaluate(features, targets, folds)
@@ -253,6 +349,15 @@ def main():
         "dataset_manifest": manifest_provenance,
         "checkpoint_dataset": checkpoint_dataset,
         "group_by": args.group_by, "n_splits": args.n_splits,
+        "sampling": {
+            "seed": args.seed,
+            "max_windows": args.max_windows,
+            "available_windows": len(spans),
+            "selected_windows": selected_windows,
+            "selected_window_group_counts": selected_window_group_counts,
+        },
+        "random_model_seed": args.random_model_seed,
+        "hidden_layer": hidden_layer,
         "dataset": {"path": str(test_path.resolve()), "sha256": _sha256(test_path)},
         "checkpoint": {"path": str(checkpoint_path.resolve()), "sha256": _sha256(checkpoint_path)},
         "vocabulary": {"path": str(vocabulary_path.resolve()), "sha256": _sha256(vocabulary_path), "size": len(tokens)},

@@ -1,0 +1,57 @@
+{
+  "benchmark": "corrected_dna_shape_controls",
+  "date": "2026-07-29",
+  "targets": {
+    "source": "computed local-sequence DNA-shape proxy",
+    "properties": 14,
+    "warning": "These are deterministic computational targets, not independent experimental measurements."
+  },
+  "sampling": {
+    "available_test_windows": 5712,
+    "selected_windows": 100,
+    "seed": 42,
+    "genome_counts": {
+      "GCF_000008525.1": 50,
+      "GCF_000009125.1": 50
+    }
+  },
+  "primary_genome_grouped": {
+    "folds": 2,
+    "positions": 38068,
+    "final_layer": {
+      "one_hot": 0.444837,
+      "local_5mer": 0.766993,
+      "local_7mer": 0.025073,
+      "random_seed19": 0.334176,
+      "codonlm_seed1337": -0.677084,
+      "codonlm_seed2027": -0.659900
+    },
+    "layer_2_cross_task_hypothesis": {
+      "random_seed19": 0.344100,
+      "codonlm_seed1337": -0.669800,
+      "codonlm_seed2027": -0.639600
+    }
+  },
+  "gene_grouped_sensitivity": {
+    "folds": 5,
+    "positions": 37182,
+    "final_layer": {
+      "one_hot": 0.653828,
+      "local_5mer": 0.929831,
+      "local_7mer": 0.844424,
+      "random_seed19": 0.600241,
+      "codonlm_seed1337": 0.009727,
+      "codonlm_seed2027": 0.001300
+    },
+    "layer_2_cross_task_hypothesis": {
+      "random_seed19": 0.608000,
+      "codonlm_seed1337": 0.016800,
+      "codonlm_seed2027": 0.024200
+    }
+  },
+  "decision": {
+    "linear_shape_representation_gate": "failed",
+    "reason": "Both trained checkpoints and both tested layers are substantially worse than matched random-Transformer, one-hot, and local-sequence controls.",
+    "next_step": "Run a capacity-matched nonlinear sensitivity analysis without treating it as evidence of linearly organized shape representations."
+  }
+}

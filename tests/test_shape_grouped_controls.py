@@ -1,7 +1,11 @@
 import numpy as np
 import pytest
 
-from scripts.eval_shape_baselines import _local_mer, make_group_folds
+from scripts.eval_shape_baselines import (
+    _local_mer,
+    make_group_folds,
+    select_window_indices,
+)
 
 
 def test_group_folds_are_disjoint_and_deterministic():
@@ -25,3 +29,22 @@ def test_local_mers_pad_sequence_boundaries():
     assert _local_mer("ATGCCC", 1, 5) == "GCCCN"
     assert _local_mer("ATGCCC", 0, 7) == "NNATGCC"
     assert _local_mer("ATGCCC", 1, 7) == "TGCCCNN"
+
+
+def test_window_sampling_balances_genomes_and_is_deterministic():
+    spans = {
+        index: [{"source_id": f"gene-{index}"}]
+        for index in range(10)
+    }
+    genomes = {
+        f"gene-{index}": "genome-a" if index < 8 else "genome-b"
+        for index in range(10)
+    }
+    first, counts = select_window_indices(
+        spans, genomes, "genome", max_windows=4, seed=17
+    )
+    repeated, repeated_counts = select_window_indices(
+        spans, genomes, "genome", max_windows=4, seed=17
+    )
+    assert first == repeated
+    assert counts == repeated_counts == {"genome-a": 2, "genome-b": 2}

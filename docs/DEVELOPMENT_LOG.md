@@ -911,6 +911,16 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     macro-AUPRC from 0.312/0.331 to 0.447/0.451. This confirms final-layer pooling
     was a major failure mode, but the selected pretrained representations still do
     not consistently exceed both random-Transformer controls.
+*   **Corrected DNA-Shape Linear Controls (2026-07-29):** Added deterministic
+    group-balanced window sampling and explicit random-model/layer provenance.
+    The primary two-genome transfer uses 100 windows balanced 50/50 across the
+    held-out genomes (38,068 positions). Final-layer CodonLM R² was -0.677/-0.660
+    for seeds 1337/2027, versus random 0.334, one-hot 0.445, and centered 5-mer
+    0.767. The independently motivated layer-2 hypothesis also failed
+    (-0.670/-0.640 versus matched random 0.344). Five-fold gene-grouped sensitivity
+    reproduced the gap: pretrained R² 0.001-0.024 versus random 0.600-0.608,
+    one-hot 0.654, and local 5-mer 0.930. These computed targets do not support a
+    claim of linearly organized DNA-shape representations.
 
 ---
 *End of Log*
