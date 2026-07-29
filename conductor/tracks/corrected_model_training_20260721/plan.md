@@ -94,19 +94,25 @@ an architectural intervention.
   `3e-4`, `2.25e-4`, and `1.5e-4` in fresh runs. Use scheduler-relative 10% warmup
   (200/2,000 steps), scale embedding and minimum rates with the backbone rate, and
   hold seed, token exposure, scheduler shape, and validation-only selection fixed.
-- [~] Replicate the selected batch-64, LR `1.5e-4` condition with declared seed
-  2027. The seed-1337 checkpoint reaches validation PPL `40.961`, below trigram
-  `42.459`; promotion still requires replication and final frozen-test evaluation.
+- [x] Replicate the selected batch-64, LR `1.5e-4` condition with declared seed
+  2027. Validation PPL is `40.961` for seed 1337 and `41.436` for seed 2027,
+  below trigram `42.459` in both runs. The paired CodonLM-minus-trigram confidence
+  intervals are entirely below zero. Lock this configuration for final frozen-test
+  evaluation.
 - [x] Run validation context ablation and a paired packed-window trigram comparison
   for the selected batch-64 checkpoint. Context gains continue through 32-128
   codons; the trigram deficit is `+0.015280` nats/token with 95% CI
   `[+0.014204, +0.016337]`.
-- [ ] If optimization still trails trigram, predeclare a zero-initialized local
+- [x] Defer the conditional architecture intervention because the optimized basic
+  model no longer trails trigram. If later work reopens it, predeclare a
+  zero-initialized local
   causal-convolution or amino-acid/codon-factorization ablation based on
   transition-level errors. Preserve the demonstrated long-context gain and keep any
   explicit Markov-logit residual separately labelled as a hybrid model.
-- [ ] Evaluate uniform, unigram, bigram, trigram, and CodonLM on identical test
-  tokens; report loss, perplexity, bits/codon, and improvement over the best baseline.
+- [x] Evaluate unigram, bigram, trigram, and both locked CodonLM replicates on
+  identical frozen-test tokens; report loss, perplexity, bits/codon, and improvement
+  over the best baseline. Seed-1337 and seed-2027 PPL are `39.133` and `39.492`,
+  both below trigram `42.037`.
 - [ ] Extract causal embeddings with dataset/checkpoint/vocabulary/code provenance.
 - [ ] Run EC, essentiality, AMR, and DNA-shape evaluations with controlled splits and
   shared controls.

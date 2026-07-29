@@ -1,0 +1,68 @@
+{
+  "benchmark": "corrected_batch64_lr15_replication",
+  "date": "2026-07-29",
+  "selection_split": "validation",
+  "configuration": {
+    "effective_batch_size": 64,
+    "epochs": 2,
+    "optimizer_steps": 2000,
+    "non_pad_training_tokens": 50476876,
+    "peak_learning_rate": 0.00015,
+    "minimum_learning_rate": 0.000015,
+    "warmup_steps": 200,
+    "warmup_fraction": 0.1,
+    "dropout": 0.05,
+    "label_smoothing": 0.0,
+    "tie_embeddings": false
+  },
+  "validation_baselines": {
+    "uniform": {"nll": 4.204693, "ppl": 67.0},
+    "unigram": {"nll": 3.892183, "ppl": 49.018},
+    "bigram": {"nll": 3.782536, "ppl": 43.927},
+    "trigram": {"nll": 3.748532, "ppl": 42.459}
+  },
+  "test_baselines": {
+    "unigram": {"nll": 3.895213, "ppl": 49.166539, "bits_per_codon": 5.619605},
+    "bigram": {"nll": 3.779984, "ppl": 43.815359, "bits_per_codon": 5.453365},
+    "trigram": {"nll": 3.738549, "ppl": 42.036947, "bits_per_codon": 5.393586}
+  },
+  "replicates": [
+    {
+      "seed": 1337,
+      "run_id": "corrected-codonlm-v1-batch64-lr-ablation-lr_1_5e4",
+      "checkpoint_sha256": "0ab91e5b38a1e9209101eb561ec52de670eee5baa7fb2fbd34d03c77c0f0e082",
+      "validation_tokens": 3228255,
+      "validation_nll": 3.712613,
+      "validation_ppl": 40.961,
+      "codonlm_minus_trigram_nll": -0.035919,
+      "paired_bootstrap_95_ci": [-0.036887, -0.034984],
+      "test_tokens": 2228589,
+      "test_nll": 3.666961473787338,
+      "test_ppl": 39.13281893145237,
+      "test_bits_per_codon": 5.290307,
+      "test_nll_improvement_over_trigram": 0.071587526212662
+    },
+    {
+      "seed": 2027,
+      "run_id": "corrected-codonlm-v1-batch64-lr15-seed2027",
+      "checkpoint_sha256": "02e5dd39eb3d9f39bb8844a0df3bd4ac3fcfc9c367412710c14f12db373073ab",
+      "validation_tokens": 3228255,
+      "validation_nll": 3.724160,
+      "validation_ppl": 41.436,
+      "codonlm_minus_trigram_nll": -0.024372,
+      "paired_bootstrap_95_ci": [-0.025314, -0.023417],
+      "test_tokens": 2228589,
+      "test_nll": 3.676088518585919,
+      "test_ppl": 39.491620832679814,
+      "test_bits_per_codon": 5.303475,
+      "test_nll_improvement_over_trigram": 0.062460481414081
+    }
+  ],
+  "decision": {
+    "validation_trigram_gate": "passed_and_replicated",
+    "test_trigram_gate": "passed_in_both_replicates",
+    "configuration_locked_for_test": true,
+    "test_split_accessed": true,
+    "next_step": "Promote the basic model to controlled causal-embedding and downstream evaluation."
+  }
+}

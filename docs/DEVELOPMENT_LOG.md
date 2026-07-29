@@ -859,6 +859,26 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     `1.5e-5`, and 200/2,000 adaptive warmup schedule are unchanged. Only model and
     data-loader seeds, run ID, and provenance contract differ. Validation remains
     the selection split and the frozen test split remains untouched.
+*   **Batch-64 LR `1.5e-4` Replication Result (2026-07-29):** The seed-2027 run
+    completed the declared 2,000 optimizer steps and 50,476,876 non-PAD tokens
+    with zero invalid accumulation groups. Independent unsmoothed validation PPL
+    was 41.436, compared with 40.961 for seed 1337 and 42.459 for the segment-aware
+    trigram. The paired CodonLM-minus-trigram differences were -0.035919
+    nats/token for seed 1337 (95% packed-window bootstrap CI -0.036887 to
+    -0.034984) and -0.024372 for seed 2027 (95% CI -0.025314 to -0.023417).
+    The validation promotion gate is therefore replicated. Recorded both
+    checkpoint hashes in `docs/benchmarks/corrected_lr15_replication.json` and
+    locked the configuration before the one-time frozen-test evaluation.
+*   **Locked Primary Frozen-Test Result (2026-07-29):** After configuration lock,
+    evaluated both best checkpoints once on the manifest-bound frozen test split
+    (2,228,589 non-PAD tokens). Seed 1337 reached NLL 3.666961, PPL 39.133, and
+    5.2903 bits/codon; seed 2027 reached NLL 3.676089, PPL 39.492, and 5.3035
+    bits/codon. Both beat the train-fitted segment-aware trigram baseline (NLL
+    3.738549, PPL 42.037, 5.3936 bits/codon), improving NLL by 0.071588 and
+    0.062460 nats/token. The replicated basic model passes the intrinsic promotion
+    gate and can proceed to causal embedding extraction and controlled downstream
+    evaluation. This result does not by itself validate structural or functional
+    representations.
 
 ---
 *End of Log*
