@@ -879,6 +879,18 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     gate and can proceed to causal embedding extraction and controlled downstream
     evaluation. This result does not by itself validate structural or functional
     representations.
+*   **Corrected Downstream Readiness Audit (2026-07-29):** Added a fail-closed EC
+    builder aligned to frozen pretraining genome assignments and MMseqs2 protein
+    clusters. All 6,617 matched EC annotations occur in pretraining-train genomes;
+    none occur in pretraining-test genomes, so the legacy EC corpus cannot produce
+    a corrected held-out score. Built the independent CARD AMR split at 30%
+    protein identity and 80% coverage. Quarantined eight invalid internal-stop
+    translations and 25 exact LM-training matches before clustering. The final
+    corpus contains 3,733 train and 1,285 test records across six classes and 185
+    clusters. Its post-build audit against 74,600 LM-training CDSs passes with zero
+    exact duplicates and reports 34 shared protein clusters, median nearest-protein
+    identity 37.2%, and 95th percentile identity 73.9%. AMR is ready for
+    provenance-bound embedding extraction; EC remains blocked on a new corpus.
 
 ---
 *End of Log*
