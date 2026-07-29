@@ -91,6 +91,29 @@ def _pool_hidden(
         return pooled  # (B, D)
 
 
+def _pool_state(
+    hidden: torch.Tensor,
+    idx: torch.Tensor,
+    nonpad_mask: torch.Tensor,
+    *,
+    mode: str,
+    content_ids: set[int],
+) -> torch.Tensor:
+    if mode == "mean_nonpad":
+        mask = nonpad_mask
+    elif mode == "mean_content":
+        mask = torch.zeros_like(nonpad_mask)
+        for token_id in content_ids:
+            mask |= idx.eq(token_id)
+    elif mode == "eos":
+        positions = nonpad_mask.long().sum(dim=1).sub(1).clamp_min(0)
+        return hidden[torch.arange(hidden.size(0), device=hidden.device), positions]
+    else:
+        raise ValueError(f"unsupported pooling mode: {mode}")
+    weights = mask.to(hidden.dtype).unsqueeze(-1)
+    return (hidden * weights).sum(dim=1) / weights.sum(dim=1).clamp_min(1.0)
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -166,10 +189,25 @@ def main() -> None:
         type=int,
         help="Extract from a deterministic random model with the checkpoint architecture.",
     )
+    ap.add_argument(
+        "--hidden-layers",
+        default="final",
+        help="Comma-separated layer stages: 0..n_layer and/or final.",
+    )
+    ap.add_argument(
+        "--pooling-modes",
+        default="mean_nonpad",
+        help="Comma-separated modes: mean_nonpad, mean_content, eos.",
+    )
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
     if args.batch_size < 1:
         ap.error("--batch-size must be at least 1")
+    layer_values: list[int | str] = []
+    for value in args.hidden_layers.split(","):
+        value = value.strip()
+        layer_values.append("final" if value == "final" else int(value))
+    pooling_modes = [value.strip() for value in args.pooling_modes.split(",")]
 
     # Resolve run directory and load model + vocab
     if args.run_dir:
@@ -180,6 +218,12 @@ def main() -> None:
     itos = load_itos(itos_path)
     stoi = {token: index for index, token in enumerate(itos)}
     state_dict, cfg, checkpoint_path = load_codon_checkpoint(rd)
+    valid_layers = set(range(int(cfg["n_layer"]) + 1)) | {"final"}
+    if not layer_values or any(layer not in valid_layers for layer in layer_values):
+        ap.error(f"--hidden-layers must be drawn from {sorted(map(str, valid_layers))}")
+    valid_pooling = {"mean_nonpad", "mean_content", "eos"}
+    if not pooling_modes or any(mode not in valid_pooling for mode in pooling_modes):
+        ap.error(f"--pooling-modes must be drawn from {sorted(valid_pooling)}")
     manifest_provenance = None
     if args.manifest is not None:
         _, manifest_provenance = bind_dataset_manifest(args.manifest)
@@ -264,8 +308,15 @@ def main() -> None:
         if toks:
             examples.append((sid, toks[:max_T]))
 
-    out_vecs: List[np.ndarray] = []
+    representation_vectors: dict[str, List[np.ndarray]] = {
+        f"layer_{layer}__{mode}": []
+        for layer in layer_values
+        for mode in pooling_modes
+    }
     ids: List[str] = []
+    content_ids = {
+        index for index, token in enumerate(itos) if len(token) == 3 and token.isalpha()
+    }
     with torch.no_grad():
         for start in range(0, len(examples), args.batch_size):
             batch = examples[start : start + args.batch_size]
@@ -287,18 +338,39 @@ def main() -> None:
                     ids_tensor.size(0), 3 * ids_tensor.size(1), 4
                 )
                 shapes = encoder(one_hots)
-            pooled = _pool_hidden(
-                model, ids_tensor, nonpad, shape_embeddings=shapes
-            )
-            out_vecs.extend(pooled.cpu().numpy())
+            requested = set(layer_values)
+            iterator = getattr(model, "iter_hidden_states", None)
+            if not callable(iterator):
+                raise TypeError(
+                    f"{type(model).__name__} does not expose iter_hidden_states"
+                )
+            for layer, hidden in iterator(ids_tensor, shape_embeddings=shapes):
+                if layer not in requested:
+                    continue
+                for mode in pooling_modes:
+                    pooled = _pool_state(
+                        hidden,
+                        ids_tensor,
+                        nonpad,
+                        mode=mode,
+                        content_ids=content_ids,
+                    )
+                    representation_vectors[f"layer_{layer}__{mode}"].extend(
+                        pooled.cpu().numpy()
+                    )
             ids.extend(sid for sid, _ in batch)
 
-    if not out_vecs:
+    if not ids:
         raise SystemExit("No valid sequences after tokenization")
-    X = np.stack(out_vecs, axis=0)
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(out_path, X=X, ids=np.array(ids, dtype=object))
+    arrays = {
+        f"X__{name}": np.stack(vectors, axis=0)
+        for name, vectors in representation_vectors.items()
+    }
+    if len(arrays) == 1:
+        arrays["X"] = next(iter(arrays.values()))
+    np.savez_compressed(out_path, **arrays, ids=np.array(ids, dtype=object))
     input_paths = [Path(path) for path in (args.fasta, args.csv) if path]
     metadata = {
         "schema_version": 1,
@@ -318,7 +390,12 @@ def main() -> None:
             if getattr(model, "sep_id", None) is not None
             else "canonical_causal"
         ),
-        "pooling_mode": "mean_nonpad_including_special_tokens",
+        "pooling_mode": (
+            "mean_nonpad_including_special_tokens"
+            if pooling_modes == ["mean_nonpad"]
+            else "multi_representation"
+        ),
+        "representations": sorted(representation_vectors),
         "shape_guidance": bool(getattr(model, "use_shape_guidance", False)),
         "block_size": max_T,
         "extraction_batch_size": args.batch_size,
@@ -328,7 +405,8 @@ def main() -> None:
     out_path.with_suffix(out_path.suffix + ".metadata.json").write_text(
         json.dumps(metadata, indent=2, sort_keys=True) + "\n"
     )
-    print(f"[extract] wrote {args.out} with X.shape={X.shape}")
+    shapes_written = {name: list(array.shape) for name, array in arrays.items()}
+    print(f"[extract] wrote {args.out} with arrays={shapes_written}")
 
 
 if __name__ == "__main__":

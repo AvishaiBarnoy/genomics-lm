@@ -354,6 +354,21 @@ class TinyGPT(nn.Module):
     def forward_hidden(
         self, idx, shape_embeddings=None, attention_window: int | None = None
     ):
+        final = None
+        for _, hidden in self.iter_hidden_states(
+            idx,
+            shape_embeddings=shape_embeddings,
+            attention_window=attention_window,
+        ):
+            final = hidden
+        if final is None:
+            raise RuntimeError("hidden-state iterator produced no states")
+        return final
+
+    def iter_hidden_states(
+        self, idx, shape_embeddings=None, attention_window: int | None = None
+    ):
+        """Yield canonical causal states at embedding, block, and final-norm stages."""
         B, T = idx.shape
         x = self.tok_emb(idx)
         if not self.use_rope:
@@ -365,11 +380,13 @@ class TinyGPT(nn.Module):
 
         attn_mask = self.build_attention_mask(idx, attention_window)
 
-        for blk in self.blocks:
+        yield 0, x
+        for layer, blk in enumerate(self.blocks, start=1):
             x = blk(x, attn_mask=attn_mask)
+            yield layer, x
 
         x = self.ln_f(x)
-        return x
+        yield "final", x
 
 class NoPropBlock(nn.Module):
     def __init__(self, n_embd, n_head, dropout, block_size, n_kv_head: int | None = None, use_sdpa: bool = False):

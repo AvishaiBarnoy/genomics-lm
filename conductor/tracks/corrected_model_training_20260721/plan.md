@@ -127,6 +127,10 @@ an architectural intervention.
   outperform both pretrained final-layer causal-mean representations. Predeclare
   pooling/layer selection using grouped cross-validation within probe training
   before touching the AMR test set again.
+  The train-only ablation selected layer-2 content mean (macro-AUPRC 0.4587 across
+  grouped folds and seeds). Locked test balanced accuracy improved to 0.501/0.469
+  from 0.322/0.349, but the representation still does not consistently beat both
+  random controls; AMR-specific pretraining benefit remains unproven.
 - [ ] Run raw and syntax-constrained generation with memorization and nucleotide/
   protein nearest-neighbor audits; do not use critic scores for promotion yet.
 - [ ] Publish per-seed and aggregate primary results with confidence intervals and

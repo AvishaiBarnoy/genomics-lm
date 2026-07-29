@@ -82,6 +82,38 @@
   "decision": {
     "pretraining_representation_gate": "failed",
     "reason": "Both random-transformer controls outperform both pretrained checkpoints on balanced accuracy, macro-F1, AUROC, and macro-AUPRC.",
-    "next_step": "Predeclare layer and pooling ablations before rerunning AMR; do not modify the frozen language-model checkpoint."
+    "next_step": "Use the train-only selected layer-2 content mean for downstream sensitivity reporting, while retaining the conclusion that AMR-specific pretraining benefit is unproven."
+  },
+  "train_only_representation_selection": {
+    "protocol": "5-fold stratified protein-cluster-grouped CV aggregated across both CodonLM seeds",
+    "primary_metric": "macro_auprc",
+    "winner": "layer_2__mean_content",
+    "winner_macro_auprc_mean": 0.458734,
+    "winner_macro_auprc_std": 0.110852,
+    "runner_up": "layer_2__mean_nonpad",
+    "runner_up_macro_auprc_mean": 0.457618,
+    "test_results_after_lock": [
+      {
+        "seed": 1337,
+        "train_embedding_sha256": "ae71890434a4271c0e281ad5abe3253dd32b56136651cdbd5f0993048fed4224",
+        "test_embedding_sha256": "6445e526ac5458e79cbd02b28995a41868cf9238c1b1e05928ca0dccbd036fd5",
+        "balanced_accuracy": 0.500968,
+        "balanced_accuracy_95_ci": [0.439202, 0.559325],
+        "macro_f1": 0.430720,
+        "macro_auprc": 0.447116,
+        "macro_auprc_95_ci": [0.415260, 0.511792]
+      },
+      {
+        "seed": 2027,
+        "train_embedding_sha256": "bd9c3c3c910276bc9e465ac509b9cba928cd361a8282bb0445628c2e7513a5eb",
+        "test_embedding_sha256": "d63c8a15ded8c8af46d872398503b21a067bcaab005cbbcf6c18e562bfcc4920",
+        "balanced_accuracy": 0.468630,
+        "balanced_accuracy_95_ci": [0.409038, 0.523848],
+        "macro_f1": 0.405053,
+        "macro_auprc": 0.451325,
+        "macro_auprc_95_ci": [0.410368, 0.520011]
+      }
+    ],
+    "conclusion": "Early-layer pooling fixes most of the final-layer deficit but does not establish a consistent advantage over random Transformer controls."
   }
 }

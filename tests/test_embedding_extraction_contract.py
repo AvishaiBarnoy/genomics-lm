@@ -44,6 +44,16 @@ def test_previous_segment_cannot_change_later_segment_hidden_states():
     torch.testing.assert_close(first_hidden[:, 2:], second_hidden[:, 2:])
 
 
+def test_hidden_iterator_final_state_matches_forward_hidden():
+    model = _model()
+    ids = torch.tensor([[1, 4, 5, 6, 7]])
+    with torch.no_grad():
+        expected = model.forward_hidden(ids)
+        states = list(model.iter_hidden_states(ids))
+    assert [layer for layer, _ in states] == [0, 1, 2, "final"]
+    torch.testing.assert_close(states[-1][1], expected)
+
+
 def test_pooling_rejects_unverified_model_api():
     class Unsupported(torch.nn.Module):
         pass
