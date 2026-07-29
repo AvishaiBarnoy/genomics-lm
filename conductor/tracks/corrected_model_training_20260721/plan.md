@@ -90,10 +90,13 @@ an architectural intervention.
   conditions at 2,000 and 4,000 optimizer steps respectively. Keep physical batch,
   seed, data order, model, learning rate, two-epoch token exposure, and validation
   selection fixed.
-- [~] Run a narrow effective-batch-64 learning-rate ablation. Compare peak rates
+- [x] Run a narrow effective-batch-64 learning-rate ablation. Compare peak rates
   `3e-4`, `2.25e-4`, and `1.5e-4` in fresh runs. Use scheduler-relative 10% warmup
   (200/2,000 steps), scale embedding and minimum rates with the backbone rate, and
   hold seed, token exposure, scheduler shape, and validation-only selection fixed.
+- [~] Replicate the selected batch-64, LR `1.5e-4` condition with declared seed
+  2027. The seed-1337 checkpoint reaches validation PPL `40.961`, below trigram
+  `42.459`; promotion still requires replication and final frozen-test evaluation.
 - [x] Run validation context ablation and a paired packed-window trigram comparison
   for the selected batch-64 checkpoint. Context gains continue through 32-128
   codons; the trigram deficit is `+0.015280` nats/token with 95% CI

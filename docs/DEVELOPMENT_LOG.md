@@ -844,6 +844,21 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     `2.25e-4`, and `1.5e-4`, all with 200/2,000 warmup steps. Embedding LR changes
     with backbone LR and minimum LR stays at 10% of peak. The earlier batch-64 run
     is not reused because its fixed 100-step warmup is not matched.
+*   **Batch-64 LR Sweep Result (2026-07-29):** All three adaptive-warmup runs
+    completed 2,000 optimizer steps and 50,476,876 non-PAD tokens with zero invalid
+    accumulation groups. Independent unsmoothed validation PPL was 46.157 at
+    `3e-4`, 46.103 at `2.25e-4`, and 40.961 at `1.5e-4`. The selected epoch-1
+    `1.5e-4` checkpoint beats the segment-aware trigram baseline (42.459) by
+    0.035919 nats/token. Added `docs/PERPLEXITY_BASELINES.md` to distinguish the
+    theoretical uniform threshold from empirical Markov thresholds and to state
+    what crossing each threshold does and does not establish.
+*   **Batch-64 LR `1.5e-4` Replication Launch (2026-07-29):** Launched a fresh
+    seed-2027 replication of the selected seed-1337 checkpoint on MPS. The frozen
+    dataset, two-epoch 50,476,876-token exposure, effective batch 64, untied
+    embeddings, zero label smoothing, dropout 0.05, LR `1.5e-4`, minimum LR
+    `1.5e-5`, and 200/2,000 adaptive warmup schedule are unchanged. Only model and
+    data-loader seeds, run ID, and provenance contract differ. Validation remains
+    the selection split and the frozen test split remains untouched.
 
 ---
 *End of Log*
