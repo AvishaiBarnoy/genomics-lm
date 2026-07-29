@@ -53,15 +53,13 @@ failure is not simple sequence duplication or sample collapse.
 
 ## Remaining Audit
 
-The exhaustive nucleotide/protein nearest-neighbor alignment against all 74,600
-training CDSs remains blocked on the 8 GB host. MMseqs2 could not allocate the
-nucleotide target database even with 512 MB split limits. This must be completed
-with explicit training-database chunking or on a higher-memory host before the
-memorization audit is considered complete.
+The exhaustive nucleotide/protein audit now completes on the 8 GB host using
+minimap2 for nucleotide alignments and explicit 5,000-record MMseqs2 protein
+batches. See `GENERATION_TERMINATION_DIAGNOSTICS.md` for results.
 
 ## Decision
 
-Do not promote the basic model for unguided gene generation. The result motivates
-the predeclared termination/replay phase and a separate decoding/composition
-diagnostic. Syntax constraints may be reported as an inference intervention, but
-they do not repair the model's missing length prior or GC drift.
+Do not promote the top-k 5 decoder for unguided gene generation. A subsequent
+pilot found that unrestricted temperature `1.0` sampling restores natural stopping
+in 9/10 samples for both seeds. That decoder requires a larger controlled
+evaluation before termination/replay training is promoted.

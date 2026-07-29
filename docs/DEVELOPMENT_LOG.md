@@ -930,6 +930,16 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     training-match coverage, but drifted to 74-76% GC versus 52.9% in the held-out
     sources. The natural-generation gate therefore fails. Exhaustive
     nearest-neighbor alignment remains blocked by MMseqs2 memory on the 8 GB host.
+*   **Generation Termination Diagnosis (2026-07-29):** Replaced the generated
+    novelty audit's monolithic nucleotide MMseqs2 search and materialized training
+    substring index with minimap2, bounded MMseqs2 protein target batches, and a
+    query-window streaming scan. Exhaustive auditing now completes against all
+    74,600 training CDSs. At true terminal contexts, termination probability is
+    only 0.32-0.45% and median rank is about 61, so top-k 5/20 makes stopping
+    impossible. In a 10-prompt pilot per seed, unrestricted temperature-1.0
+    sampling restored 90% natural stops and substantially reduced GC drift. The
+    next gate is a larger unrestricted-decoder evaluation before termination/replay
+    training.
 
 ---
 *End of Log*

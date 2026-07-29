@@ -277,7 +277,9 @@ def test_mmseqs_protein_cluster_report_policy_is_nonblocking(tmp_path):
 
 def test_generated_audit_reports_nearest_identity_and_match_coverage(tmp_path):
     executable = tmp_path / "mmseqs"
+    nucleotide_executable = tmp_path / "minimap2"
     _write_fake_mmseqs(executable)
+    _write_fake_minimap2(nucleotide_executable)
     output = tmp_path / "generated_audit.json"
 
     report = audit_generated_sequences(
@@ -287,6 +289,7 @@ def test_generated_audit_reports_nearest_identity_and_match_coverage(tmp_path):
         nucleotide_window=6,
         protein_window=2,
         executable=str(executable),
+        nucleotide_executable=str(nucleotide_executable),
     )
 
     record = report["records"][0]
@@ -296,3 +299,31 @@ def test_generated_audit_reports_nearest_identity_and_match_coverage(tmp_path):
     assert record["protein_nearest"]["target_id"] == "train-a"
     assert 0.0 < record["nucleotide_training_match_coverage"] <= 1.0
     assert 0.0 < record["protein_training_match_coverage"] <= 1.0
+
+
+def test_generated_audit_batches_training_and_keeps_global_best(tmp_path):
+    executable = tmp_path / "mmseqs"
+    nucleotide_executable = tmp_path / "minimap2"
+    _write_fake_mmseqs(executable)
+    _write_fake_minimap2(nucleotide_executable)
+    output = tmp_path / "generated_audit.json"
+
+    report = audit_generated_sequences(
+        [
+            _record("train-poor", "train", "ATGTTTTTTTTTTAA"),
+            _record("train-best", "train", "ATGGCTGCTAAATAA"),
+        ],
+        [_record("generated-a", "generated", "ATGGCTGCTAAATAA")],
+        output,
+        nucleotide_window=6,
+        protein_window=2,
+        executable=str(executable),
+        nucleotide_executable=str(nucleotide_executable),
+        training_batch_size=1,
+    )
+
+    record = report["records"][0]
+    assert record["nucleotide_nearest"] is not None
+    assert record["protein_nearest"]["target_id"] == "train-best"
+    assert report["parameters"]["training_batch_size"] == 1
+    assert sum(command[1] == "easy-search" for command in report["commands"]) == 2

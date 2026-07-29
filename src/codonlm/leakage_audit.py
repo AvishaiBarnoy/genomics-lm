@@ -170,7 +170,8 @@ def _parse_nearest(path: Path) -> list[dict[str, Any]]:
         return rows
     with path.open() as handle:
         for line in handle:
-            query, target, pident, alnlen, qlen, tlen = line.rstrip("\n").split("\t")
+            fields = line.rstrip("\n").split("\t")
+            query, target, pident, alnlen, qlen, tlen = fields[:6]
             rows.append(
                 {
                     "query_id": query,
@@ -180,9 +181,40 @@ def _parse_nearest(path: Path) -> list[dict[str, Any]]:
                     "query_length": int(qlen),
                     "target_length": int(tlen),
                     "query_coverage": int(alnlen) / max(1, int(qlen)),
+                    "bits": float(fields[6]) if len(fields) > 6 else None,
                 }
             )
     return rows
+
+
+def _nearest_rank(row: Mapping[str, Any]) -> tuple[float, float, int]:
+    bits = row.get("bits")
+    return (
+        float(bits) if bits is not None else -1.0,
+        float(row["identity"]),
+        int(row["alignment_length"]),
+    )
+
+
+def _matched_query_windows(
+    queries: Sequence[str], training: Sequence[str], window: int
+) -> set[str]:
+    query_windows = {
+        sequence[start : start + window]
+        for sequence in queries
+        for start in range(max(0, len(sequence) - window + 1))
+    }
+    if not query_windows:
+        return set()
+    matched: set[str] = set()
+    for sequence in training:
+        for start in range(max(0, len(sequence) - window + 1)):
+            candidate = sequence[start : start + window]
+            if candidate in query_windows:
+                matched.add(candidate)
+        if len(matched) == len(query_windows):
+            break
+    return matched
 
 
 def _parse_minimap_paf(path: Path) -> list[dict[str, Any]]:
@@ -577,7 +609,10 @@ def audit_generated_sequences(
     protein_window: int = 10,
     threads: int = 1,
     executable: str = "mmseqs",
+    nucleotide_executable: str = "minimap2",
+    nucleotide_preset: str = "asm20",
     split_memory_limit: str | None = None,
+    training_batch_size: int = 5000,
 ) -> dict[str, Any]:
     """Report nearest training identities and matching-substring coverage."""
     resolved = shutil.which(executable)
@@ -588,30 +623,88 @@ def audit_generated_sequences(
     commands: list[list[str]] = []
     version_result = _run([resolved, "version"], commands)
     version = (version_result.stdout or version_result.stderr).strip()
+    resolved_nucleotide = shutil.which(nucleotide_executable)
+    if resolved_nucleotide is None:
+        raise LeakageAuditError(
+            f"nucleotide aligner {nucleotide_executable!r} was not found"
+        )
+    nucleotide_version_result = _run([resolved_nucleotide, "--version"], commands)
+    nucleotide_version = (
+        nucleotide_version_result.stdout or nucleotide_version_result.stderr
+    ).strip()
     nearest_by_type: dict[str, dict[str, dict[str, Any]]] = {}
 
+    if training_batch_size <= 0:
+        raise ValueError("training_batch_size must be positive")
     converters = {"nucleotide": normalize_cds, "protein": translate_cds}
+    converted_training: dict[str, list[str]] = {}
+    converted_generated: dict[str, list[str]] = {}
     for sequence_type, convert in converters.items():
-        train_fasta = work_dir / f"train_{sequence_type}.fasta"
         generated_fasta = work_dir / f"generated_{sequence_type}.fasta"
-        _write_fasta(
-            train_fasta,
-            ((str(record["source_id"]), convert(record["sequence"])) for record in training),
-        )
+        training_sequences = [convert(record["sequence"]) for record in training]
+        generated_sequences = [convert(record["sequence"]) for record in generated]
+        converted_training[sequence_type] = training_sequences
+        converted_generated[sequence_type] = generated_sequences
         _write_fasta(
             generated_fasta,
-            ((str(record["source_id"]), convert(record["sequence"])) for record in generated),
+            (
+                (str(record["source_id"]), sequence)
+                for record, sequence in zip(generated, generated_sequences)
+            ),
         )
-        output = work_dir / f"nearest_{sequence_type}.tsv"
-        command = [
+        if sequence_type == "nucleotide":
+            train_fasta = work_dir / "train_nucleotide.fasta"
+            _write_fasta(
+                train_fasta,
+                (
+                    (str(record["source_id"]), sequence)
+                    for record, sequence in zip(training, training_sequences)
+                ),
+            )
+            result = _run(
+                [
+                    resolved_nucleotide,
+                    "-x",
+                    nucleotide_preset,
+                    "--secondary=no",
+                    "-t",
+                    str(threads),
+                    str(train_fasta),
+                    str(generated_fasta),
+                ],
+                commands,
+            )
+            output = work_dir / "nearest_nucleotide.paf"
+            output.write_text(result.stdout)
+            nearest_by_type[sequence_type] = {
+                row["query_id"]: row for row in _parse_minimap_paf(output)
+            }
+            continue
+        best_by_query: dict[str, dict[str, Any]] = {}
+        for batch_index, batch_start in enumerate(
+            range(0, len(training), training_batch_size)
+        ):
+            batch_end = min(len(training), batch_start + training_batch_size)
+            train_fasta = work_dir / (
+                f"train_{sequence_type}_{batch_index:04d}.fasta"
+            )
+            _write_fasta(
+                train_fasta,
+                (
+                    (str(training[index]["source_id"]), training_sequences[index])
+                    for index in range(batch_start, batch_end)
+                ),
+            )
+            output = work_dir / f"nearest_{sequence_type}_{batch_index:04d}.tsv"
+            command = [
                 resolved,
                 "easy-search",
                 str(generated_fasta),
                 str(train_fasta),
                 str(output),
-                str(work_dir / f"search_{sequence_type}_tmp"),
+                str(work_dir / f"search_{sequence_type}_{batch_index:04d}_tmp"),
                 "--format-output",
-                "query,target,pident,alnlen,qlen,tlen",
+                "query,target,pident,alnlen,qlen,tlen,bits",
                 "--max-seqs",
                 "1",
                 "--search-type",
@@ -619,25 +712,25 @@ def audit_generated_sequences(
                 "--threads",
                 str(threads),
             ]
-        if split_memory_limit:
-            command.extend(["--split-memory-limit", split_memory_limit])
-        _run(command, commands)
-        nearest_by_type[sequence_type] = {
-            row["query_id"]: row for row in _parse_nearest(output)
-        }
+            if split_memory_limit:
+                command.extend(["--split-memory-limit", split_memory_limit])
+            _run(command, commands)
+            for row in _parse_nearest(output):
+                previous = best_by_query.get(row["query_id"])
+                if previous is None or _nearest_rank(row) > _nearest_rank(previous):
+                    best_by_query[row["query_id"]] = row
+        nearest_by_type[sequence_type] = best_by_query
 
-    training_dna = [normalize_cds(record["sequence"]) for record in training]
-    training_proteins = [translate_cds(record["sequence"]) for record in training]
-    nucleotide_windows = {
-        sequence[start : start + nucleotide_window]
-        for sequence in training_dna
-        for start in range(max(0, len(sequence) - nucleotide_window + 1))
-    }
-    protein_windows = {
-        sequence[start : start + protein_window]
-        for sequence in training_proteins
-        for start in range(max(0, len(sequence) - protein_window + 1))
-    }
+    nucleotide_windows = _matched_query_windows(
+        converted_generated["nucleotide"],
+        converted_training["nucleotide"],
+        nucleotide_window,
+    )
+    protein_windows = _matched_query_windows(
+        converted_generated["protein"],
+        converted_training["protein"],
+        protein_window,
+    )
     rows = []
     for record in generated:
         source_id = str(record["source_id"])
@@ -660,11 +753,26 @@ def audit_generated_sequences(
     report = {
         "schema_version": 1,
         "tool": {"name": "MMseqs2", "executable": resolved, "version": version},
+        "tools": {
+            "protein": {
+                "name": "MMseqs2",
+                "executable": resolved,
+                "version": version,
+            },
+            "nucleotide": {
+                "name": "Minimap2",
+                "executable": resolved_nucleotide,
+                "version": nucleotide_version,
+                "preset": nucleotide_preset,
+            },
+        },
         "parameters": {
             "nucleotide_window": nucleotide_window,
             "protein_window": protein_window,
             "threads": threads,
             "split_memory_limit": split_memory_limit,
+            "training_batch_size": training_batch_size,
+            "nucleotide_preset": nucleotide_preset,
         },
         "commands": commands,
         "training_record_count": len(training),
