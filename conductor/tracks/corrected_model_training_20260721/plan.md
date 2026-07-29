@@ -116,6 +116,11 @@ an architectural intervention.
 - [ ] Extract causal embeddings with dataset/checkpoint/vocabulary/code provenance.
 - [ ] Run EC, essentiality, AMR, and DNA-shape evaluations with controlled splits and
   shared controls.
+  EC preflight is currently blocked: all 6,617 matched legacy EC annotations occur
+  in pretraining-train genomes and none in pretraining-test genomes. The controlled
+  CARD AMR protein-cluster split passes its exact-pretraining-overlap gate after
+  quarantine (3,733 train/1,285 test across six classes). Its report discloses 34
+  protein clusters shared with pretraining.
 - [ ] Run raw and syntax-constrained generation with memorization and nucleotide/
   protein nearest-neighbor audits; do not use critic scores for promotion yet.
 - [ ] Publish per-seed and aggregate primary results with confidence intervals and

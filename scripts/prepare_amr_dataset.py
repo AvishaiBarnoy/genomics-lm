@@ -201,6 +201,21 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _pretraining_train_hashes(meta_path: Path, dna_path: Path) -> set[str]:
+    sequences = dna_path.read_text().splitlines()
+    hashes = set()
+    with meta_path.open(newline="") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            if row.get("split") != "train":
+                continue
+            line_idx = int(row["line_idx"])
+            if line_idx >= len(sequences):
+                raise ValueError(f"line_idx {line_idx} exceeds {dna_path}")
+            normalized = sequences[line_idx].strip().upper().replace("U", "T")
+            hashes.add(hashlib.sha256(normalized.encode("ascii")).hexdigest())
+    return hashes
+
+
 def _cluster_proteins(records, work_dir, executable, min_identity, coverage, threads):
     resolved = shutil.which(executable)
     if resolved is None:
@@ -211,7 +226,7 @@ def _cluster_proteins(records, work_dir, executable, min_identity, coverage, thr
         for index, record in enumerate(records):
             source_key = f"record-{index}"
             record["source_key"] = source_key
-            protein = translate_cds(record["dna"])
+            protein = record.get("protein") or translate_cds(record["dna"])
             if not protein or "X" in protein:
                 raise ValueError(f"invalid translated protein for {record['id']}")
             handle.write(f">{source_key}\n{protein}\n")
@@ -294,6 +309,8 @@ def main(argv=None) -> None:
     ap.add_argument("--min-protein-identity", type=float, default=0.3)
     ap.add_argument("--min-coverage", type=float, default=0.8)
     ap.add_argument("--threads", type=int, default=1)
+    ap.add_argument("--pretraining-cds-meta", type=Path)
+    ap.add_argument("--pretraining-cds-dna", type=Path)
     ap.add_argument("--min_examples", type=int, default=60,
                     help="Minimum gene examples per drug class to include")
     ap.add_argument("--top_n_classes", type=int, default=8,
@@ -307,12 +324,21 @@ def main(argv=None) -> None:
         ap.error("--min-protein-identity must be between 0 and 1")
     if not 0.0 < args.min_coverage <= 1.0:
         ap.error("--min-coverage must be in (0, 1]")
+    if (args.pretraining_cds_meta is None) != (args.pretraining_cds_dna is None):
+        ap.error("--pretraining-cds-meta and --pretraining-cds-dna must be used together")
 
     fasta_path = Path(args.fasta)
     aro_path = Path(args.aro_index)
     out_root = Path(args.out_dir)
     out_dir = out_root / args.protocol
     out_dir.mkdir(parents=True, exist_ok=True)
+    pretraining_hashes = (
+        _pretraining_train_hashes(
+            args.pretraining_cds_meta, args.pretraining_cds_dna
+        )
+        if args.pretraining_cds_meta is not None
+        else set()
+    )
 
     # 1. Load ARO → drug class & family mapping
     print("[amr] Loading ARO index...")
@@ -322,7 +348,14 @@ def main(argv=None) -> None:
     # 2. Parse FASTA and join to drug class & family
     print(f"[amr] Parsing FASTA: {fasta_path}")
     records: list[dict] = []
-    stats = Counter(skipped_no_aro=0, skipped_no_class=0, skipped_too_short=0, skipped_invalid=0, kept=0)
+    stats = Counter(
+        skipped_no_aro=0,
+        skipped_no_class=0,
+        skipped_too_short=0,
+        skipped_invalid=0,
+        skipped_pretraining_exact=0,
+        kept=0,
+    )
 
     for header, seq_parts in _parse_fasta(fasta_path):
         seq = "".join(seq_parts)
@@ -341,12 +374,21 @@ def main(argv=None) -> None:
             continue
         if len(codons) > MAX_CODONS:
             codons = codons[:MAX_CODONS]
+        dna = "".join(codons)
+        protein = translate_cds(dna)
+        if not protein or "X" in protein:
+            stats["skipped_invalid"] += 1
+            continue
+        if hashlib.sha256(dna.encode("ascii")).hexdigest() in pretraining_hashes:
+            stats["skipped_pretraining_exact"] += 1
+            continue
         records.append({
             "id": header.split("|")[1] if "|" in header else header[:40],
             "aro": aro,
             "family": family,
             "sequence": " ".join(codons),
-            "dna": "".join(codons),
+            "dna": dna,
+            "protein": protein,
             "n_codons": len(codons),
             "drug_class": drug_class,
         })
@@ -445,6 +487,22 @@ def main(argv=None) -> None:
             "inputs": {
                 "fasta": {"path": str(fasta_path.resolve()), "sha256": _sha256(fasta_path)},
                 "aro_index": {"path": str(aro_path.resolve()), "sha256": _sha256(aro_path)},
+                "pretraining_cds_meta": (
+                    {
+                        "path": str(args.pretraining_cds_meta.resolve()),
+                        "sha256": _sha256(args.pretraining_cds_meta),
+                    }
+                    if args.pretraining_cds_meta is not None
+                    else None
+                ),
+                "pretraining_cds_dna": (
+                    {
+                        "path": str(args.pretraining_cds_dna.resolve()),
+                        "sha256": _sha256(args.pretraining_cds_dna),
+                    }
+                    if args.pretraining_cds_dna is not None
+                    else None
+                ),
             },
             "clustering": clustering,
             "filtering": dict(stats),
