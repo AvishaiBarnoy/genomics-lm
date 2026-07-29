@@ -94,8 +94,8 @@ an architectural intervention.
   `3e-4`, `2.25e-4`, and `1.5e-4` in fresh runs. Use scheduler-relative 10% warmup
   (200/2,000 steps), scale embedding and minimum rates with the backbone rate, and
   hold seed, token exposure, scheduler shape, and validation-only selection fixed.
-- [ ] Replicate the selected batch-64, LR `1.5e-4` condition with another declared
-  seed. The seed-1337 checkpoint reaches validation PPL `40.961`, below trigram
+- [~] Replicate the selected batch-64, LR `1.5e-4` condition with declared seed
+  2027. The seed-1337 checkpoint reaches validation PPL `40.961`, below trigram
   `42.459`; promotion still requires replication and final frozen-test evaluation.
 - [x] Run validation context ablation and a paired packed-window trigram comparison
   for the selected batch-64 checkpoint. Context gains continue through 32-128
