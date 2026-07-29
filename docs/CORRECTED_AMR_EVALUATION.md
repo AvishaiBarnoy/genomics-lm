@@ -52,3 +52,28 @@ selection on AMR test results. Candidate extraction methods are:
 These methods should be selected using grouped cross-validation inside the AMR
 training partition. The held-out AMR test set should not be reused for choosing the
 pooling method.
+
+## Train-Only Representation Selection
+
+Five-fold stratified protein-cluster-grouped cross-validation was run on the 3,733
+AMR training records only. It compared layers 0, 2, 5, 8, and final with
+content-only mean, non-PAD mean, and EOS pooling for both CodonLM seeds. Macro-AUPRC
+was the declared selection metric.
+
+Layer 2 content-only mean pooling ranked first with mean macro-AUPRC `0.4587`
+(fold/seed standard deviation `0.1109`). Layer 2 non-PAD mean was second at
+`0.4576`; the small margin is a limitation. After locking the winner, it was
+evaluated once on the held-out AMR test set:
+
+| Representation | Balanced accuracy | Macro-F1 | AUROC | Macro-AUPRC |
+| --- | ---: | ---: | ---: | ---: |
+| Layer 2 content mean, seed 1337 | **0.501** | **0.431** | **0.881** | 0.447 |
+| Layer 2 content mean, seed 2027 | 0.469 | 0.405 | 0.875 | **0.451** |
+| Final causal mean, seed 1337 | 0.322 | 0.317 | 0.777 | 0.312 |
+| Final causal mean, seed 2027 | 0.349 | 0.347 | 0.795 | 0.331 |
+
+Early-layer pooling repairs much of the final-layer deficit. It brings CodonLM
+close to random-Transformer balanced accuracy (`0.503-0.508`) but still does not
+consistently exceed the random controls, whose macro-AUPRC is `0.474-0.526`.
+Therefore the extraction failure is confirmed, but an AMR-specific pretraining
+advantage remains unproven.

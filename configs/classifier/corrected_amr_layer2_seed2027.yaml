@@ -1,0 +1,14 @@
+protocol: protein_cluster_held_out_train_cv_selected
+task: corrected_amr_layer2_seed2027
+out_dir: runs/corrected-codonlm-v1-batch64-lr15-seed2027/scores/amr_layer2_mean_content
+require_verified_embeddings: true
+
+data:
+  train_embeddings: runs/corrected-codonlm-v1-batch64-lr15-seed2027/embeddings/amr_protein_cluster/train_layer2_mean_content.npz
+  train_labels: data/processed/downstream/corrected-codonlm-v1/amr/protein_cluster_held_out/train_amr.csv
+  test_embeddings: runs/corrected-codonlm-v1-batch64-lr15-seed2027/embeddings/amr_protein_cluster/test_layer2_mean_content.npz
+  test_labels: data/processed/downstream/corrected-codonlm-v1/amr/protein_cluster_held_out/test_amr.csv
+
+classifier:
+  kind: probe_logreg
+  C: 1.0

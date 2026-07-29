@@ -902,6 +902,15 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     successful intrinsic PPL gate. Pooling and layer choice must be selected using
     grouped cross-validation within probe training before the AMR test set is used
     again.
+*   **AMR Train-Only Layer/Pooling Ablation (2026-07-29):** Added canonical
+    intermediate hidden-state iteration and multi-representation extraction.
+    Five-fold stratified protein-cluster-grouped CV over AMR training records,
+    aggregated across both CodonLM seeds, selected layer-2 content-only mean pooling
+    by macro-AUPRC (0.4587; layer-2 non-PAD mean runner-up 0.4576). After locking,
+    held-out balanced accuracy improved from 0.322/0.349 to 0.501/0.469 and
+    macro-AUPRC from 0.312/0.331 to 0.447/0.451. This confirms final-layer pooling
+    was a major failure mode, but the selected pretrained representations still do
+    not consistently exceed both random-Transformer controls.
 
 ---
 *End of Log*
