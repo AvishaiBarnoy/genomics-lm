@@ -28,7 +28,7 @@ import numpy as np
 import torch
 
 from . import query_model as Q
-from src.codonlm.checkpoints import load_codon_checkpoint
+from src.codonlm.checkpoints import build_codon_model_from_cfg, load_codon_checkpoint
 from src.codonlm.evaluation_provenance import (
     bind_checkpoint_dataset,
     bind_dataset_manifest,
@@ -160,8 +160,16 @@ def main() -> None:
         type=Path,
         help="Frozen pretraining manifest; required for corrected checkpoints.",
     )
+    ap.add_argument("--batch-size", type=int, default=16)
+    ap.add_argument(
+        "--random-init-seed",
+        type=int,
+        help="Extract from a deterministic random model with the checkpoint architecture.",
+    )
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
+    if args.batch_size < 1:
+        ap.error("--batch-size must be at least 1")
 
     # Resolve run directory and load model + vocab
     if args.run_dir:
@@ -177,9 +185,47 @@ def main() -> None:
         _, manifest_provenance = bind_dataset_manifest(args.manifest)
     checkpoint_dataset = bind_checkpoint_dataset(cfg, manifest_provenance)
     _validate_vocabulary(itos, state_dict, cfg, itos_path)
-    model = Q.build_model_from_state(
-        state_dict, cfg, setup_shape_runtime=False
-    )
+    if args.random_init_seed is None:
+        model = Q.build_model_from_state(
+            state_dict, cfg, setup_shape_runtime=False
+        )
+        model_initialization = {"kind": "trained_checkpoint"}
+        model_weights_sha256 = _sha256(checkpoint_path)
+    else:
+        if bool(cfg.get("use_shape_guidance", False)):
+            raise RuntimeError(
+                "random-init extraction is not supported for shape-guided checkpoints"
+            )
+        torch.manual_seed(args.random_init_seed)
+        model = build_codon_model_from_cfg(cfg)
+        model.eval()
+        random_contract = json.dumps(
+            {
+                "architecture": {
+                    key: cfg.get(key)
+                    for key in (
+                        "vocab_size",
+                        "block_size",
+                        "n_layer",
+                        "n_head",
+                        "n_embd",
+                        "dropout",
+                        "tie_embeddings",
+                        "n_kv_head",
+                        "use_sdpa",
+                        "use_swiglu",
+                        "use_rope",
+                    )
+                },
+                "seed": args.random_init_seed,
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+        model_weights_sha256 = hashlib.sha256(random_contract).hexdigest()
+        model_initialization = {
+            "kind": "random",
+            "seed": args.random_init_seed,
+        }
     device = Q.dev()
     model.to(device).eval()
     encoder = lookup = None
@@ -202,39 +248,50 @@ def main() -> None:
     bos = stoi.get("<BOS_CDS>")
     eos = stoi.get("<EOS_CDS>")
     pad = stoi.get("<PAD>", 0)
+    examples: List[Tuple[str, List[int]]] = []
+    max_T = int(cfg.get("block_size", getattr(model, "block_size", 512)))
+    for sid, seq in seqs:
+        if args.mode == "dna_cds":
+            codons = _dna_to_codon_tokens(seq)
+        else:
+            codons = [t for t in seq.strip().upper().split() if t]
+        toks = []
+        if bos is not None:
+            toks.append(bos)
+        toks.extend(stoi[c] for c in codons if c in stoi)
+        if eos is not None:
+            toks.append(eos)
+        if toks:
+            examples.append((sid, toks[:max_T]))
+
     out_vecs: List[np.ndarray] = []
     ids: List[str] = []
-    max_T = int(cfg.get("block_size", getattr(model, "block_size", 512)))
     with torch.no_grad():
-        for sid, seq in seqs:
-            if args.mode == "dna_cds":
-                codons = _dna_to_codon_tokens(seq)
-            else:
-                codons = [t for t in seq.strip().upper().split() if t]
-            # Map to ids; add BOS/EOS if available; truncate to block_size
-            toks = []
-            if bos is not None:
-                toks.append(bos)
-            for c in codons:
-                if c in stoi:
-                    toks.append(stoi[c])
-            if eos is not None:
-                toks.append(eos)
-            if not toks:
-                continue
-            ids_tensor = torch.tensor(
-                toks[:max_T], dtype=torch.long, device=device
-            ).unsqueeze(0)
+        for start in range(0, len(examples), args.batch_size):
+            batch = examples[start : start + args.batch_size]
+            batch_width = max(len(toks) for _, toks in batch)
+            ids_tensor = torch.full(
+                (len(batch), batch_width),
+                pad,
+                dtype=torch.long,
+                device=device,
+            )
+            for row, (_, toks) in enumerate(batch):
+                ids_tensor[row, : len(toks)] = torch.tensor(
+                    toks, dtype=torch.long, device=device
+                )
             nonpad = ids_tensor.ne(pad)
             shapes = None
             if encoder is not None:
-                one_hots = lookup[ids_tensor].view(1, 3 * ids_tensor.size(1), 4)
+                one_hots = lookup[ids_tensor].view(
+                    ids_tensor.size(0), 3 * ids_tensor.size(1), 4
+                )
                 shapes = encoder(one_hots)
             pooled = _pool_hidden(
                 model, ids_tensor, nonpad, shape_embeddings=shapes
             )
-            out_vecs.append(pooled.squeeze(0).cpu().numpy())
-            ids.append(sid)
+            out_vecs.extend(pooled.cpu().numpy())
+            ids.extend(sid for sid, _ in batch)
 
     if not out_vecs:
         raise SystemExit("No valid sequences after tokenization")
@@ -248,6 +305,10 @@ def main() -> None:
         "validation_status": "causal_verified",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "checkpoint": {"path": str(checkpoint_path.resolve()), "sha256": _sha256(checkpoint_path)},
+        "model_weights": {
+            "sha256": model_weights_sha256,
+            "initialization": model_initialization,
+        },
         "dataset_manifest": manifest_provenance or {"status": "legacy_unverified"},
         "checkpoint_dataset": checkpoint_dataset,
         "vocabulary": {"path": str(itos_path.resolve()), "size": len(itos), "sha256": _sha256(itos_path)},
@@ -260,6 +321,7 @@ def main() -> None:
         "pooling_mode": "mean_nonpad_including_special_tokens",
         "shape_guidance": bool(getattr(model, "use_shape_guidance", False)),
         "block_size": max_T,
+        "extraction_batch_size": args.batch_size,
         "truncation_policy": "right_truncate",
         "code_git_sha": _git_sha(),
     }

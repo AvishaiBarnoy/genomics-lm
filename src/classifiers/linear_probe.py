@@ -23,7 +23,7 @@ class ProbeResult:
 def fit_logreg(X: np.ndarray, y: np.ndarray, C: float = 1.0, max_iter: int = 2000, multi_class: str = "auto") -> ProbeResult:
     clf = Pipeline([
         ("scaler", StandardScaler(with_mean=True)),
-        ("clf", LogisticRegression(C=C, max_iter=max_iter, n_jobs=-1))
+        ("clf", LogisticRegression(C=C, max_iter=max_iter))
     ])
     clf.fit(X, y)
     y_pred = clf.predict(X)

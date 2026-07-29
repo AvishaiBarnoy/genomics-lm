@@ -1,0 +1,87 @@
+{
+  "benchmark": "corrected_amr_protein_cluster_held_out",
+  "date": "2026-07-29",
+  "dataset": {
+    "train_records": 3733,
+    "test_records": 1285,
+    "classes": 6,
+    "within_amr_protein_clusters": 185,
+    "exact_test_pretraining_duplicates": 0,
+    "protein_clusters_shared_with_pretraining": 34
+  },
+  "probe": {
+    "classifier": "standardized_logistic_regression",
+    "C": 1.0,
+    "bootstrap": "1000 stratified resamples",
+    "pooling": "causal final-layer mean over non-PAD tokens"
+  },
+  "results": [
+    {
+      "model": "CodonLM",
+      "seed": 1337,
+      "checkpoint_sha256": "0ab91e5b38a1e9209101eb561ec52de670eee5baa7fb2fbd34d03c77c0f0e082",
+      "train_embedding_sha256": "bed5bede64342e77f33068d7544a69aeab09e8c93683149340ce7d11e0391375",
+      "test_embedding_sha256": "07791b85f292246fe7909e4e00c13823d44d6929a6526cd1a73925087d695a0e",
+      "accuracy": 0.806226,
+      "balanced_accuracy": 0.321756,
+      "balanced_accuracy_95_ci": [0.278346, 0.373285],
+      "macro_f1": 0.316719,
+      "macro_f1_95_ci": [0.273669, 0.364270],
+      "auroc": 0.776802,
+      "macro_auprc": 0.312254,
+      "macro_auprc_95_ci": [0.290231, 0.364453]
+    },
+    {
+      "model": "CodonLM",
+      "seed": 2027,
+      "checkpoint_sha256": "02e5dd39eb3d9f39bb8844a0df3bd4ac3fcfc9c367412710c14f12db373073ab",
+      "train_embedding_sha256": "df1fe10ad99c434b294c55b2d2b11878471218f3ac92f4395971a89d4a20532b",
+      "test_embedding_sha256": "919fdd0f0e2087f5e93662bae0943ee81d1373c2d565598b7b0bb97eaa039677",
+      "accuracy": 0.794553,
+      "balanced_accuracy": 0.349127,
+      "balanced_accuracy_95_ci": [0.301255, 0.398672],
+      "macro_f1": 0.347207,
+      "macro_f1_95_ci": [0.301215, 0.398949],
+      "auroc": 0.795111,
+      "macro_auprc": 0.330749,
+      "macro_auprc_95_ci": [0.306648, 0.384434]
+    },
+    {
+      "model": "random_transformer",
+      "seed": 19,
+      "balanced_accuracy": 0.507780,
+      "balanced_accuracy_95_ci": [0.444473, 0.569766],
+      "macro_f1": 0.421995,
+      "macro_f1_95_ci": [0.372368, 0.471834],
+      "auroc": 0.897823,
+      "macro_auprc": 0.525622,
+      "macro_auprc_95_ci": [0.474443, 0.600657]
+    },
+    {
+      "model": "random_transformer",
+      "seed": 23,
+      "balanced_accuracy": 0.503429,
+      "balanced_accuracy_95_ci": [0.442938, 0.566253],
+      "macro_f1": 0.443670,
+      "macro_f1_95_ci": [0.391924, 0.495114],
+      "auroc": 0.878784,
+      "macro_auprc": 0.474048,
+      "macro_auprc_95_ci": [0.426168, 0.551935]
+    },
+    {
+      "model": "nucleotide_3mer_tfidf",
+      "balanced_accuracy": 0.194337,
+      "balanced_accuracy_95_ci": [0.179679, 0.209818],
+      "macro_f1": 0.187389,
+      "macro_f1_95_ci": [0.168655, 0.206011],
+      "auroc": 0.836782,
+      "macro_auprc": 0.342278,
+      "macro_auprc_95_ci": [0.321638, 0.402168]
+    }
+  ],
+  "decision": {
+    "pretraining_representation_gate": "failed",
+    "reason": "Both random-transformer controls outperform both pretrained checkpoints on balanced accuracy, macro-F1, AUROC, and macro-AUPRC.",
+    "next_step": "Predeclare layer and pooling ablations before rerunning AMR; do not modify the frozen language-model checkpoint."
+  }
+}

@@ -113,7 +113,9 @@ an architectural intervention.
   identical frozen-test tokens; report loss, perplexity, bits/codon, and improvement
   over the best baseline. Seed-1337 and seed-2027 PPL are `39.133` and `39.492`,
   both below trigram `42.037`.
-- [ ] Extract causal embeddings with dataset/checkpoint/vocabulary/code provenance.
+- [x] Extract causal AMR embeddings for both corrected seeds with
+  dataset/checkpoint/vocabulary/code provenance. Other downstream datasets remain
+  pending.
 - [ ] Run EC, essentiality, AMR, and DNA-shape evaluations with controlled splits and
   shared controls.
   EC preflight is currently blocked: all 6,617 matched legacy EC annotations occur
@@ -121,6 +123,10 @@ an architectural intervention.
   CARD AMR protein-cluster split passes its exact-pretraining-overlap gate after
   quarantine (3,733 train/1,285 test across six classes). Its report discloses 34
   protein clusters shared with pretraining.
+  The first AMR representation gate fails: both random-Transformer controls
+  outperform both pretrained final-layer causal-mean representations. Predeclare
+  pooling/layer selection using grouped cross-validation within probe training
+  before touching the AMR test set again.
 - [ ] Run raw and syntax-constrained generation with memorization and nucleotide/
   protein nearest-neighbor audits; do not use critic scores for promotion yet.
 - [ ] Publish per-seed and aggregate primary results with confidence intervals and

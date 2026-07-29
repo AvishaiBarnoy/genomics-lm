@@ -41,7 +41,7 @@ class KmerResult:
 def fit_kmer_logreg(seqs: List[str], y: np.ndarray, k: int = 3, tfidf: bool = True, C: float = 1.0, max_iter: int = 2000) -> KmerResult:
     vec = TfidfVectorizer(analyzer=_kmer_analyzer(k), lowercase=False, use_idf=tfidf, norm="l2")
     X = vec.fit_transform(seqs)
-    clf = LogisticRegression(C=C, max_iter=max_iter, n_jobs=-1, multi_class="auto")
+    clf = LogisticRegression(C=C, max_iter=max_iter)
     clf.fit(X, y)
     y_pred = clf.predict(X)
     y_proba = None

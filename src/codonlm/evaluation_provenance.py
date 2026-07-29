@@ -213,9 +213,11 @@ def bind_embedding_pair(
                 train_extraction["dataset_manifest"].get("dataset_id"),
                 test_extraction["dataset_manifest"].get("dataset_id"),
             ),
-            "checkpoint_sha256": (
-                train_extraction["checkpoint"].get("sha256"),
-                test_extraction["checkpoint"].get("sha256"),
+            "model_weights_sha256": (
+                train_extraction.get("model_weights", {}).get("sha256")
+                or train_extraction["checkpoint"].get("sha256"),
+                test_extraction.get("model_weights", {}).get("sha256")
+                or test_extraction["checkpoint"].get("sha256"),
             ),
             "vocabulary_sha256": (
                 train_extraction["vocabulary"].get("sha256"),
