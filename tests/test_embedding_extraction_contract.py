@@ -118,3 +118,61 @@ def test_cli_writes_verified_provenance_sidecar(tmp_path, monkeypatch):
     assert metadata["mask_mode"] == "canonical_causal_segment"
     assert metadata["vocabulary"]["size"] == 12
     assert metadata["inputs"][0]["path"] == str(fasta.resolve())
+    assert metadata["model_weights"]["initialization"]["kind"] == "trained_checkpoint"
+
+
+def test_cli_records_deterministic_random_initialization(tmp_path, monkeypatch):
+    run_dir = tmp_path / "run"
+    (run_dir / "checkpoints").mkdir(parents=True)
+    tokens = ["<PAD>", "<BOS_CDS>", "<EOS_CDS>", "<SEP>", "ATG"] + [
+        f"T{i}" for i in range(7)
+    ]
+    (run_dir / "itos.txt").write_text("\n".join(tokens) + "\n")
+    model = _model()
+    cfg = {
+        "vocab_size": 12,
+        "block_size": 8,
+        "n_layer": 2,
+        "n_head": 2,
+        "n_embd": 16,
+        "dropout": 0.0,
+        "use_sdpa": True,
+    }
+    torch.save(
+        {"model": model.state_dict(), "cfg": cfg},
+        run_dir / "checkpoints" / "best.pt",
+    )
+    fasta = tmp_path / "input.fasta"
+    fasta.write_text(">gene-1\nATG\n")
+    monkeypatch.setattr(extract_embeddings.Q, "dev", lambda: torch.device("cpu"))
+
+    fingerprints = []
+    values = []
+    for index in range(2):
+        output = tmp_path / f"random-{index}.npz"
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "extract_embeddings",
+                "--run_dir",
+                str(run_dir),
+                "--fasta",
+                str(fasta),
+                "--random-init-seed",
+                "19",
+                "--out",
+                str(output),
+            ],
+        )
+        extract_embeddings.main()
+        with np.load(output, allow_pickle=True) as data:
+            values.append(data["X"])
+        metadata = json.loads(output.with_suffix(".npz.metadata.json").read_text())
+        assert metadata["model_weights"]["initialization"] == {
+            "kind": "random",
+            "seed": 19,
+        }
+        fingerprints.append(metadata["model_weights"]["sha256"])
+
+    np.testing.assert_array_equal(values[0], values[1])
+    assert fingerprints[0] == fingerprints[1]

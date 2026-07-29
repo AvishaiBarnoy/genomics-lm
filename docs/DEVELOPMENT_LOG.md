@@ -891,6 +891,17 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     exact duplicates and reports 34 shared protein clusters, median nearest-protein
     identity 37.2%, and 95th percentile identity 73.9%. AMR is ready for
     provenance-bound embedding extraction; EC remains blocked on a new corpus.
+*   **Corrected AMR Representation Result (2026-07-29):** Added batched causal
+    embedding extraction and deterministic random-initialized architecture
+    controls with explicit weight provenance. On the six-class protein-cluster
+    holdout, corrected seed-1337/2027 final-layer causal-mean embeddings reached
+    balanced accuracy 0.322/0.349 and macro-AUPRC 0.312/0.331. Random-Transformer
+    seeds 19/23 reached balanced accuracy 0.508/0.503 and macro-AUPRC 0.526/0.474.
+    A nucleotide 3-mer TF-IDF baseline reached balanced accuracy 0.194 and
+    macro-AUPRC 0.342. The pretraining representation gate fails despite the
+    successful intrinsic PPL gate. Pooling and layer choice must be selected using
+    grouped cross-validation within probe training before the AMR test set is used
+    again.
 
 ---
 *End of Log*

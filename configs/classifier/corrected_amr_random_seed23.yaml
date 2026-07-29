@@ -1,0 +1,14 @@
+protocol: protein_cluster_held_out
+task: corrected_amr_random_seed23
+out_dir: outputs/reports/corrected-codonlm-v1/amr_protein_cluster/random_seed23
+require_verified_embeddings: true
+
+data:
+  train_embeddings: outputs/reports/corrected-codonlm-v1/amr_protein_cluster/random_seed23/train_causal.npz
+  train_labels: data/processed/downstream/corrected-codonlm-v1/amr/protein_cluster_held_out/train_amr.csv
+  test_embeddings: outputs/reports/corrected-codonlm-v1/amr_protein_cluster/random_seed23/test_causal.npz
+  test_labels: data/processed/downstream/corrected-codonlm-v1/amr/protein_cluster_held_out/test_amr.csv
+
+classifier:
+  kind: probe_logreg
+  C: 1.0
