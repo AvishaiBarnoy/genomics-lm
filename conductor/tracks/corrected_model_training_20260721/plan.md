@@ -137,6 +137,12 @@ an architectural intervention.
   five-fold gene-grouped sensitivity protocols.
 - [ ] Run raw and syntax-constrained generation with memorization and nucleotide/
   protein nearest-neighbor audits; do not use critic scores for promotion yet.
+  The replicated 50-prompt generation gate is complete for both corrected seeds:
+  raw sampling has 0% natural stops and 100% hard-cap failures, while the
+  target-length CDS constraint also has 0% natural stops. Generated GC rises to
+  74-76% versus 52.9% in held-out sources. Exact indexed 10/20-codon coverage is
+  zero. The item remains open only because exhaustive nucleotide/protein nearest
+  neighbors are blocked by MMseqs2 memory on the 8 GB host.
 - [ ] Publish per-seed and aggregate primary results with confidence intervals and
   limitations, then record a go/no-go decision for extensions.
 

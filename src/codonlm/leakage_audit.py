@@ -577,6 +577,7 @@ def audit_generated_sequences(
     protein_window: int = 10,
     threads: int = 1,
     executable: str = "mmseqs",
+    split_memory_limit: str | None = None,
 ) -> dict[str, Any]:
     """Report nearest training identities and matching-substring coverage."""
     resolved = shutil.which(executable)
@@ -602,8 +603,7 @@ def audit_generated_sequences(
             ((str(record["source_id"]), convert(record["sequence"])) for record in generated),
         )
         output = work_dir / f"nearest_{sequence_type}.tsv"
-        _run(
-            [
+        command = [
                 resolved,
                 "easy-search",
                 str(generated_fasta),
@@ -618,9 +618,10 @@ def audit_generated_sequences(
                 "1" if sequence_type == "protein" else "3",
                 "--threads",
                 str(threads),
-            ],
-            commands,
-        )
+            ]
+        if split_memory_limit:
+            command.extend(["--split-memory-limit", split_memory_limit])
+        _run(command, commands)
         nearest_by_type[sequence_type] = {
             row["query_id"]: row for row in _parse_nearest(output)
         }
@@ -663,6 +664,7 @@ def audit_generated_sequences(
             "nucleotide_window": nucleotide_window,
             "protein_window": protein_window,
             "threads": threads,
+            "split_memory_limit": split_memory_limit,
         },
         "commands": commands,
         "training_record_count": len(training),

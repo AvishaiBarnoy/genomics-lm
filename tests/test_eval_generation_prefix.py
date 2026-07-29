@@ -3,6 +3,7 @@ from pathlib import Path
 
 from scripts import query_model as Q
 from scripts.eval_generation_prefix import (
+    _extract_frozen_split_cds,
     _bootstrap_interval,
     _codon_to_aa,
     _load_vocab_for_run,
@@ -13,6 +14,47 @@ from scripts.eval_generation_prefix import (
     _sample_seed,
     _training_match_coverage,
 )
+
+
+def test_extract_frozen_split_cds_balances_genomes(tmp_path):
+    import json
+
+    metadata = tmp_path / "cds_meta.tsv"
+    dna = tmp_path / "cds_dna.txt"
+    metadata.write_text(
+        "line_idx\tsplit\tsource_id\tgenome\n"
+        "0\ttest\ta1\tgenome-a\n"
+        "1\ttest\ta2\tgenome-a\n"
+        "2\ttest\tb1\tgenome-b\n"
+        "3\ttest\tb2\tgenome-b\n"
+        "4\ttrain\tt1\tgenome-train\n"
+    )
+    dna.write_text(
+        "ATGAAATAA\nATGCCCTAA\nATGGGGTAA\nATGTTTTAA\nATGACGTAA\n"
+    )
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "artifacts": {
+                    "source_metadata": {"path": "cds_meta.tsv"},
+                    "source_dna": {"path": "cds_dna.txt"},
+                }
+            }
+        )
+    )
+    run_dir = tmp_path / "run"
+
+    selected_path, provenance = _extract_frozen_split_cds(
+        run_dir, manifest, "test", max_genes=4, seed=17
+    )
+
+    assert len(selected_path.read_text().splitlines()) == 4
+    assert provenance["split"] == "test"
+    assert provenance["selected_group_counts"] == {
+        "genome-a": 2,
+        "genome-b": 2,
+    }
 
 
 def test_ngram_repeat_ratio_simple():
@@ -204,12 +246,14 @@ def test_eval_generation_prefix_end_to_end(tmp_path):
         protocol_samples_csv = test_run_dir / "scores" / "gen_prefix" / "protocol_samples.csv"
         protocol_summary_csv = test_run_dir / "scores" / "gen_prefix" / "protocol_summary.csv"
         protocol_manifest = test_run_dir / "scores" / "gen_prefix" / "protocol_manifest.json"
+        generated_fasta = test_run_dir / "scores" / "gen_prefix" / "generated_protocols.fasta"
         
         assert samples_csv.exists()
         assert summary_csv.exists()
         assert protocol_samples_csv.exists()
         assert protocol_summary_csv.exists()
         assert protocol_manifest.exists()
+        assert generated_fasta.exists()
 
         with protocol_samples_csv.open() as f:
             protocol_rows = list(csv.DictReader(f))

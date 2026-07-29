@@ -35,6 +35,7 @@ import torch
 import matplotlib.pyplot as plt
 
 from . import query_model as Q
+from src.codonlm.dataset_manifest import manifest_artifact_path
 from src.codonlm.generate import (
     generate_cds_constrained,
     generate_cds_critic_guided,
@@ -110,9 +111,15 @@ def _load_run_meta(run_dir: Path) -> dict:
     raise FileNotFoundError(f"meta.json missing under {run_dir}")
 
 
-def _resolve_repo_path(repo: Path, raw_path: str | Path | None) -> Path | None:
+def _resolve_repo_path(
+    repo: Path, raw_path: str | Path | dict | None
+) -> Path | None:
     if not raw_path:
         return None
+    if isinstance(raw_path, dict):
+        raw_path = raw_path.get("path")
+        if not raw_path:
+            return None
     path = Path(raw_path)
     return path if path.is_absolute() else repo / path
 
@@ -199,7 +206,91 @@ def _build_train_ngram_set(repo: Path, cfg: dict, n: int, max_tokens: int) -> se
     return ngram_set
 
 
-def _resolve_cds_dna_path(repo: Path, run_dir: Path, cfg: dict, max_genes: int) -> Path | None:
+def _extract_frozen_split_cds(
+    run_dir: Path,
+    manifest_path: Path,
+    split: str,
+    max_genes: int,
+    seed: int,
+) -> tuple[Path, dict]:
+    manifest = json.loads(manifest_path.read_text())
+    resolved_manifest = manifest_path.expanduser().resolve()
+    metadata_path = manifest_artifact_path(
+        manifest, resolved_manifest, "source_metadata"
+    )
+    dna_path = manifest_artifact_path(manifest, resolved_manifest, "source_dna")
+    grouped: dict[str, list[tuple[str, str]]] = {}
+    with metadata_path.open(newline="") as metadata_handle, dna_path.open() as dna_handle:
+        metadata_rows = csv.DictReader(metadata_handle, delimiter="\t")
+        for index, (row, sequence) in enumerate(zip(metadata_rows, dna_handle)):
+            if int(row["line_idx"]) != index:
+                raise ValueError(
+                    f"source metadata line_idx mismatch at row {index}: {row['line_idx']}"
+                )
+            if row["split"] != split:
+                continue
+            group = row.get("genome") or row.get("source_id") or "unknown"
+            grouped.setdefault(group, []).append(
+                (row.get("source_id") or f"record-{index}", sequence.strip())
+            )
+    if not grouped:
+        raise ValueError(f"frozen manifest contains no records for split {split!r}")
+
+    rng = random.Random(seed)
+    for records in grouped.values():
+        rng.shuffle(records)
+    group_names = sorted(grouped)
+    selected: list[tuple[str, str, str]] = []
+    cursor = 0
+    while len(selected) < max_genes:
+        made_progress = False
+        for group in group_names:
+            records = grouped[group]
+            if cursor < len(records):
+                source_id, sequence = records[cursor]
+                selected.append((source_id, group, sequence))
+                made_progress = True
+                if len(selected) >= max_genes:
+                    break
+        if not made_progress:
+            break
+        cursor += 1
+
+    out_path = run_dir / "scores" / f"_eval_{split}_cds_dna.txt"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text("".join(f"{sequence}\n" for _, _, sequence in selected))
+    return out_path, {
+        "manifest": str(resolved_manifest),
+        "manifest_sha256": hashlib.sha256(resolved_manifest.read_bytes()).hexdigest(),
+        "split": split,
+        "selection": "seeded_shuffle_then_round_robin_by_genome",
+        "seed": seed,
+        "available_groups": group_names,
+        "selected_group_counts": {
+            group: sum(1 for _, selected_group, _ in selected if selected_group == group)
+            for group in group_names
+        },
+        "selected_source_ids": [source_id for source_id, _, _ in selected],
+    }
+
+
+def _resolve_cds_dna_path(
+    repo: Path,
+    run_dir: Path,
+    cfg: dict,
+    max_genes: int,
+    seed: int,
+    dataset_manifest: Path | None,
+    source_split: str,
+) -> tuple[Path | None, dict]:
+    configured_manifest = dataset_manifest or _resolve_repo_path(
+        repo, cfg.get("dataset_manifest")
+    )
+    if configured_manifest is not None and configured_manifest.exists():
+        return _extract_frozen_split_cds(
+            run_dir, configured_manifest, source_split, max_genes, seed
+        )
+
     # Legacy/main.sh manifest layout.
     manifest = run_dir / "combined_manifest.json"
     if manifest.exists():
@@ -207,13 +298,13 @@ def _resolve_cds_dna_path(repo: Path, run_dir: Path, cfg: dict, max_genes: int) 
         if data.get("datasets"):
             dna_path = _resolve_repo_path(repo, data["datasets"][0].get("dna"))
             if dna_path is not None and dna_path.exists():
-                return dna_path
+                return dna_path, {"status": "legacy_unverified"}
 
     # Direct config override for future runs.
     for key in ("dna_path", "cds_dna", "primary_dna"):
         dna_path = _resolve_repo_path(repo, cfg.get(key))
         if dna_path is not None and dna_path.exists():
-            return dna_path
+            return dna_path, {"status": "legacy_unverified"}
 
     manifest_candidates = [cfg.get("hybrid_manifest"), cfg.get("combined_manifest")]
     train_npz = cfg.get("train_npz")
@@ -229,8 +320,8 @@ def _resolve_cds_dna_path(repo: Path, run_dir: Path, cfg: dict, max_genes: int) 
         if manifest_path is not None and manifest_path.exists():
             dna_path = _extract_hybrid_cds_file(repo, run_dir, manifest_path, max_genes=max(10000, max_genes))
             if dna_path is not None and dna_path.exists():
-                return dna_path
-    return None
+                return dna_path, {"status": "legacy_unverified"}
+    return None, {"status": "unresolved"}
 
 
 def _model_spec_from(meta: dict, ckpt: object) -> dict:
@@ -493,6 +584,18 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run_id", required=True)
     ap.add_argument(
+        "--dataset_manifest",
+        type=Path,
+        default=None,
+        help="Frozen dataset manifest. Defaults to the checkpoint configuration.",
+    )
+    ap.add_argument(
+        "--source_split",
+        choices=("train", "val", "test"),
+        default="test",
+        help="Frozen source-record split from which generation prefixes are sampled.",
+    )
+    ap.add_argument(
         "--preset",
         choices=sorted(PRESETS),
         default=None,
@@ -739,7 +842,15 @@ def main() -> None:
         raise SystemExit("require 0 < min_aa_len ≤ target_aa_len ≤ max_aa_len")
 
     # Choose CDS corpus from legacy combined manifest, config, or hybrid manifest.
-    dna_path = _resolve_cds_dna_path(repo, run_dir, cfg, max_genes=args.max_genes)
+    dna_path, source_provenance = _resolve_cds_dna_path(
+        repo,
+        run_dir,
+        cfg,
+        max_genes=args.max_genes,
+        seed=args.seed,
+        dataset_manifest=args.dataset_manifest,
+        source_split=args.source_split,
+    )
     if dna_path is None or not dna_path.exists():
         raise SystemExit(
             "[gen-prefix] could not locate a CDS dna file via combined or hybrid manifest"
@@ -947,6 +1058,7 @@ def main() -> None:
 
     rows: List[SampleResult] = []
     protocol_rows: List[ProtocolResult] = []
+    protocol_sequences: list[tuple[str, str]] = []
     k_list = [int(x) for x in args.k_list.split(",") if x]
     total_expected = len(cds) * len(k_list) * int(args.samples)
     done = 0
@@ -1073,7 +1185,7 @@ def main() -> None:
                     temperature=float(args.temperature),
                     topk=int(args.topk) if args.topk > 0 else 0,
                 )
-                raw_result, _ = score_protocol(
+                raw_result, raw_metrics = score_protocol(
                     generated_ids=raw_gen_ids,
                     generation_info=raw_info,
                     protocol="raw_model",
@@ -1106,7 +1218,7 @@ def main() -> None:
                         multi_offset_prior_enabled=False,
                         cds_only=True,
                     )
-                    constrained_result, _ = score_protocol(
+                    constrained_result, constrained_metrics = score_protocol(
                         generated_ids=constrained_ids,
                         generation_info=constrained_info,
                         protocol="cds_constrained",
@@ -1123,9 +1235,26 @@ def main() -> None:
                     )
                 else:
                     constrained_result = selected_result
+                    constrained_metrics = selected_metrics
                 protocol_rows.extend([raw_result, constrained_result])
+                record_key = f"gene{gene_idx}_k{k}_sample{sidx}_seed{paired_seed}"
+                protocol_sequences.extend(
+                    [
+                        (
+                            f"raw_model_{record_key}",
+                            "".join(raw_metrics["codons"]),
+                        ),
+                        (
+                            f"cds_constrained_{record_key}",
+                            "".join(constrained_metrics["codons"]),
+                        ),
+                    ]
+                )
                 if is_guided:
                     protocol_rows.append(selected_result)
+                    protocol_sequences.append(
+                        (f"guided_{record_key}", "".join(selected_metrics["codons"]))
+                    )
 
                 codons = selected_metrics["codons"]
                 aaid = selected_metrics["aa_identity"]
@@ -1229,6 +1358,13 @@ def main() -> None:
             )
     print(f"[gen-prefix] wrote {protocol_samples_csv}")
 
+    generated_fasta = out_dir / "generated_protocols.fasta"
+    with generated_fasta.open("w") as handle:
+        for record_id, sequence in protocol_sequences:
+            if sequence:
+                handle.write(f">{record_id}\n{sequence}\n")
+    print(f"[gen-prefix] wrote {generated_fasta}")
+
     protocol_summary = []
     protocols = ("raw_model", "cds_constrained", "guided")
     for k in k_list:
@@ -1294,6 +1430,7 @@ def main() -> None:
         "schema_version": 1,
         "run_id": args.run_id,
         "checkpoint": str(weights_path),
+        "source_data": source_provenance,
         "base_seed": int(args.seed),
         "sample_seed_derivation": "sha256(base_seed:gene_idx:k:sample_id)[0:4]",
         "confidence_interval": {
