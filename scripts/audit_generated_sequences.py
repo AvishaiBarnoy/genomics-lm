@@ -74,6 +74,11 @@ def main() -> None:
     parser.add_argument("--protein-window", type=int, default=10)
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument("--mmseqs-executable", default="mmseqs")
+    parser.add_argument(
+        "--split-memory-limit",
+        default=None,
+        help="MMseqs2 memory per target-database split, for example 3G.",
+    )
     args = parser.parse_args()
 
     if args.manifest is not None:
@@ -89,6 +94,7 @@ def main() -> None:
         protein_window=args.protein_window,
         threads=args.threads,
         executable=args.mmseqs_executable,
+        split_memory_limit=args.split_memory_limit,
     )
     report["dataset_manifest"] = manifest_provenance
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")

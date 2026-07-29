@@ -921,6 +921,15 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     reproduced the gap: pretrained R² 0.001-0.024 versus random 0.600-0.608,
     one-hot 0.654, and local 5-mer 0.930. These computed targets do not support a
     claim of linearly organized DNA-shape representations.
+*   **Corrected Base-Model Generation Gate (2026-07-29):** Evaluated both promoted
+    basic-model seeds on 50 start-codon prompts balanced across the two frozen
+    held-out genomes. Raw full-vocabulary sampling produced zero natural stops and
+    hit the 300-token cap in all 100 samples across seeds. CDS-token-constrained
+    sampling also produced zero natural stops and returned at its imposed
+    256-codon target. Samples were unique with zero indexed exact 10/20-codon
+    training-match coverage, but drifted to 74-76% GC versus 52.9% in the held-out
+    sources. The natural-generation gate therefore fails. Exhaustive
+    nearest-neighbor alignment remains blocked by MMseqs2 memory on the 8 GB host.
 
 ---
 *End of Log*

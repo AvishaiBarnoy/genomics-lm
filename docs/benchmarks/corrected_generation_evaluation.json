@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "protocol": {
+    "source_split": "test",
+    "held_out_genomes": 2,
+    "prompts": 50,
+    "prompts_per_genome": 25,
+    "prefix_codons": 1,
+    "samples_per_prompt": 1,
+    "temperature": 0.8,
+    "topk": 5,
+    "max_new_tokens": 300,
+    "constrained_target_codons": 256
+  },
+  "held_out_source_mean_gc": 0.5290762430320225,
+  "runs": [
+    {
+      "seed": 1337,
+      "raw_model": {
+        "natural_stop_rate": 0.0,
+        "hard_cap_rate": 1.0,
+        "mean_total_codons": 301.0,
+        "unique_fraction": 1.0,
+        "mean_gc": 0.7435658914728684,
+        "codon_js_vs_held_out_sources": 0.2940788899659267
+      },
+      "cds_constrained": {
+        "natural_stop_rate": 0.0,
+        "hard_cap_rate": 0.0,
+        "mean_total_codons": 257.0,
+        "unique_fraction": 1.0,
+        "mean_gc": 0.7429053177691309,
+        "codon_js_vs_held_out_sources": 0.2923885084440104
+      }
+    },
+    {
+      "seed": 2027,
+      "raw_model": {
+        "natural_stop_rate": 0.0,
+        "hard_cap_rate": 1.0,
+        "mean_total_codons": 301.0,
+        "unique_fraction": 1.0,
+        "mean_gc": 0.7617940199335547,
+        "codon_js_vs_held_out_sources": 0.3052989229936909
+      },
+      "cds_constrained": {
+        "natural_stop_rate": 0.0,
+        "hard_cap_rate": 0.0,
+        "mean_total_codons": 257.0,
+        "unique_fraction": 1.0,
+        "mean_gc": 0.7626459143968873,
+        "codon_js_vs_held_out_sources": 0.30306335024378706
+      }
+    }
+  ],
+  "memorization": {
+    "indexed_training_tokens": 10000384,
+    "exact_10_codon_match_coverage": 0.0,
+    "exact_20_codon_match_coverage": 0.0,
+    "exhaustive_nearest_neighbor_status": "blocked_mmseqs2_memory"
+  },
+  "decision": "failed_natural_generation_gate"
+}
