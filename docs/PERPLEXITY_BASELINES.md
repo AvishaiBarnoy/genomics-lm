@@ -48,11 +48,30 @@ The frozen genome validation comparison uses `3,228,255` non-PAD targets:
 | Unigram | 3.892183 | 49.018 |
 | Bigram | 3.782536 | 43.927 |
 | Trigram | 3.748532 | 42.459 |
-| CodonLM, batch 64, LR `1.5e-4` | **3.712613** | **40.961** |
+| CodonLM, batch 64, LR `1.5e-4`, seed 1337 | **3.712613** | **40.961** |
+| CodonLM, batch 64, LR `1.5e-4`, seed 2027 | **3.724160** | **41.436** |
 
-The selected CodonLM now beats trigram by `0.035919` nats/token. Its context
-ablation also improves through 32-128 codons, so the gain is consistent with using
-information unavailable to a two-codon Markov table.
+The selected CodonLM beats trigram in both declared replicates: by `0.035919`
+nats/token for seed 1337 (95% packed-window bootstrap CI
+`[-0.036887, -0.034984]`) and by `0.024372` for seed 2027 (95% CI
+`[-0.025314, -0.023417]`). Its context ablation also improves through 32-128
+codons, so the gain is consistent with using information unavailable to a
+two-codon Markov table. These are validation results; final test results are
+reported only after the configuration is locked.
+
+After locking the configuration, both best checkpoints were evaluated once on the
+frozen test split:
+
+| Model | Test NLL | Test PPL | Bits/codon |
+| --- | ---: | ---: | ---: |
+| Unigram | 3.895213 | 49.167 | 5.6196 |
+| Bigram | 3.779984 | 43.815 | 5.4534 |
+| Trigram | 3.738549 | 42.037 | 5.3936 |
+| CodonLM, seed 1337 | **3.666961** | **39.133** | **5.2903** |
+| CodonLM, seed 2027 | **3.676089** | **39.492** | **5.3035** |
+
+Thus the trigram promotion gate holds on the untouched test split for both seeds,
+by `0.071588` and `0.062460` nats/token respectively.
 
 ## What PPL Says the Model Learned
 
