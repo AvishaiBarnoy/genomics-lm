@@ -341,6 +341,18 @@ def run_training(cfg: dict, args) -> None:
     termination_n_classes = int(cfg.get("termination_n_classes", len(termination_bucket_edges) + 1))
     if termination_n_classes != len(termination_bucket_edges) + 1:
         raise ValueError("termination_n_classes must equal len(termination_bucket_edges) + 1")
+    termination_class_weights_raw = cfg.get("termination_class_weights")
+    termination_class_weight_values = None
+    if termination_class_weights_raw is not None:
+        if len(termination_class_weights_raw) != termination_n_classes:
+            raise ValueError(
+                "termination_class_weights must contain termination_n_classes values"
+            )
+        termination_class_weight_values = [
+            float(value) for value in termination_class_weights_raw
+        ]
+        if any(value <= 0 for value in termination_class_weight_values):
+            raise ValueError("termination_class_weights values must be positive")
     replay_loss_enabled = bool(cfg.get("replay_loss_enabled", False))
     replay_loss_weight = float(cfg.get("replay_loss_weight", 0.1))
     replay_data = cfg.get("replay_data")
@@ -349,7 +361,8 @@ def run_training(cfg: dict, args) -> None:
     if termination_loss_enabled:
         print(
             f"[loss] termination_aux weight={termination_loss_weight} "
-            f"stop_ids={termination_stop_ids} bucket_edges={termination_bucket_edges}"
+            f"stop_ids={termination_stop_ids} bucket_edges={termination_bucket_edges} "
+            f"class_weights={termination_class_weights_raw}"
         )
     if replay_loss_enabled:
         if not replay_data:
@@ -451,6 +464,15 @@ def run_training(cfg: dict, args) -> None:
     print(f"[device] using {device}")
     torch.manual_seed(base_seed)
     amp = bool(cfg.get("amp", True)) and (device.type == "mps")
+    termination_class_weights = (
+        torch.tensor(
+            termination_class_weight_values,
+            dtype=torch.float32,
+            device=device,
+        )
+        if termination_class_weight_values is not None
+        else None
+    )
 
     use_shape_guidance = bool(cfg.get("use_shape_guidance", False))
     encoder = None
@@ -1026,7 +1048,11 @@ def run_training(cfg: dict, args) -> None:
                             stop_ids=termination_stop_ids,
                             bucket_edges=termination_bucket_edges,
                         )
-                        term_loss_ = termination_aux_loss(term_logits, term_labels)
+                        term_loss_ = termination_aux_loss(
+                            term_logits,
+                            term_labels,
+                            class_weights=termination_class_weights,
+                        )
                         total_loss_ = total_loss_ + (termination_loss_weight * term_loss_)
                     replay_loss_ = None
                     if split == "train" and replay_loader is not None:

@@ -1,0 +1,89 @@
+# Phase 6 head-only termination ablation from the promoted corrected base model.
+dataset_manifest: data/processed/corrected/corrected-codonlm-v1/genome/manifest.json
+itos_path: data/processed/corrected/corrected-codonlm-v1/genome/itos.txt
+train_npz: data/processed/corrected/corrected-codonlm-v1/genome/train_bs512.npz
+val_npz: data/processed/corrected/corrected-codonlm-v1/genome/val_bs512.npz
+test_npz: data/processed/corrected/corrected-codonlm-v1/genome/test_bs512.npz
+
+run_id: corrected-termination-head-seed1337
+seed: 1337
+dataloader_seed: 1337
+epochs: 1
+max_time_minutes: null
+
+block_size: 512
+vocab_size: 68
+n_layer: 10
+n_head: 8
+n_embd: 384
+dropout: 0.05
+label_smoothing: 0.0
+tie_embeddings: false
+use_sdpa: true
+sep_mask_enabled: true
+n_kv_head: null
+use_rope: false
+use_swiglu: false
+use_shape_guidance: false
+unfreeze_encoder: false
+multi_offset_loss_enabled: false
+multi_offset_targets: []
+
+termination_loss_enabled: true
+termination_loss_weight: 0.1
+termination_stop_ids: [2]
+termination_bucket_edges: [0, 3, 10, 30]
+termination_n_classes: 5
+# Square-root inverse-frequency weights, normalized to E[w] = 1 on frozen train.
+termination_class_weights: [12.364329, 7.145187, 4.686482, 2.785020, 0.705228]
+replay_loss_enabled: false
+freeze_backbone: false
+eos_loss_weight: 1.0
+
+transfer_from: runs/corrected-codonlm-v1-batch64-lr-ablation-lr_1_5e4/checkpoints/best.pt
+
+batch_size: 4
+grad_accum_steps: 16
+lr: 0.000005
+lr_embedding: 0.0001
+min_lr: 0.0000005
+weight_decay: 0.05
+warmup_fraction: 0.1
+optimizer: adamw
+scheduler: cosine
+scheduler_total_steps: 1000
+early_stop_patience: 0
+max_nonfinite_accumulation_groups: 0
+checkpoint_every_steps: 0
+checkpoint_every_minutes: 30
+save_epochs: false
+
+device: mps
+force_gpu: true
+amp: true
+use_checkpoint: true
+use_mmap: true
+bucket_batching: false
+num_workers: 0
+pin_memory: false
+compile: false
+
+out_dir: outputs/checkpoints
+scores_dir: outputs/scores
+
+extension_experiment_contract:
+  schema_version: 1
+  phase: termination_head_without_replay
+  anchor_run_id: corrected-codonlm-v1-batch64-lr-ablation-lr_1_5e4
+  dataset_protocol: frozen_genome_holdout
+  token_exposure_epochs: 1
+  primary_decoder:
+    temperature: 1.0
+    topk: 0
+    forced_stop: false
+    cds_mask: false
+  replay_enabled: false
+  promotion:
+    max_relative_test_nll_regression: 0.02
+    require_reduced_hard_cap_rate: true
+    require_no_short_length_collapse: true

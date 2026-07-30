@@ -107,6 +107,19 @@ def test_termination_aux_loss_accepts_labels():
     assert torch.isfinite(loss)
 
 
+def test_termination_aux_loss_accepts_class_weights():
+    logits = torch.zeros((1, 2, 2), dtype=torch.float32)
+    labels = torch.tensor([[0, 1]], dtype=torch.long)
+
+    loss = termination_aux_loss(
+        logits,
+        labels,
+        class_weights=torch.tensor([4.0, 1.0]),
+    )
+
+    assert torch.isfinite(loss)
+
+
 def test_multi_offset_projection_heads():
     # Instantiate model with multi-offset targets
     model = TinyGPT(

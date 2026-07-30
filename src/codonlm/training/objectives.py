@@ -97,10 +97,12 @@ def termination_distance_bucket_labels(
 def termination_aux_loss(
     termination_logits: torch.Tensor,
     labels: torch.Tensor,
+    class_weights: torch.Tensor | None = None,
     ignore_index: int = -100,
 ) -> torch.Tensor:
     return torch.nn.functional.cross_entropy(
         termination_logits.float().view(-1, termination_logits.size(-1)),
         labels.contiguous().view(-1),
+        weight=class_weights,
         ignore_index=ignore_index,
     )
