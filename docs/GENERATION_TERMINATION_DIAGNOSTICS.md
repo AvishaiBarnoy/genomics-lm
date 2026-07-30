@@ -68,3 +68,10 @@ unacceptable length calibration, early stops, or hard caps.
 
 Decoder correction does not prove protein quality. ORF, composition, diversity,
 and novelty controls remain required for the larger run.
+
+## Confirmatory Result
+
+The subsequent 50-prompt run did not reproduce the pilot's 90% stop rate. Natural
+stop rates were 70% and 56%, with hard-cap rates of 30% and 42%. See
+`UNRESTRICTED_GENERATION_CONFIRMATION.md`. Unrestricted temperature `1.0` remains
+the correct baseline decoder, but termination/replay ablation is now warranted.

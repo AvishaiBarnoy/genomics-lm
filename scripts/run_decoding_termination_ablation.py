@@ -62,8 +62,19 @@ def main() -> None:
     parser.add_argument("--max-genes", type=int, default=10)
     parser.add_argument("--max-new", type=int, default=300)
     parser.add_argument("--seed", type=int, default=1337)
+    parser.add_argument(
+        "--variants",
+        default=",".join(VARIANTS),
+        help="Comma-separated decoding variants to run.",
+    )
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
+    selected_variants = [name.strip() for name in args.variants.split(",") if name.strip()]
+    unknown_variants = sorted(set(selected_variants) - set(VARIANTS))
+    if unknown_variants:
+        parser.error(f"unknown variants: {', '.join(unknown_variants)}")
+    if not selected_variants:
+        parser.error("--variants must select at least one variant")
 
     repo = Path(__file__).resolve().parents[1]
     run_dir = repo / "runs" / args.run_id
@@ -94,7 +105,8 @@ def main() -> None:
     sequences = []
     for sequence_index, dna in enumerate(dna_path.read_text().splitlines()):
         prefix_ids = Q.dna_prefix_to_ids(dna[:3], stoi)
-        for variant, parameters in VARIANTS.items():
+        for variant in selected_variants:
+            parameters = VARIANTS[variant]
             sample_seed = _sample_seed(args.seed, sequence_index, variant)
             _set_seed(sample_seed)
             generated_ids, info = generate_model_raw(
@@ -137,7 +149,7 @@ def main() -> None:
         "max_new_tokens": args.max_new,
         "summary": {
             variant: _summary([row for row in rows if row["variant"] == variant])
-            for variant in VARIANTS
+            for variant in selected_variants
         },
         "rows": rows,
     }
