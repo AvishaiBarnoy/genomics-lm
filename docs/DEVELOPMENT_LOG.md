@@ -940,6 +940,14 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     sampling restored 90% natural stops and substantially reduced GC drift. The
     next gate is a larger unrestricted-decoder evaluation before termination/replay
     training.
+*   **Unrestricted Decoder Confirmation (2026-07-30):** Expanded the
+    temperature-1.0 unrestricted pilot to 50 balanced held-out prompts per
+    checkpoint. Natural-stop rates fell to 70% and 56%, while hard-cap rates were
+    30% and 42%. Mean generated GC was 52.5% and 58.4% versus 52.9% in held-out
+    sources, but naturally stopped samples were typically short. Exhaustive
+    novelty auditing found no reported nucleotide/protein alignment and negligible
+    exact-window coverage. The decoder correction is retained as the baseline, and
+    Phase 6 termination-head training is authorized.
 
 ---
 *End of Log*

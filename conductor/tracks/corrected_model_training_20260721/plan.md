@@ -147,6 +147,10 @@ an architectural intervention.
   sampling support. A 10-prompt pilot restores 90% natural stopping for both seeds
   at temperature 1.0 without top-k truncation. Run the larger corrected decoder
   baseline before promoting termination/replay training.
+  The 50-prompt confirmation reached only 70% and 56% natural stops across seeds,
+  with 30% and 42% hard-cap rates. Completed samples were generally shorter than
+  held-out CDSs. The unrestricted decoder is retained as the base comparison, but
+  the confirmation now authorizes the Phase 6 termination-head ablation.
 - [ ] Publish per-seed and aggregate primary results with confidence intervals and
   limitations, then record a go/no-go decision for extensions.
 

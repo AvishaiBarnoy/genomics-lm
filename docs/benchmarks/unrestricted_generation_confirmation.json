@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "protocol": {
+    "prompts_per_checkpoint": 50,
+    "held_out_genomes": 2,
+    "prefix_codons": 1,
+    "temperature": 1.0,
+    "topk": 0,
+    "max_new_tokens": 300,
+    "forced_stop": false,
+    "cds_mask": false
+  },
+  "held_out_sources": {
+    "mean_length_codons": 350.08,
+    "median_length_codons": 294.0,
+    "mean_gc": 0.5290762430320225
+  },
+  "runs": [
+    {
+      "seed": 1337,
+      "natural_stop_rate": 0.7,
+      "natural_stop_wilson_95": [0.562496495355466, 0.8089644649911906],
+      "eos_rate": 0.0,
+      "hard_cap_rate": 0.3,
+      "mean_generated_codons": 175.58,
+      "median_generated_codons": 162.0,
+      "median_naturally_stopped_codons": 119.0,
+      "mean_gc": 0.5246116711343984,
+      "novelty": {
+        "reported_nucleotide_hits": 0,
+        "reported_protein_hits": 0,
+        "mean_exact_30nt_coverage": 0.0,
+        "mean_exact_10aa_coverage": 0.0
+      }
+    },
+    {
+      "seed": 2027,
+      "natural_stop_rate": 0.56,
+      "natural_stop_wilson_95": [0.4230602802165686, 0.6883780078874284],
+      "eos_rate": 0.02,
+      "hard_cap_rate": 0.42,
+      "mean_generated_codons": 205.54,
+      "median_generated_codons": 248.5,
+      "median_naturally_stopped_codons": 152.0,
+      "mean_gc": 0.5841003745757023,
+      "novelty": {
+        "reported_nucleotide_hits": 0,
+        "reported_protein_hits": 0,
+        "mean_exact_30nt_coverage": 0.0,
+        "mean_exact_10aa_coverage": 0.001941747572815534,
+        "max_exact_10aa_coverage": 0.0970873786407767
+      }
+    }
+  ],
+  "decision": "proceed_to_termination_head_ablation"
+}
