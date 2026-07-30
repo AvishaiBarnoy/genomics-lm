@@ -956,6 +956,13 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     backbone/head learning rates, a one-epoch token budget, and gates for PPL,
     hard caps, and short-length collapse. Replay remains disabled pending the
     head-only result.
+*   **Termination-Label MPS Vectorization (2026-07-31):** Paused the head-only run
+    at committed optimizer step 393 after throughput declined during scalar label
+    construction. Replaced the nested per-token scan and MPS `.item()` calls with
+    a reverse cumulative-minimum tensor pass. Randomized parity tests preserve the
+    original labels, while the measured `4 x 512` MPS workload improved from about
+    1,615 ms to 0.78 ms per microbatch. The run resumes from the unchanged
+    checkpoint after review.
 
 ---
 *End of Log*

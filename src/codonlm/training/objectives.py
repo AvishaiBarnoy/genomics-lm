@@ -66,32 +66,29 @@ def termination_distance_bucket_labels(
     bucket_edges: tuple[int, ...] = (0, 3, 10, 30),
     ignore_index: int = -100,
 ) -> torch.Tensor:
-    """Bucket distance from each target position to the next stop token."""
+    """Bucket each valid position's distance to the next stop token."""
     if not stop_ids:
         raise ValueError("stop_ids must not be empty")
     if tuple(bucket_edges) != tuple(sorted(bucket_edges)):
         raise ValueError("bucket_edges must be sorted")
 
-    labels = torch.full_like(yb, fill_value=ignore_index, dtype=torch.long)
-    n_classes = len(bucket_edges) + 1
-    for row_idx in range(yb.shape[0]):
-        row = yb[row_idx]
-        valid_positions = row != PAD_ID
-        stop_positions = torch.nonzero(
-            torch.isin(row, torch.tensor(stop_ids, device=row.device)),
-            as_tuple=False,
-        ).flatten()
-        for pos in torch.nonzero(valid_positions, as_tuple=False).flatten():
-            future_stops = stop_positions[stop_positions >= pos]
-            if len(future_stops) == 0:
-                labels[row_idx, pos] = n_classes - 1
-                continue
-            distance = int(future_stops[0].item() - pos.item())
-            bucket = 0
-            while bucket < len(bucket_edges) and distance > int(bucket_edges[bucket]):
-                bucket += 1
-            labels[row_idx, pos] = bucket
-    return labels
+    sequence_length = yb.shape[1]
+    positions = torch.arange(sequence_length, device=yb.device, dtype=torch.long)
+    positions = positions.unsqueeze(0).expand_as(yb)
+    stop_mask = torch.isin(
+        yb,
+        torch.as_tensor(stop_ids, device=yb.device, dtype=yb.dtype),
+    )
+    stop_positions = torch.where(stop_mask, positions, sequence_length)
+    next_stop = torch.flip(
+        torch.cummin(torch.flip(stop_positions, dims=(1,)), dim=1).values,
+        dims=(1,),
+    )
+    distances = next_stop - positions
+    edges = torch.as_tensor(bucket_edges, device=yb.device, dtype=distances.dtype)
+    labels = (distances.unsqueeze(-1) > edges).sum(dim=-1).to(torch.long)
+    labels = labels.masked_fill(next_stop == sequence_length, len(bucket_edges))
+    return labels.masked_fill(yb == PAD_ID, ignore_index)
 
 
 def termination_aux_loss(

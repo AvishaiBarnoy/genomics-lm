@@ -92,6 +92,46 @@ def test_termination_distance_bucket_labels():
     ]
 
 
+def _reference_termination_labels(yb, stop_ids, bucket_edges, ignore_index=-100):
+    labels = torch.full_like(yb, fill_value=ignore_index, dtype=torch.long)
+    n_classes = len(bucket_edges) + 1
+    for row_idx, row in enumerate(yb):
+        stop_positions = [
+            pos for pos, token in enumerate(row.tolist()) if token in stop_ids
+        ]
+        for pos, token in enumerate(row.tolist()):
+            if token == 0:
+                continue
+            future_stops = [stop for stop in stop_positions if stop >= pos]
+            if not future_stops:
+                labels[row_idx, pos] = n_classes - 1
+                continue
+            distance = future_stops[0] - pos
+            labels[row_idx, pos] = sum(
+                distance > edge for edge in bucket_edges
+            )
+    return labels
+
+
+def test_vectorized_termination_labels_match_reference():
+    generator = torch.Generator().manual_seed(1337)
+    for shape in ((1, 1), (2, 17), (4, 512)):
+        yb = torch.randint(0, 12, shape, generator=generator)
+        for stop_ids in ((2,), (2, 3)):
+            for bucket_edges in ((), (0,), (0, 3, 10, 30)):
+                expected = _reference_termination_labels(
+                    yb,
+                    stop_ids=stop_ids,
+                    bucket_edges=bucket_edges,
+                )
+                actual = termination_distance_bucket_labels(
+                    yb,
+                    stop_ids=stop_ids,
+                    bucket_edges=bucket_edges,
+                )
+                assert torch.equal(actual, expected)
+
+
 def test_termination_aux_loss_accepts_labels():
     logits = torch.randn(2, 4, 5)
     labels = torch.tensor(
