@@ -194,8 +194,15 @@ next-token quality, termination, memory, or runtime reliability.
 
 ## Phase 6: Termination and Replay Ablation
 
-- [ ] Predeclare distance buckets, replay construction, matched prompts/seeds,
+- [x] Predeclare distance buckets, replay construction, matched prompts/seeds,
   decoding conditions, token budget, and acceptance thresholds.
+  The head-only condition uses EOS-distance buckets `[0,3,10,30]`, square-root
+  inverse-frequency weights measured on 25,238,438 frozen training positions, one
+  epoch from the promoted seed-1337 checkpoint, joint LR `5e-6`/head LR `1e-4`,
+  and no replay. Raw unrestricted temperature-1.0 decoding is primary;
+  head-biased decoding is a separately labelled intervention. Promotion permits
+  at most 2% test-NLL regression and requires fewer hard caps without short-length
+  collapse.
 - [ ] Train the termination-head condition without replay from the corrected primary
   checkpoint.
 - [ ] Add generated-prefix replay only if the head-only condition is insufficient.

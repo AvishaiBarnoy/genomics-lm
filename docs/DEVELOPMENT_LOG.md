@@ -948,6 +948,14 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     novelty auditing found no reported nucleotide/protein alignment and negligible
     exact-window coverage. The decoder correction is retained as the baseline, and
     Phase 6 termination-head training is authorized.
+*   **Termination-Head Protocol Freeze (2026-07-30):** Predeclared the Phase 6
+    head-only condition from corrected seed 1337. The historical distance buckets
+    were retained, but their frozen-corpus imbalance was measured explicitly:
+    90.9% of positions are in the farthest class and only 0.30% are at the exact
+    boundary. Added square-root inverse-frequency loss weights, conservative joint
+    backbone/head learning rates, a one-epoch token budget, and gates for PPL,
+    hard caps, and short-length collapse. Replay remains disabled pending the
+    head-only result.
 
 ---
 *End of Log*
