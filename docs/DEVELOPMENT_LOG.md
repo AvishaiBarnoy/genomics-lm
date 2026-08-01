@@ -970,6 +970,13 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     for the three intermediate distance buckets, predicting only exact-boundary
     and far classes. Strict class-0 decoder bias never activated. The checkpoint
     is not promoted; generated-prefix replay is authorized as the next condition.
+*   **Corrected Replay Freeze (2026-08-02):** Repaired the legacy replay builder's
+    frozen-source API and corrected two protocol errors: test-derived prefixes are
+    forbidden for training, and replay classes now use exact distance buckets rather
+    than mapping a 12-codon window to class 1. Built 79 unrestricted hard-cap records
+    from 200 training-split prefixes across 20 genomes. Added replay cadence and
+    replay-specific class weighting so the locked group-average replay contribution
+    is 0.2 without replaying a synthetic batch on every native microbatch.
 
 ---
 *End of Log*
