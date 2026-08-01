@@ -963,6 +963,13 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     original labels, while the measured `4 x 512` MPS workload improved from about
     1,615 ms to 0.78 ms per microbatch. The run resumes from the unchanged
     checkpoint after review.
+*   **Termination-Head Evaluation (2026-07-31):** Completed the head-only Phase 6
+    condition and frozen evaluation. Test NLL increased 1.10%, within the locked
+    2% gate, but raw unrestricted termination was unchanged at 63/100 across two
+    seeds. The auxiliary head obtained 36.44% balanced accuracy and zero recall
+    for the three intermediate distance buckets, predicting only exact-boundary
+    and far classes. Strict class-0 decoder bias never activated. The checkpoint
+    is not promoted; generated-prefix replay is authorized as the next condition.
 
 ---
 *End of Log*

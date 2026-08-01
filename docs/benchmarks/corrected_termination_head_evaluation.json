@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "run_id": "corrected-termination-head-seed1337",
+  "anchor_run_id": "corrected-codonlm-v1-batch64-lr-ablation-lr_1_5e4",
+  "protocol": {
+    "checkpoint": "best.pt",
+    "frozen_split": "test",
+    "raw_prompts_per_seed": 50,
+    "raw_temperature": 1.0,
+    "raw_topk": 0,
+    "raw_max_new_tokens": 300,
+    "raw_forced_stop": false,
+    "raw_cds_mask": false
+  },
+  "next_token": {
+    "anchor_test_nll": 3.666961473787338,
+    "anchor_test_ppl": 39.13281893145237,
+    "termination_head_test_nll": 3.7071192486363427,
+    "termination_head_test_ppl": 40.736286222787754,
+    "relative_test_nll_regression": 0.010951239912408648,
+    "passes_max_relative_nll_regression_0_02": true
+  },
+  "raw_unrestricted": {
+    "seed_1337": {
+      "natural_stop_rate": 0.62,
+      "hard_cap_rate": 0.38,
+      "mean_generated_codons": 189.82,
+      "median_generated_codons": 197.0,
+      "median_naturally_stopped_codons": 119.0,
+      "mean_gc": 0.5801487906852364
+    },
+    "seed_2027": {
+      "natural_stop_rate": 0.64,
+      "hard_cap_rate": 0.36,
+      "mean_generated_codons": 189.74,
+      "median_generated_codons": 223.0,
+      "median_naturally_stopped_codons": 133.0,
+      "mean_gc": 0.589454660734883
+    },
+    "aggregate": {
+      "natural_stops": 63,
+      "samples": 100,
+      "natural_stop_rate": 0.63,
+      "hard_cap_rate": 0.37,
+      "anchor_natural_stop_rate": 0.63,
+      "anchor_hard_cap_rate": 0.37
+    },
+    "paired_seed_1337": {
+      "paired_samples": 50,
+      "anchor_stops": 35,
+      "termination_head_stops": 31,
+      "anchor_cap_to_head_stop": 2,
+      "anchor_stop_to_head_cap": 6,
+      "mcnemar_exact_p": 0.2890625
+    }
+  },
+  "termination_head": {
+    "weighted_cross_entropy": 0.9887382312905921,
+    "accuracy": 0.9084335565567017,
+    "balanced_accuracy": 0.36442773727250055,
+    "class_recall": [
+      0.824566646742379,
+      0.0,
+      0.0,
+      0.0,
+      0.9975720396201235
+    ],
+    "interpretation": "The head predicts only exact-boundary and far classes; it does not recover the three intermediate distance classes."
+  },
+  "separate_decoder_conditions_seed_1337": {
+    "syntax_constrained": {
+      "terminal_stop_rate": 0.6,
+      "mean_aa_length": 167.08,
+      "median_aa_length": 169.5,
+      "early_stop_rate": 0.0
+    },
+    "strict_class_0_decoder_bias": {
+      "stop_logit_bias": 5.0,
+      "window_codons": 5,
+      "terminal_stop_rate": 0.6,
+      "mean_aa_length": 167.08,
+      "median_aa_length": 169.5,
+      "termination_bias_steps_total": 0,
+      "interpretation": "The head never predicted class 0 inside the target window, so the intervention was identical to syntax-constrained decoding."
+    }
+  },
+  "novelty": {
+    "seed_1337": {
+      "reported_nucleotide_hits": 0,
+      "reported_protein_hits": 0,
+      "mean_exact_30nt_coverage": 0.0,
+      "mean_exact_10aa_coverage": 0.0
+    },
+    "seed_2027": {
+      "reported_nucleotide_hits": 0,
+      "reported_protein_hits": 0,
+      "mean_exact_30nt_coverage": 0.0,
+      "mean_exact_10aa_coverage": 0.000664451827242525,
+      "max_exact_10aa_coverage": 0.03322259136212625
+    }
+  },
+  "decision": {
+    "promote_head_only": false,
+    "reason": "The NLL gate passes, but raw natural-stop and hard-cap rates do not improve and intermediate termination-distance classes collapse.",
+    "next_condition": "generated_prefix_replay"
+  }
+}

@@ -203,9 +203,13 @@ next-token quality, termination, memory, or runtime reliability.
   head-biased decoding is a separately labelled intervention. Promotion permits
   at most 2% test-NLL regression and requires fewer hard caps without short-length
   collapse.
-- [ ] Train the termination-head condition without replay from the corrected primary
-  checkpoint.
+- [x] Train the termination-head condition without replay from the corrected primary
+  checkpoint. The frozen test NLL regression is 1.10%, within the 2% gate, but
+  raw unrestricted termination remains 63/100, identical to the anchor aggregate.
+  The head predicts only exact-boundary and far classes (balanced accuracy 36.44%;
+  zero recall for all three intermediate buckets), so this condition is not promoted.
 - [ ] Add generated-prefix replay only if the head-only condition is insufficient.
+  Head-only is insufficient; the predeclared replay condition is authorized.
 - [ ] Compare natural, syntax-constrained, replay-trained, and decoder-biased
   behavior without conflating training and inference interventions.
 - [ ] Report length distributions, natural-stop, early-stop, and hard-cap rates plus
