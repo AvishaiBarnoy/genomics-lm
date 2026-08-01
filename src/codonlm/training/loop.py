@@ -357,6 +357,21 @@ def run_training(cfg: dict, args) -> None:
     replay_loss_weight = float(cfg.get("replay_loss_weight", 0.1))
     replay_data = cfg.get("replay_data")
     replay_batch_size = int(cfg.get("replay_batch_size", cfg.get("batch_size", 1)))
+    replay_every_microbatches = int(cfg.get("replay_every_microbatches", 1))
+    if replay_every_microbatches <= 0:
+        raise ValueError("replay_every_microbatches must be positive")
+    replay_class_weights_raw = cfg.get("replay_class_weights")
+    replay_class_weight_values = None
+    if replay_class_weights_raw is not None:
+        if len(replay_class_weights_raw) != termination_n_classes:
+            raise ValueError(
+                "replay_class_weights must contain termination_n_classes values"
+            )
+        replay_class_weight_values = [
+            float(value) for value in replay_class_weights_raw
+        ]
+        if any(value <= 0 for value in replay_class_weight_values):
+            raise ValueError("replay_class_weights values must be positive")
     termination_head_enabled = termination_loss_enabled or replay_loss_enabled
     if termination_loss_enabled:
         print(
@@ -369,7 +384,9 @@ def run_training(cfg: dict, args) -> None:
             raise ValueError("replay_loss_enabled=true requires replay_data")
         print(
             f"[loss] replay_termination weight={replay_loss_weight} "
-            f"data={replay_data} batch_size={replay_batch_size}"
+            f"data={replay_data} batch_size={replay_batch_size} "
+            f"every_microbatches={replay_every_microbatches} "
+            f"class_weights={replay_class_weights_raw}"
         )
 
     eos_loss_weight = cfg.get("eos_loss_weight", None)
@@ -471,6 +488,15 @@ def run_training(cfg: dict, args) -> None:
             device=device,
         )
         if termination_class_weight_values is not None
+        else None
+    )
+    replay_class_weights = (
+        torch.tensor(
+            replay_class_weight_values,
+            dtype=torch.float32,
+            device=device,
+        )
+        if replay_class_weight_values is not None
         else None
     )
 
@@ -1055,7 +1081,11 @@ def run_training(cfg: dict, args) -> None:
                         )
                         total_loss_ = total_loss_ + (termination_loss_weight * term_loss_)
                     replay_loss_ = None
-                    if split == "train" and replay_loader is not None:
+                    if (
+                        split == "train"
+                        and replay_loader is not None
+                        and current_microbatch_idx % replay_every_microbatches == 0
+                    ):
                         if replay_iter is None:
                             replay_iter = iter(replay_loader)
                         try:
@@ -1074,7 +1104,11 @@ def run_training(cfg: dict, args) -> None:
                         replay_logits = replay_aux.get("termination_logits")
                         if replay_logits is None:
                             raise RuntimeError("replay_loss_enabled=true but model returned no termination logits")
-                        replay_loss_ = termination_aux_loss(replay_logits, replay_labels)
+                        replay_loss_ = termination_aux_loss(
+                            replay_logits,
+                            replay_labels,
+                            class_weights=replay_class_weights,
+                        )
                         total_loss_ = total_loss_ + (replay_loss_weight * replay_loss_)
                     return total_loss_, next_loss_, offset_losses_, term_loss_, replay_loss_
 

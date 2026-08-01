@@ -13,22 +13,30 @@ def test_codon_positions_counts_only_codon_tokens():
 
 
 def test_replay_labels_targets_boundary_window_after_prefix():
-    itos = ["<PAD>", "<BOS_CDS>", "ATG", "AAA", "CCC", "GGG", "TAA"]
     ids = [1, 2, 3, 4, 5, 3, 4, 5]
 
     labels = _replay_labels(
         ids,
-        itos,
-        prefix_codons=2,
-        target_codons=4,
-        window=2,
-        near_class=1,
-        immediate_class=0,
+        prefix_tokens=2,
+        window=4,
+        bucket_edges=(0, 1, 3),
     )
 
     assert labels == [
-        {"pos": 4, "class": 1},
-        {"pos": 5, "class": 1},
-        {"pos": 6, "class": 0},
+        {"pos": 3, "class": 3},
+        {"pos": 4, "class": 2},
+        {"pos": 5, "class": 2},
+        {"pos": 6, "class": 1},
         {"pos": 7, "class": 0},
     ]
+
+
+def test_replay_labels_do_not_supervise_the_original_prefix():
+    labels = _replay_labels(
+        [1, 2, 3],
+        prefix_tokens=2,
+        window=30,
+        bucket_edges=(0, 3, 10, 30),
+    )
+
+    assert labels == [{"pos": 2, "class": 0}]

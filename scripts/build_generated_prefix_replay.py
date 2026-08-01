@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import json
 import time
 from pathlib import Path
@@ -21,7 +22,7 @@ from scripts.eval_generation_prefix import (
     _select_device,
     _set_seed,
 )
-from src.codonlm.generate import generate_cds_constrained
+from src.codonlm.generate import generate_cds_constrained, generate_model_raw
 
 
 def _is_codon(tok: str) -> bool:
@@ -41,23 +42,25 @@ def _codon_positions(ids: list[int], itos: list[str]) -> list[tuple[int, int, st
 
 def _replay_labels(
     ids: list[int],
-    itos: list[str],
     *,
-    prefix_codons: int,
-    target_codons: int,
+    prefix_tokens: int,
     window: int,
-    near_class: int,
-    immediate_class: int,
+    bucket_edges: tuple[int, ...],
 ) -> list[dict[str, int]]:
-    labels: list[dict[str, int]] = []
-    start_generated = max(0, int(target_codons) - max(0, int(window)))
-    for pos, total_codons, _tok in _codon_positions(ids, itos):
-        generated_codons = int(total_codons) - int(prefix_codons)
-        if generated_codons < start_generated:
-            continue
-        target_class = int(immediate_class) if generated_codons >= int(target_codons) else int(near_class)
-        labels.append({"pos": int(pos), "class": target_class})
-    return labels
+    """Label the tail of a failed prefix relative to a desired next-token stop."""
+    if tuple(bucket_edges) != tuple(sorted(bucket_edges)):
+        raise ValueError("bucket_edges must be sorted")
+    if len(ids) <= int(prefix_tokens):
+        return []
+    boundary_state = len(ids) - 1
+    start = max(int(prefix_tokens), boundary_state - max(0, int(window)))
+    return [
+        {
+            "pos": pos,
+            "class": sum((boundary_state - pos) > edge for edge in bucket_edges),
+        }
+        for pos in range(start, boundary_state + 1)
+    ]
 
 
 def _load_model(repo: Path, run_id: str, ckpt_name: str, device: torch.device):
@@ -84,6 +87,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run_id", required=True)
     ap.add_argument("--ckpt", default="best.pt")
+    ap.add_argument("--dataset_manifest", type=Path, default=None)
+    ap.add_argument("--source_split", choices=("train", "val", "test"), default="train")
     ap.add_argument("--preset", choices=sorted(PRESETS), default="quick")
     ap.add_argument("--k_list", default="1,3,5,10")
     ap.add_argument("--samples", type=int, default=None)
@@ -97,9 +102,14 @@ def main() -> None:
     ap.add_argument("--target_aa_len", type=int, default=256)
     ap.add_argument("--max_aa_len", type=int, default=400)
     ap.add_argument("--special_margin", type=int, default=6)
-    ap.add_argument("--replay_window", type=int, default=12)
-    ap.add_argument("--near_class", type=int, default=1)
-    ap.add_argument("--immediate_class", type=int, default=0)
+    ap.add_argument("--replay_window", type=int, default=30)
+    ap.add_argument("--bucket_edges", default="0,3,10,30")
+    ap.add_argument(
+        "--decoder",
+        choices=("raw", "cds_constrained"),
+        default="cds_constrained",
+        help="Generation distribution used to collect hard-cap failures.",
+    )
     ap.add_argument("--out", default=None)
     ap.add_argument("--progress_every", type=int, default=20)
     ap.add_argument(
@@ -125,7 +135,15 @@ def main() -> None:
     repo = Path(__file__).resolve().parents[1]
     device = _select_device(args.device)
     run_dir, cfg, model, itos, stoi = _load_model(repo, args.run_id, args.ckpt, device)
-    dna_path = _resolve_cds_dna_path(repo, run_dir, cfg, max_genes=args.max_genes)
+    dna_path, source_provenance = _resolve_cds_dna_path(
+        repo,
+        run_dir,
+        cfg,
+        max_genes=args.max_genes,
+        seed=int(args.seed),
+        dataset_manifest=args.dataset_manifest,
+        source_split=args.source_split,
+    )
     if dna_path is None or not dna_path.exists():
         raise SystemExit("[replay] could not locate CDS DNA via run manifests/config")
 
@@ -145,11 +163,15 @@ def main() -> None:
                 break
 
     k_list = [int(x) for x in str(args.k_list).split(",") if x]
+    bucket_edges = tuple(int(x) for x in str(args.bucket_edges).split(",") if x)
+    if tuple(bucket_edges) != tuple(sorted(bucket_edges)):
+        raise SystemExit("--bucket_edges must be sorted")
     total_expected = len(cds) * len(k_list) * int(args.samples)
     done = 0
     written = 0
     hard_caps = 0
     terminal_stops = 0
+    label_class_counts: Counter[int] = Counter()
     wall0 = time.perf_counter()
     block_size = int(cfg.get("block_size", getattr(model, "block_size", 512)))
 
@@ -166,19 +188,31 @@ def main() -> None:
                         raise ValueError("block_size too small for requested replay generation lengths")
                     hard_cap = int(min(max_window_codons, args.max_aa_len, args.max_new))
                     target_codons = int(max(args.min_aa_len, min(args.target_aa_len, hard_cap)))
-                    gen_ids, info = generate_cds_constrained(
-                        model=model,
-                        device=device,
-                        ctx_ids=ctx_ids,
-                        stoi=stoi,
-                        itos=itos,
-                        target_codons=target_codons,
-                        hard_cap=hard_cap,
-                        require_terminal_stop=True,
-                        temperature=float(args.temperature),
-                        topk=int(args.topk) if args.topk > 0 else 0,
-                        cds_only=not bool(args.allow_non_cds_tokens),
-                    )
+                    if args.decoder == "raw":
+                        gen_ids, info = generate_model_raw(
+                            model=model,
+                            device=device,
+                            ctx_ids=ctx_ids,
+                            stoi=stoi,
+                            itos=itos,
+                            max_new_tokens=hard_cap,
+                            temperature=float(args.temperature),
+                            topk=int(args.topk) if args.topk > 0 else 0,
+                        )
+                    else:
+                        gen_ids, info = generate_cds_constrained(
+                            model=model,
+                            device=device,
+                            ctx_ids=ctx_ids,
+                            stoi=stoi,
+                            itos=itos,
+                            target_codons=target_codons,
+                            hard_cap=hard_cap,
+                            require_terminal_stop=True,
+                            temperature=float(args.temperature),
+                            topk=int(args.topk) if args.topk > 0 else 0,
+                            cds_only=not bool(args.allow_non_cds_tokens),
+                        )
                     done += 1
                     if info.get("had_terminal_stop"):
                         terminal_stops += 1
@@ -186,14 +220,12 @@ def main() -> None:
                         hard_caps += 1
                         labels = _replay_labels(
                             gen_ids,
-                            itos,
-                            prefix_codons=prefix_k,
-                            target_codons=target_codons,
+                            prefix_tokens=len(ctx_ids),
                             window=int(args.replay_window),
-                            near_class=int(args.near_class),
-                            immediate_class=int(args.immediate_class),
+                            bucket_edges=bucket_edges,
                         )
                         if labels:
+                            label_class_counts.update(item["class"] for item in labels)
                             record = {
                                 "source_run_id": args.run_id,
                                 "source_ckpt": args.ckpt,
@@ -205,6 +237,8 @@ def main() -> None:
                                 "target_codons": int(target_codons),
                                 "generated_codons": int(info.get("generated_codons", 0)),
                                 "hard_cap": int(hard_cap),
+                                "decoder": args.decoder,
+                                "synthetic_boundary": "next_token_after_failed_prefix",
                                 "last_termination_class": info.get("last_termination_class"),
                             }
                             out_fh.write(json.dumps(record, separators=(",", ":")) + "\n")
@@ -224,6 +258,8 @@ def main() -> None:
         "run_id": args.run_id,
         "ckpt": args.ckpt,
         "device": str(device),
+        "source_split": args.source_split,
+        "source_provenance": source_provenance,
         "preset": args.preset,
         "samples": int(args.samples),
         "max_genes": int(args.max_genes),
@@ -232,10 +268,15 @@ def main() -> None:
         "hard_cap_without_stop": int(hard_caps),
         "terminal_stops": int(terminal_stops),
         "records_written": int(written),
+        "label_class_counts": {
+            str(class_index): int(label_class_counts[class_index])
+            for class_index in range(len(bucket_edges) + 1)
+        },
+        "decoder": args.decoder,
         "replay_window": int(args.replay_window),
-        "near_class": int(args.near_class),
-        "immediate_class": int(args.immediate_class),
-        "cds_only": not bool(args.allow_non_cds_tokens),
+        "bucket_edges": list(bucket_edges),
+        "cds_only": args.decoder == "cds_constrained"
+        and not bool(args.allow_non_cds_tokens),
         "out": str(out_path),
     }
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")

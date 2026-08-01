@@ -209,7 +209,10 @@ next-token quality, termination, memory, or runtime reliability.
   The head predicts only exact-boundary and far classes (balanced accuracy 36.44%;
   zero recall for all three intermediate buckets), so this condition is not promoted.
 - [ ] Add generated-prefix replay only if the head-only condition is insufficient.
-  Head-only is insufficient; the predeclared replay condition is authorized.
+  Head-only is insufficient; the replay condition is authorized and frozen. Replay
+  uses 79 unrestricted hard-cap failures generated from 200 training-split prefixes,
+  exact `[0,3,10,30]` tail labels, one replay batch per optimizer group, and no
+  validation/test source records.
 - [ ] Compare natural, syntax-constrained, replay-trained, and decoder-biased
   behavior without conflating training and inference interventions.
 - [ ] Report length distributions, natural-stop, early-stop, and hard-cap rates plus
