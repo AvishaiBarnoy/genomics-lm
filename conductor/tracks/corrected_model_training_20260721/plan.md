@@ -208,18 +208,28 @@ next-token quality, termination, memory, or runtime reliability.
   raw unrestricted termination remains 63/100, identical to the anchor aggregate.
   The head predicts only exact-boundary and far classes (balanced accuracy 36.44%;
   zero recall for all three intermediate buckets), so this condition is not promoted.
-- [ ] Add generated-prefix replay only if the head-only condition is insufficient.
+- [x] Add generated-prefix replay only if the head-only condition is insufficient.
   Head-only is insufficient; the replay condition is authorized and frozen. Replay
   uses 79 unrestricted hard-cap failures generated from 200 training-split prefixes,
   exact `[0,3,10,30]` tail labels, one replay batch per optimizer group, and no
-  validation/test source records.
-- [ ] Compare natural, syntax-constrained, replay-trained, and decoder-biased
-  behavior without conflating training and inference interventions.
-- [ ] Report length distributions, natural-stop, early-stop, and hard-cap rates plus
-  primary loss, sequence controls, runtime, and memorization.
+  validation/test source records. The one-epoch condition is complete.
+- [x] Compare natural, syntax-constrained, replay-trained, and decoder-biased
+  behavior without conflating training and inference interventions. Replay changes
+  raw behavior intrinsically; strict class-0 decoder bias applies zero steps and is
+  reported separately.
+- [x] Report length distributions, natural-stop, early-stop, and hard-cap rates plus
+  primary loss, sequence controls, runtime, and memorization. Replay reduces hard
+  caps from 37/100 to 19/100 (`p=7.6e-6`) with a 1.31% primary-test NLL regression
+  and no measured training-sequence overlap. Median generated length falls from 207
+  to 147.5 codons, so the result requires an independent training replicate before
+  promotion over the corrected primary.
 
 Exit gate: natural completion improves without forced-stop dependence,
 short-sequence collapse, or material primary-quality regression.
+
+Screening status: passed, but not promoted. Natural completion improves within the
+NLL gate and without forced stopping; the material length shift and poorly calibrated
+auxiliary classes require independent replay replication.
 
 ## Phase 7: Biophysical Shape-Guidance Ablation
 

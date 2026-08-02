@@ -977,6 +977,15 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     from 200 training-split prefixes across 20 genomes. Added replay cadence and
     replay-specific class weighting so the locked group-average replay contribution
     is 0.2 without replaying a synthetic batch on every native microbatch.
+*   **Termination Replay Evaluation (2026-08-03):** The one-epoch replay condition
+    passed its screening gate: frozen test NLL regressed 1.31% from the primary,
+    while matched unrestricted hard caps fell from 37/100 to 19/100. In 100 paired
+    samples, replay resolved 18 former hard caps with zero reverse transitions
+    (`p=7.6e-6`). No nucleotide/protein alignment or exact-window overlap was
+    reported. Median generated length fell from 207 to 147.5 codons, and the
+    auxiliary head still ignored classes 1-2 while overpredicting class 3. Retain
+    the corrected primary as canonical and require an independent replay-training
+    replicate before promoting this termination-aware variant.
 
 ---
 *End of Log*
