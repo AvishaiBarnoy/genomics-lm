@@ -986,6 +986,18 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     auxiliary head still ignored classes 1-2 while overpredicting class 3. Retain
     the corrected primary as canonical and require an independent replay-training
     replicate before promoting this termination-aware variant.
+*   **Corrected Multi-Offset Protocol Freeze (2026-08-03):** Started the Phase 5
+    replay of the legacy `n+x` extension from the promoted corrected seed-1337
+    checkpoint and frozen genome split. The first condition trains only independent
+    identity-initialized projection heads for `+2/+4/+8/+16/+32`; the backbone and
+    ordinary next-token head remain frozen. Equal auxiliary weights avoid confounding
+    offset distance with effective learning rate. The offsets are treated as
+    multi-scale future-token probes, not as direct structural labels. Raw decoding
+    remains the control, and any merged-prior decoding is a separate evaluation.
+    A two-minute real-data MPS smoke loaded all 176 anchor tensors exactly, left
+    only the 20 new projection tensors trainable, processed 400 microbatches at
+    about 19.5 sequences/second, reported no nonfinite or aborted accumulation
+    groups, and saved a resumable wall-time checkpoint.
 
 ---
 *End of Log*

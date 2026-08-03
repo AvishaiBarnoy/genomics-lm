@@ -1,0 +1,95 @@
+# Phase 5 frozen-backbone multi-offset representation probe.
+dataset_manifest: data/processed/corrected/corrected-codonlm-v1/genome/manifest.json
+itos_path: data/processed/corrected/corrected-codonlm-v1/genome/itos.txt
+train_npz: data/processed/corrected/corrected-codonlm-v1/genome/train_bs512.npz
+val_npz: data/processed/corrected/corrected-codonlm-v1/genome/val_bs512.npz
+test_npz: data/processed/corrected/corrected-codonlm-v1/genome/test_bs512.npz
+
+run_id: corrected-multi-offset-heads-seed1337
+seed: 1337
+dataloader_seed: 1337
+epochs: 3
+max_time_minutes: null
+
+block_size: 512
+vocab_size: 68
+n_layer: 10
+n_head: 8
+n_embd: 384
+dropout: 0.05
+label_smoothing: 0.0
+tie_embeddings: false
+use_sdpa: true
+sep_mask_enabled: true
+n_kv_head: null
+use_rope: false
+use_swiglu: false
+use_shape_guidance: false
+unfreeze_encoder: false
+
+multi_offset_loss_enabled: true
+multi_offset_targets: [2, 4, 8, 16, 32]
+# Equal weights give the independent heads equal effective learning rates.
+multi_offset_weights:
+  2: 0.1
+  4: 0.1
+  8: 0.1
+  16: 0.1
+  32: 0.1
+termination_loss_enabled: false
+replay_loss_enabled: false
+freeze_backbone: true
+eos_loss_weight: 1.0
+
+transfer_from: runs/corrected-codonlm-v1-batch64-lr-ablation-lr_1_5e4/checkpoints/best.pt
+
+batch_size: 4
+grad_accum_steps: 16
+lr: 0.0001
+lr_embedding: 0.0001
+min_lr: 0.00001
+weight_decay: 0.0
+warmup_fraction: 0.1
+optimizer: adamw
+scheduler: cosine
+early_stop_patience: 0
+max_nonfinite_accumulation_groups: 0
+checkpoint_every_steps: 0
+checkpoint_every_minutes: 30
+save_epochs: false
+
+device: mps
+force_gpu: true
+amp: true
+# The frozen backbone needs no activation recomputation during backward.
+use_checkpoint: false
+use_mmap: true
+bucket_batching: false
+num_workers: 0
+pin_memory: false
+compile: false
+
+out_dir: outputs/checkpoints
+scores_dir: outputs/scores
+
+extension_experiment_contract:
+  schema_version: 1
+  phase: multi_offset_frozen_backbone
+  anchor_run_id: corrected-codonlm-v1-batch64-lr-ablation-lr_1_5e4
+  dataset_protocol: frozen_genome_holdout
+  offsets: [2, 4, 8, 16, 32]
+  offset_semantics: future_token_distances_not_structural_labels
+  projection_initialization: two_layer_identity_mlp
+  backbone_policy: frozen
+  primary_next_token_head_policy: frozen
+  token_exposure_epochs: 3
+  training_prior_merge: false
+  inference_conditions:
+    - raw_next_token
+    - multi_offset_prior_guided
+  promotion:
+    require_each_offset_val_loss_improvement: true
+    max_relative_test_nll_regression: 0.0
+    require_no_generation_length_or_termination_regression: true
+    require_runtime_and_memory_report: true
+    require_independent_seed_replication: true

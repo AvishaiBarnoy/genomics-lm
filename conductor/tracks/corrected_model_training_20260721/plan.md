@@ -179,10 +179,17 @@ support promotion, stability, family, function, or guidance claims.
 
 ## Phase 5: Multi-Offset `n+x` Ablation
 
-- [ ] Predeclare offsets (including whether `n+2` is used), weights, projection-head
+- [x] Predeclare offsets (including whether `n+2` is used), weights, projection-head
   initialization, backbone-freeze/joint-training policy, token budget, and metrics.
-- [ ] State separately whether offset logits are auxiliary training signals or are
+- [x] State separately whether offset logits are auxiliary training signals or are
   consumed by a merged-prior decoder at inference.
+  The first corrected condition uses independent identity-initialized two-layer
+  projection heads at `+2/+4/+8/+16/+32`, equal weights of `0.1`, three frozen-
+  backbone epochs, effective batch 64, and adaptive 10% warmup. These offsets are
+  future-token distances, not direct labels for helices, sheets, or contacts. The
+  main next-token head remains frozen. Prior merging is disabled during training
+  and is evaluated later as a separately labelled decoder condition against raw
+  next-token sampling.
 - [ ] Train matched multi-offset runs from the corrected primary checkpoint without
   changing data splits or the main next-token head.
 - [ ] Report main next-token loss and every offset loss separately; rerun long-range,
