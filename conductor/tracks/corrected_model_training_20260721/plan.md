@@ -167,14 +167,17 @@ corrected report passes its promotion criteria. Otherwise pause and audit.
   balance, missing classes, cluster thresholds, and cross-split nearest neighbors.
   Corrected critic v1 uses a from-scratch bidirectional 8L8H-d256 backbone with
   attention pooling and no motif-saliency regularizer or legacy checkpoint transfer.
-  MMseqs2 clustering at 30% identity and 80% coverage produced 14,689 disjoint
-  clusters over 34,705 records. Supported targets are 43 first-domain Pfam classes,
+  MMseqs2 clustering at 30% identity and 80% coverage produced 14,689 source
+  clusters. After removing records without a retained target, v2 contains 15,054
+  records in 5,149 disjoint retained clusters. Supported targets are 43 first-domain Pfam classes,
   seven top-level EC classes, and continuous MegaScale `deltaG`. Stability has eight
   train, one validation, and one test scaffold cluster, so it is a limited
   scaffold-held-out regression rather than a universal stability probability.
 - [ ] Retrain Pfam-family, EC-function, stability, and declared structural/protein-
   type heads under the corrected split; do not initialize from a holdout-exposed
   critic unless the transfer protocol proves compatibility and isolation.
+  The regression-aware, manifest-bound trainer and evaluator are implemented. The
+  remaining task is the full corrected training and held-out evaluation run.
 - [ ] Calibrate every probability-producing head and report class-aware metrics,
   confidence intervals, reliability, and generated-protein OOD behavior.
 - [ ] Version the passing critic checkpoint and bind it to its dataset, labels,
