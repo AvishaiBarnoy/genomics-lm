@@ -7,7 +7,9 @@ import numpy as np
 import pytest
 import torch
 import yaml
+from torch.utils.data import DataLoader, TensorDataset
 
+from scripts.evaluate_test import evaluate
 from scripts.training_preflight import _write_fixture
 from scripts.audit_generated_sequences import _read_manifest_training
 from src.codonlm.dataset_manifest import artifact_entry, finalize_manifest
@@ -18,6 +20,35 @@ from src.codonlm.evaluation_provenance import (
     bind_dataset_manifest,
 )
 from src.codonlm.model_tiny_gpt import TinyGPT
+
+
+def test_test_evaluator_reports_multi_offset_unprojected_baseline():
+    model = TinyGPT(
+        vocab_size=8,
+        block_size=6,
+        n_layer=1,
+        n_head=1,
+        n_embd=8,
+        dropout=0.0,
+        multi_offset_targets=[2, 4],
+    ).eval()
+    x = torch.tensor([[1, 4, 5, 6, 7, 2]])
+    y = torch.tensor([[4, 5, 6, 7, 2, 0]])
+
+    _, _, _, _, offsets = evaluate(
+        model,
+        torch.device("cpu"),
+        DataLoader(TensorDataset(x, y), batch_size=1),
+        offset_targets=(2, 4),
+    )
+
+    assert set(offsets) == {2, 4}
+    assert offsets[2]["evaluated_tokens"] > offsets[4]["evaluated_tokens"]
+    assert offsets[2]["unprojected_nll"] > 0.0
+    assert offsets[4]["unprojected_ppl"] > 0.0
+    assert offsets[2]["relative_nll_improvement"] == pytest.approx(
+        offsets[2]["nll_improvement"] / offsets[2]["unprojected_nll"]
+    )
 
 
 def _corrected_run(tmp_path: Path):

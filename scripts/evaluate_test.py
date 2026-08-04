@@ -31,6 +31,7 @@ from src.codonlm.evaluation_provenance import (
 from src.codonlm.dataset_manifest import manifest_artifact_path
 from scripts._shared import resolve_run
 from src.codonlm.metrics_io import write_merge_metrics
+from src.codonlm.training.objectives import offset_target_mask
 
 
 def dev() -> torch.device:
@@ -89,14 +90,23 @@ def evaluate(
     loader: DataLoader,
     *,
     label_smoothing: float = 0.0,
-) -> tuple[float, float, float, int]:
+    offset_targets: tuple[int, ...] = (),
+) -> tuple[float, float, float, int, dict[int, dict[str, float | int]]]:
     total_nll = 0.0
     total_objective = 0.0
     total_tokens = 0
+    offset_sums = {
+        offset: {"trained": 0.0, "unprojected": 0.0, "tokens": 0}
+        for offset in offset_targets
+    }
     for xb, yb in loader:
         xb = xb.to(device)
         yb = yb.to(device)
-        logits, _ = model(xb)
+        if offset_targets:
+            logits, _, aux = model(xb, return_aux=True)
+        else:
+            logits, _ = model(xb)
+            aux = {}
         valid = (yb != 0).sum().item()
         if valid == 0:
             continue
@@ -120,10 +130,45 @@ def evaluate(
             ).item()
         )
         total_tokens += valid
+        offset_logits = aux.get("offset_logits", {})
+        for offset in offset_targets:
+            if offset not in offset_logits:
+                continue
+            target = yb[:, offset - 1 :]
+            valid_mask = offset_target_mask(yb, offset)
+            offset_tokens = int(valid_mask.sum().item())
+            if offset_tokens == 0:
+                continue
+            trained = offset_logits[offset][:, : target.shape[1], :][valid_mask]
+            unprojected = logits[:, : target.shape[1], :][valid_mask]
+            offset_sums[offset]["trained"] += float(
+                F.cross_entropy(trained.float(), target[valid_mask], reduction="sum").item()
+            )
+            offset_sums[offset]["unprojected"] += float(
+                F.cross_entropy(unprojected.float(), target[valid_mask], reduction="sum").item()
+            )
+            offset_sums[offset]["tokens"] += offset_tokens
     mean_nll = total_nll / max(1, total_tokens)
     mean_objective = total_objective / max(1, total_tokens)
     ppl = float(math.exp(min(20.0, mean_nll)))
-    return mean_nll, ppl, mean_objective, total_tokens
+    offset_metrics = {}
+    for offset, sums in offset_sums.items():
+        tokens = int(sums["tokens"])
+        if tokens == 0:
+            continue
+        trained_nll = float(sums["trained"]) / tokens
+        unprojected_nll = float(sums["unprojected"]) / tokens
+        improvement = unprojected_nll - trained_nll
+        offset_metrics[offset] = {
+            "nll": trained_nll,
+            "ppl": float(math.exp(min(20.0, trained_nll))),
+            "unprojected_nll": unprojected_nll,
+            "unprojected_ppl": float(math.exp(min(20.0, unprojected_nll))),
+            "nll_improvement": improvement,
+            "relative_nll_improvement": improvement / unprojected_nll,
+            "evaluated_tokens": tokens,
+        }
+    return mean_nll, ppl, mean_objective, total_tokens, offset_metrics
 
 
 def main() -> None:
@@ -221,20 +266,33 @@ def main() -> None:
         batch_size = int(cfg.get("eval_batch_size", 16 if dev().type == "mps" else 64))
     loader = DataLoader(ds, batch_size=batch_size, collate_fn=collate_fn)
     label_smoothing = float(cfg.get("label_smoothing", 0.0))
-    nll, ppl, objective_loss, evaluated_tokens = evaluate(
+    offset_targets = tuple(int(x) for x in cfg.get("multi_offset_targets", []))
+    nll, ppl, objective_loss, evaluated_tokens, offset_metrics = evaluate(
         model,
         dev(),
         loader,
         label_smoothing=label_smoothing,
+        offset_targets=offset_targets,
     )
     print(
         f"[{args.split}] nll={nll:.4f} ppl={ppl:.2f} "
         f"objective={objective_loss:.4f} label_smoothing={label_smoothing:.4f}"
     )
+    for offset, values in sorted(offset_metrics.items()):
+        print(
+            f"[{args.split}] offset=+{offset} nll={values['nll']:.4f} "
+            f"ppl={values['ppl']:.2f} unprojected_nll={values['unprojected_nll']:.4f} "
+            f"relative_improvement={100.0 * values['relative_nll_improvement']:.2f}%"
+        )
 
     metrics_path = run_dir / "scores" / "metrics.json"
     prefix = metric_prefix
 
+    offset_updates = {
+        f"{prefix}_offset_{offset}_{name}": value
+        for offset, values in offset_metrics.items()
+        for name, value in values.items()
+    }
     write_merge_metrics(
         metrics_path,
         {
@@ -244,6 +302,7 @@ def main() -> None:
             f"{prefix}_objective_loss": float(objective_loss),
             f"{prefix}_label_smoothing": label_smoothing,
             f"{prefix}_evaluated_tokens": int(evaluated_tokens),
+            **offset_updates,
             f"{prefix}_evaluation_provenance": {
                 "schema_version": 2,
                 "loss_definition": {

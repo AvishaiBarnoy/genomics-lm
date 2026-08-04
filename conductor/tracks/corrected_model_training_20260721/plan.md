@@ -183,21 +183,34 @@ support promotion, stability, family, function, or guidance claims.
   initialization, backbone-freeze/joint-training policy, token budget, and metrics.
 - [x] State separately whether offset logits are auxiliary training signals or are
   consumed by a merged-prior decoder at inference.
-  The first corrected condition uses independent identity-initialized two-layer
+  The first corrected condition uses independent two-layer projection heads whose
+  linear matrices are identity-initialized but whose intervening GELU means the
+  complete projection is not initially an identity function. It evaluates
   projection heads at `+2/+4/+8/+16/+32`, equal weights of `0.1`, three frozen-
   backbone epochs, effective batch 64, and adaptive 10% warmup. These offsets are
   future-token distances, not direct labels for helices, sheets, or contacts. The
   main next-token head remains frozen. Prior merging is disabled during training
   and is evaluated later as a separately labelled decoder condition against raw
   next-token sampling.
-- [ ] Train matched multi-offset runs from the corrected primary checkpoint without
+- [x] Train the predeclared head-only multi-offset condition from the corrected primary checkpoint without
   changing data splits or the main next-token head.
-- [ ] Report main next-token loss and every offset loss separately; rerun long-range,
+- [x] Report main next-token loss and every offset loss separately; rerun long-range,
   downstream, termination, runtime, and memory evaluations.
-- [ ] Promote or reject the extension using replicated predeclared gates.
+- [x] Reject merged-prior decoding at the tested weights using matched seeds.
+  The run completed three epochs cleanly. All 176 shared anchor tensors remained
+  bitwise identical, so ordinary logits, hidden-state probes, and downstream
+  embeddings are unchanged by construction. Frozen-test next-token NLL/PPL remained
+  `3.66696`/`39.13`. Offset heads improved NLL only `0.98-1.12%` over the
+  unprojected next-token head, with no decay from `+2` to `+32`. Across 160 matched
+  generations, equal-weight prior merging reduced natural stops from `30.6%` to
+  `6.25%` and increased hard caps from `69.4%` to `93.8%`; it lost 39 control stops,
+  preserved 10, and rescued none. Retain the heads only as exploratory probes and
+  do not promote this merged-prior decoder. A second training seed is unnecessary
+  for rejection but would be required before making a positive representation claim.
 
-Exit gate: a replicated long-range/downstream gain does not materially degrade
-next-token quality, termination, memory, or runtime reliability.
+Exit gate result: failed. Next-token quality was preserved, but the weak,
+distance-flat probe gain did not establish long-range structure and prior-guided
+decoding materially degraded termination.
 
 ## Phase 6: Termination and Replay Ablation
 
