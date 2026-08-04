@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "dataset_id": "corrected-protein-critic-v1",
+  "status": "built_locally_reproducible_not_yet_trained",
+  "protocol": "mmseqs_cluster_held_out_multitask_protein_critic",
+  "clustering": {
+    "tool": "MMseqs2 18-8cc5c",
+    "minimum_sequence_identity": 0.3,
+    "minimum_coverage": 0.8,
+    "coverage_mode": 0,
+    "clusters": 14689,
+    "cross_split_clusters": 0
+  },
+  "records": {
+    "total": 34705,
+    "train": 27764,
+    "validation": 3471,
+    "test": 3470,
+    "exact_label_conflicts_quarantined": 0
+  },
+  "tasks": {
+    "pfam_first_domain": {
+      "eligible_classes": 43,
+      "labeled_train": 4204,
+      "labeled_validation": 447,
+      "labeled_test": 473
+    },
+    "ec_top_level": {
+      "eligible_classes": 7,
+      "labeled_train": 8551,
+      "labeled_validation": 523,
+      "labeled_test": 517
+    },
+    "megascale_delta_g": {
+      "target_type": "continuous_regression",
+      "units": "kcal/mol",
+      "train_records": 1122,
+      "validation_records": 80,
+      "test_records": 62,
+      "train_clusters": 8,
+      "validation_clusters": 1,
+      "test_clusters": 1
+    }
+  },
+  "artifact_sha256": {
+    "train": "f872a520d3a87e12c9fe5fd56c6ebcc39f95eef60dcda3135bb1837315b03184",
+    "validation": "6af25dbb095c611e5d2183a24a3e06509fd70cc69f33b92abedcdbf43d9507b4",
+    "test": "1aa2f09321cfae6dcdea3988258e6fd1f5ba9730136d2e2373207e9064e88e51",
+    "task_vocabs": "f167bd57a0a7265ffd737a7efe7fd4a4b68ba9c49351b6456fd9e4958c09c0ae"
+  },
+  "architecture_freeze": {
+    "backbone": "bidirectional_transformer",
+    "layers": 8,
+    "heads": 8,
+    "embedding_dimension": 256,
+    "pooling": "attention",
+    "initialization": "from_scratch",
+    "legacy_checkpoint_transfer": false,
+    "saliency_motif_regularizer": false
+  },
+  "limitations": [
+    "Pfam is represented by the first annotated domain and is a closed-set classification task.",
+    "EC uses only the top-level catalytic class and does not establish exact enzyme function.",
+    "Stability contains ten scaffold groups, so held-out regression uncertainty will be large.",
+    "The dataset has been built locally but no corrected critic checkpoint exists yet."
+  ]
+}
