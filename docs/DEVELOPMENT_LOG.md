@@ -1011,6 +1011,17 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     prior merging reduced natural stops from `30.6%` to `6.25%` and raised hard caps
     from `69.4%` to `93.8%`. The tested merged-prior decoder is rejected; retain the
     heads only as exploratory probes.
+*   **Corrected ProteinCritic Dataset Freeze (2026-08-04):** Replaced the legacy
+    random 90/10 critic split and sparse 2,000-Pfam/1,000-EC targets with a
+    provenance-bound MMseqs2 cluster split. At 30% identity and 80% coverage, the
+    local build contains 34,705 records in 14,689 clusters with zero cross-split
+    clusters. Post-split support gates retain 43 first-domain Pfam classes and all
+    seven top-level EC classes. MegaScale stability remains continuous `deltaG`
+    rather than an arbitrary binary threshold, with eight training, one validation,
+    and one test scaffold cluster. Frozen architecture: from-scratch bidirectional
+    8L8H-d256, attention pooling, no legacy transfer, and no hand-selected motif
+    saliency regularizer. Trainer regression/calibration support is still required
+    before training this critic.
 
 ---
 *End of Log*

@@ -125,6 +125,27 @@ python -m scripts.evaluate_test \
 
 ---
 
+## Corrected ProteinCritic Dataset
+
+Build the homology-cluster-held-out critic artifacts before critic training:
+
+```bash
+caffeinate -i python -m scripts.build_corrected_protein_critic_dataset \
+  --protein-records data/processed/protein_pfam_labels.json \
+  --annotation-metadata data/processed/uniprot_metadata_full.csv \
+  --stability-csv data/raw/stability/dG_extdG_data_Fig1.csv \
+  --out-dir data/processed/protein_lm/corrected-v1-task-balanced \
+  --threads 2
+```
+
+The builder requires MMseqs2, clusters all sources together, assigns whole clusters
+to one split, reserves stability clusters in every split, filters Pfam/EC labels by
+post-split support, and writes `manifest.json` with input, tool, threshold, split,
+and artifact hashes. Do not train the legacy critic configuration on these files:
+continuous `stability_score` requires the corrected regression-aware trainer.
+
+---
+
 ## 3. Synonymous and Shuffling Controls
 
 ### The Golden Rule

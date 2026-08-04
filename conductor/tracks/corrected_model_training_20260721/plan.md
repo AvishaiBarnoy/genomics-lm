@@ -159,12 +159,19 @@ corrected report passes its promotion criteria. Otherwise pause and audit.
 
 ## Phase 4: Revalidate the External ProteinCritic
 
-- [ ] Select and freeze one critic architecture rather than mixing historical
+- [x] Select and freeze one critic architecture rather than mixing historical
   average-pooled, structural-transfer, and bidirectional variants.
-- [ ] Freeze protein sources, label definitions, task vocabularies, preprocessing,
+- [x] Freeze protein sources, label definitions, task vocabularies, preprocessing,
   and train/validation/test artifacts with exact provenance.
-- [ ] Split translated proteins by sequence-homology clusters and report label/class
+- [x] Split translated proteins by sequence-homology clusters and report label/class
   balance, missing classes, cluster thresholds, and cross-split nearest neighbors.
+  Corrected critic v1 uses a from-scratch bidirectional 8L8H-d256 backbone with
+  attention pooling and no motif-saliency regularizer or legacy checkpoint transfer.
+  MMseqs2 clustering at 30% identity and 80% coverage produced 14,689 disjoint
+  clusters over 34,705 records. Supported targets are 43 first-domain Pfam classes,
+  seven top-level EC classes, and continuous MegaScale `deltaG`. Stability has eight
+  train, one validation, and one test scaffold cluster, so it is a limited
+  scaffold-held-out regression rather than a universal stability probability.
 - [ ] Retrain Pfam-family, EC-function, stability, and declared structural/protein-
   type heads under the corrected split; do not initialize from a holdout-exposed
   critic unless the transfer protocol proves compatibility and isolation.
