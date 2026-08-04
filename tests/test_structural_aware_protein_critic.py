@@ -1,9 +1,19 @@
 import json
+import hashlib
 
+import pytest
 import torch
 
-from scripts.eval_multi_task_critic import threshold_metrics, top_fraction_enrichment
-from scripts.prepare_protein_type_dataset import PROTEIN_TYPE_LABELS, protein_type_labels, row_to_sample
+from scripts.eval_multi_task_critic import (
+    threshold_metrics,
+    top_fraction_enrichment,
+    verify_evaluation_artifact,
+)
+from scripts.prepare_protein_type_dataset import (
+    PROTEIN_TYPE_LABELS,
+    protein_type_labels,
+    row_to_sample,
+)
 from src.protein_lm.config import ProteinClassifierConfig
 from src.protein_lm.models_multi import MultiTaskProteinClassifier
 from src.protein_lm.tokenizer import ProteinTokenizer
@@ -13,8 +23,10 @@ from src.protein_lm.dataset import (
     collate_protein_batch,
 )
 from src.protein_lm.train_multi_task import (
+    accumulation_group_size,
     compute_multi_label_pos_weight,
     load_compatible_model_weights,
+    task_losses,
 )
 
 
@@ -94,12 +106,33 @@ def test_length_bucket_sampler_groups_sorted_lengths(tmp_path):
         {"sequence": "M" * 3},
     ]
     data.write_text("".join(json.dumps(row) + "\n" for row in rows))
-    dataset = MultiTaskProteinDataset(data, tokenizer, max_length=32, dynamic_padding=True)
+    dataset = MultiTaskProteinDataset(
+        data, tokenizer, max_length=32, dynamic_padding=True
+    )
 
     batches = list(LengthBucketBatchSampler(dataset, batch_size=2, shuffle=False))
     lengths = [[dataset.sequence_length(i) for i in batch] for batch in batches]
     assert lengths == [sorted(lengths[0]), sorted(lengths[1])]
     assert max(lengths[0]) <= min(lengths[1])
+
+
+def test_length_bucket_sampler_varies_reproducibly_by_epoch(tmp_path):
+    tokenizer = ProteinTokenizer()
+    data = tmp_path / "data.jsonl"
+    rows = [{"sequence": "M" * length} for length in range(2, 18)]
+    data.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    dataset = MultiTaskProteinDataset(
+        data, tokenizer, max_length=32, dynamic_padding=True
+    )
+    sampler = LengthBucketBatchSampler(dataset, batch_size=2, shuffle=True, seed=7)
+
+    epoch_zero = list(sampler)
+    sampler.set_epoch(1)
+    epoch_one = list(sampler)
+    sampler.set_epoch(0)
+
+    assert epoch_zero != epoch_one
+    assert list(sampler) == epoch_zero
 
 
 def test_multitask_model_uses_attention_mask():
@@ -152,7 +185,9 @@ def test_transfer_loads_matching_backbone_and_skips_heads(tmp_path):
 
     assert loaded > 0
     assert "heads.family.weight" in skipped
-    assert torch.allclose(target.backbone.token_embedding.weight, source.backbone.token_embedding.weight)
+    assert torch.allclose(
+        target.backbone.token_embedding.weight, source.backbone.token_embedding.weight
+    )
 
 
 def test_compute_multi_label_pos_weight_from_dataset(tmp_path):
@@ -195,3 +230,59 @@ def test_eval_helpers_report_thresholds_and_enrichment():
     assert enrichment[0]["positive_rate"] == 0.5
     assert abs(enrichment[0]["enrichment"] - 1.25) < 1e-6
     assert abs(enrichment[1]["positive_rate"] - 0.4) < 1e-6
+
+
+def test_eval_verifies_checkpoint_bound_split(tmp_path):
+    data = tmp_path / "validation.jsonl"
+    data.write_text('{"sequence":"MKT"}\n')
+    expected = hashlib.sha256(data.read_bytes()).hexdigest()
+    checkpoint = {
+        "dataset_provenance": {
+            "status": "manifest_verified",
+            "artifacts": {"validation": {"sha256": expected}},
+        }
+    }
+
+    assert (
+        verify_evaluation_artifact(checkpoint, data, "validation")
+        == "checkpoint_verified"
+    )
+    data.write_text('{"sequence":"CHANGED"}\n')
+    with pytest.raises(ValueError, match="checkpoint provenance"):
+        verify_evaluation_artifact(checkpoint, data, "validation")
+
+
+def test_corrected_dataset_exposes_continuous_stability(tmp_path):
+    tokenizer = ProteinTokenizer()
+    data = tmp_path / "data.jsonl"
+    data.write_text(json.dumps({"sequence": "MKT", "stability_score": 2.75}) + "\n")
+    item = MultiTaskProteinDataset(data, tokenizer, dynamic_padding=True)[0]
+    assert item["stability"].dtype == torch.float32
+    assert item["stability"].item() == 2.75
+
+
+def test_task_losses_balance_classification_and_regression():
+    logits = {
+        "family": torch.tensor([[4.0, 0.0], [0.0, 4.0]]),
+        "stability": torch.tensor([[1.5], [10.0]]),
+    }
+    batch = {
+        "family": torch.tensor([0, -1]),
+        "stability": torch.tensor([2.0, float("nan")]),
+    }
+    losses = task_losses(
+        logits,
+        batch,
+        ("family",),
+        ("stability",),
+        torch.nn.CrossEntropyLoss(),
+    )
+    assert set(losses) == {"family", "stability"}
+    assert losses["family"].item() < 0.1
+    assert losses["stability"].item() == 0.125
+
+
+def test_partial_accumulation_group_uses_actual_size():
+    assert accumulation_group_size(0, loader_length=10, grad_accum_steps=4) == 4
+    assert accumulation_group_size(8, loader_length=10, grad_accum_steps=4) == 2
+    assert accumulation_group_size(9, loader_length=10, grad_accum_steps=4) == 2

@@ -1022,6 +1022,15 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     8L8H-d256, attention pooling, no legacy transfer, and no hand-selected motif
     saliency regularizer. Trainer regression/calibration support is still required
     before training this critic.
+*   **Corrected ProteinCritic Trainer (2026-08-04):** Prepared the frozen critic
+    for training with manifest and SHA-256 verification, checkpoint-bound dataset/
+    architecture provenance, deterministic epoch-varying bucket order, correctly
+    scaled partial gradient accumulation, resumable mid-epoch wall-time checkpoints,
+    task-balanced supervised losses, and continuous MegaScale `deltaG` Smooth-L1
+    regression. The evaluator now reports stability MAE/RMSE/Pearson/Spearman and
+    a held-out median baseline. Dataset v2 removes targetless records after class
+    gates, reducing the trainable corpus from 34,705 to 15,054 records without
+    changing the frozen source clustering or retained labels.
 
 ---
 *End of Log*

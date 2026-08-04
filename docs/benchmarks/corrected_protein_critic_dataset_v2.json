@@ -1,36 +1,31 @@
 {
   "schema_version": 1,
-  "dataset_id": "corrected-protein-critic-v1",
+  "dataset_id": "corrected-protein-critic-v2",
   "status": "built_locally_reproducible_not_yet_trained",
-  "superseded_by": "corrected-protein-critic-v2",
   "protocol": "mmseqs_cluster_held_out_multitask_protein_critic",
+  "change_from_v1": "Records without a retained Pfam, EC, or stability target are excluded after class-support gates.",
   "clustering": {
     "tool": "MMseqs2 18-8cc5c",
     "minimum_sequence_identity": 0.3,
     "minimum_coverage": 0.8,
     "coverage_mode": 0,
-    "clusters": 14689,
+    "source_clusters": 14689,
+    "retained_clusters": 5149,
     "cross_split_clusters": 0
   },
   "records": {
-    "total": 34705,
-    "train": 27764,
-    "validation": 3471,
-    "test": 3470,
+    "total": 15054,
+    "train": 13071,
+    "validation": 992,
+    "test": 991,
     "exact_label_conflicts_quarantined": 0
   },
   "tasks": {
     "pfam_first_domain": {
-      "eligible_classes": 43,
-      "labeled_train": 4204,
-      "labeled_validation": 447,
-      "labeled_test": 473
+      "eligible_classes": 43
     },
     "ec_top_level": {
-      "eligible_classes": 7,
-      "labeled_train": 8551,
-      "labeled_validation": 523,
-      "labeled_test": 517
+      "eligible_classes": 7
     },
     "megascale_delta_g": {
       "target_type": "continuous_regression",
@@ -44,9 +39,9 @@
     }
   },
   "artifact_sha256": {
-    "train": "f872a520d3a87e12c9fe5fd56c6ebcc39f95eef60dcda3135bb1837315b03184",
-    "validation": "6af25dbb095c611e5d2183a24a3e06509fd70cc69f33b92abedcdbf43d9507b4",
-    "test": "1aa2f09321cfae6dcdea3988258e6fd1f5ba9730136d2e2373207e9064e88e51",
+    "train": "aa822464f8120a38b6b4db2e42dad7dc80685f082d4a1b88b08919d68fc9d1a5",
+    "validation": "5e0c19092fef982ecad8e10776c9c15c5a4d79d1a3316e6561998fb7a743db47",
+    "test": "4f5afe6cad055f478946842ec002f499bb2faa77f128811d6fd3071a33745ae4",
     "task_vocabs": "f167bd57a0a7265ffd737a7efe7fd4a4b68ba9c49351b6456fd9e4958c09c0ae"
   },
   "architecture_freeze": {

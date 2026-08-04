@@ -2,14 +2,22 @@ import json
 import torch
 from torch.utils.data import Dataset, Sampler
 
+
 class MultiTaskProteinDataset(Dataset):
-    def __init__(self, jsonl_path, tokenizer, max_length=512, dynamic_padding=False, multi_label_tasks=None):
+    def __init__(
+        self,
+        jsonl_path,
+        tokenizer,
+        max_length=512,
+        dynamic_padding=False,
+        multi_label_tasks=None,
+    ):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.dynamic_padding = dynamic_padding
         self.multi_label_tasks = set(multi_label_tasks or [])
         self.samples = []
-        
+
         with open(jsonl_path, "r") as f:
             for line in f:
                 self.samples.append(json.loads(line))
@@ -19,10 +27,14 @@ class MultiTaskProteinDataset(Dataset):
 
     def __getitem__(self, idx):
         s = self.samples[idx]
-        
+
         # Tokenize (Add BOS, pad/truncate, Add EOS handled by tokenizer logic if needed)
-        tokens = [self.tokenizer.bos_token_id] + self.tokenizer.encode_sequence(s["sequence"])[:self.max_length-2] + [self.tokenizer.eos_token_id]
-        
+        tokens = (
+            [self.tokenizer.bos_token_id]
+            + self.tokenizer.encode_sequence(s["sequence"])[: self.max_length - 2]
+            + [self.tokenizer.eos_token_id]
+        )
+
         attention_mask = [1] * len(tokens)
         if not self.dynamic_padding:
             pad_len = self.max_length - len(tokens)
@@ -31,13 +43,23 @@ class MultiTaskProteinDataset(Dataset):
         else:
             input_ids = tokens
 
+        if "stability_score" in s:
+            stability = torch.tensor(
+                float(s["stability_score"])
+                if s["stability_score"] is not None
+                else float("nan"),
+                dtype=torch.float32,
+            )
+        else:
+            stability = torch.tensor(s.get("stability_id", -1), dtype=torch.long)
+
         item = {
             "input_ids": torch.tensor(input_ids, dtype=torch.long),
             "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
             "sequence": s["sequence"],
             "family": torch.tensor(s.get("pfam_id", -1), dtype=torch.long),
             "function": torch.tensor(s.get("ec_id", -1), dtype=torch.long),
-            "stability": torch.tensor(s.get("stability_id", -1), dtype=torch.long)
+            "stability": stability,
         }
         for task in self.multi_label_tasks:
             labels = s.get(task)
@@ -56,17 +78,25 @@ class MultiTaskProteinDataset(Dataset):
 class LengthBucketBatchSampler(Sampler[list[int]]):
     """Batch similar-length proteins together to reduce padding waste."""
 
-    def __init__(self, dataset, batch_size, shuffle=True):
+    def __init__(self, dataset, batch_size, shuffle=True, seed=1337):
         self.dataset = dataset
         self.batch_size = int(batch_size)
         self.shuffle = shuffle
+        self.seed = int(seed)
+        self.epoch = 0
+
+    def set_epoch(self, epoch):
+        self.epoch = int(epoch)
 
     def __iter__(self):
         generator = torch.Generator()
-        generator.manual_seed(1337)
+        generator.manual_seed(self.seed + self.epoch)
         indices = list(range(len(self.dataset)))
         indices.sort(key=self.dataset.sequence_length)
-        batches = [indices[i : i + self.batch_size] for i in range(0, len(indices), self.batch_size)]
+        batches = [
+            indices[i : i + self.batch_size]
+            for i in range(0, len(indices), self.batch_size)
+        ]
         if self.shuffle:
             order = torch.randperm(len(batches), generator=generator).tolist()
             batches = [batches[i] for i in order]

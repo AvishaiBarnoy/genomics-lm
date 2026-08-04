@@ -3,6 +3,8 @@ import json
 import argparse
 import yaml
 import os
+import hashlib
+from pathlib import Path
 import numpy as np
 from src.protein_lm.tokenizer import ProteinTokenizer
 from src.protein_lm.models_multi import MultiTaskProteinClassifier
@@ -19,7 +21,10 @@ from sklearn.metrics import (
     classification_report,
     precision_recall_fscore_support,
     roc_auc_score,
+    mean_absolute_error,
+    mean_squared_error,
 )
+from scipy.stats import pearsonr, spearmanr
 
 
 def _device(name):
@@ -40,6 +45,27 @@ def _safe_float(value):
     if value is None or np.isnan(value):
         return None
     return float(value)
+
+
+def _sha256(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_evaluation_artifact(checkpoint, data_path, split):
+    provenance = checkpoint.get("dataset_provenance", {})
+    if provenance.get("status") != "manifest_verified":
+        return "legacy_unverified"
+    role = "test" if split == "test" else "validation"
+    expected = provenance["artifacts"][role]["sha256"]
+    if _sha256(data_path) != expected:
+        raise ValueError(
+            f"{role} data SHA-256 does not match the checkpoint provenance"
+        )
+    return "checkpoint_verified"
 
 
 def parse_float_list(value):
@@ -73,9 +99,7 @@ def top_fraction_enrichment(y_true, y_prob, fractions):
         k = max(1, int(np.ceil(len(y_true) * fraction)))
         selected = y_true[order[:k]]
         selected_positive_rate = float(selected.mean())
-        enrichment = (
-            selected_positive_rate / prevalence if prevalence > 0.0 else np.nan
-        )
+        enrichment = selected_positive_rate / prevalence if prevalence > 0.0 else np.nan
         rows.append(
             {
                 "fraction": float(fraction),
@@ -99,10 +123,13 @@ def main():
     parser.add_argument(
         "--val_data", default="data/processed/protein_lm/multitask/val.jsonl"
     )
+    parser.add_argument("--split", choices=("validation", "test"), default="validation")
     parser.add_argument("--task_vocabs", default=None, help="Optional task vocab JSON")
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--device", default="auto", help="auto, cpu, mps, or cuda")
-    parser.add_argument("--out_json", default=None, help="Optional path for metrics JSON")
+    parser.add_argument(
+        "--out_json", default=None, help="Optional path for metrics JSON"
+    )
     parser.add_argument(
         "--thresholds",
         default="0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9",
@@ -122,13 +149,17 @@ def main():
     if os.path.exists(args.config):
         with open(args.config, "r") as f:
             cfg = yaml.safe_load(f)
-    if args.val_data == parser.get_default("val_data") and cfg.get("val_data"):
-        args.val_data = cfg["val_data"]
-    if args.task_vocabs is None:
-        args.task_vocabs = cfg.get("task_vocabs")
-
     tokenizer = ProteinTokenizer()
     state = torch.load(args.ckpt, map_location="cpu")
+    if isinstance(state, dict) and isinstance(state.get("cfg"), dict):
+        cfg = {**cfg, **state["cfg"]}
+    if args.val_data == parser.get_default("val_data"):
+        data_key = "test_data" if args.split == "test" else "val_data"
+        args.val_data = cfg.get(data_key, args.val_data)
+    if args.task_vocabs is None:
+        args.task_vocabs = cfg.get("task_vocabs")
+    provenance_status = verify_evaluation_artifact(state, args.val_data, args.split)
+    print(f"[*] Evaluation dataset provenance: {provenance_status}")
     state_dict = state.get("model_state_dict", state)
     state_dict = state_dict.get("model", state_dict)
 
@@ -141,15 +172,18 @@ def main():
     if "heads.stability.weight" in state_dict:
         task_dims["stability"] = state_dict["heads.stability.weight"].shape[0]
     multi_label_tasks = list(cfg.get("multi_label_tasks", []))
+    regression_tasks = set(cfg.get("regression_tasks", []))
     for task in multi_label_tasks:
         key = f"heads.{task}.weight"
         if key in state_dict:
             task_dims[task] = state_dict[key].shape[0]
 
     vocab_labels = {}
-    if args.task_vocabs:
+    vocabs = state.get("task_vocabs") if isinstance(state, dict) else None
+    if vocabs is None and args.task_vocabs:
         with open(args.task_vocabs, "r") as f:
             vocabs = json.load(f)
+    if vocabs:
         for task in multi_label_tasks:
             if task in vocabs:
                 vocab_labels[task] = _ordered_vocab(vocabs[task])
@@ -195,7 +229,10 @@ def main():
     results = {
         task: {"preds": [], "targets": [], "top5": [], "top10": []}
         for task in task_dims
-        if task not in multi_label_tasks
+        if task not in multi_label_tasks and task not in regression_tasks
+    }
+    regression_results = {
+        task: {"targets": [], "predictions": []} for task in regression_tasks
     }
     multi_label_results = {
         task: {"targets": [], "probs": []} for task in multi_label_tasks
@@ -235,6 +272,15 @@ def main():
 
                     results[task]["top5"].extend(has_top5)
                     results[task]["top10"].extend(has_top10)
+            for task in regression_tasks:
+                targets = batch[task].float()
+                mask = torch.isfinite(targets)
+                if mask.any():
+                    predictions = logits_dict[task].detach().cpu().squeeze(-1)
+                    regression_results[task]["targets"].extend(targets[mask].tolist())
+                    regression_results[task]["predictions"].extend(
+                        predictions[mask].tolist()
+                    )
             for task in multi_label_tasks:
                 if task not in logits_dict:
                     continue
@@ -247,9 +293,9 @@ def main():
                     torch.sigmoid(logits).cpu().numpy()
                 )
 
-    summary = {"single_label": {}, "multi_label": {}}
+    summary = {"single_label": {}, "regression": {}, "multi_label": {}}
     for task in task_dims:
-        if task in multi_label_tasks:
+        if task in multi_label_tasks or task in regression_tasks:
             continue
         y_true = results[task]["targets"]
         y_pred = results[task]["preds"]
@@ -351,6 +397,35 @@ def main():
                 "thresholds": threshold_rows,
                 "top_fraction_enrichment": enrichment_rows,
             }
+
+    for task, data in regression_results.items():
+        y_true = np.asarray(data["targets"], dtype=np.float64)
+        y_pred = np.asarray(data["predictions"], dtype=np.float64)
+        if y_true.size == 0:
+            print(f"Task: {task} has no valid {args.split} samples.")
+            continue
+        mae = mean_absolute_error(y_true, y_pred)
+        rmse = mean_squared_error(y_true, y_pred) ** 0.5
+        pearson = pearsonr(y_true, y_pred).statistic if y_true.size > 1 else np.nan
+        spearman = spearmanr(y_true, y_pred).statistic if y_true.size > 1 else np.nan
+        baseline_mae = mean_absolute_error(
+            y_true, np.full_like(y_true, np.median(y_true))
+        )
+        summary["regression"][task] = {
+            "samples": int(y_true.size),
+            "mae": float(mae),
+            "rmse": float(rmse),
+            "pearson": _safe_float(pearson),
+            "spearman": _safe_float(spearman),
+            "median_baseline_mae": float(baseline_mae),
+        }
+        print("==================================================")
+        print(f"Task: {task} ({args.split})")
+        print(
+            f"  Samples: {y_true.size} | MAE: {mae:.4f} | RMSE: {rmse:.4f} "
+            f"| Pearson: {pearson:.4f} | Spearman: {spearman:.4f} "
+            f"| Median-baseline MAE: {baseline_mae:.4f}"
+        )
 
     if args.out_json:
         with open(args.out_json, "w") as f:
