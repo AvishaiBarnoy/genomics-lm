@@ -79,7 +79,7 @@ extension_experiment_contract:
   dataset_protocol: frozen_genome_holdout
   offsets: [2, 4, 8, 16, 32]
   offset_semantics: future_token_distances_not_structural_labels
-  projection_initialization: two_layer_identity_mlp
+  projection_initialization: identity_weight_matrices_with_gelu
   backbone_policy: frozen
   primary_next_token_head_policy: frozen
   token_exposure_epochs: 3

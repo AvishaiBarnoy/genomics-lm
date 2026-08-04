@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "run_id": "corrected-multi-offset-heads-seed1337",
+  "anchor_run_id": "corrected-codonlm-v1-batch64-lr-ablation-lr_1_5e4",
+  "checkpoint": "best.pt",
+  "decision": "reject_merged_prior_at_tested_weights",
+  "training": {
+    "status": "completed",
+    "best_epoch": 2,
+    "epochs_run": 3,
+    "wall_seconds": 9523.56,
+    "nonfinite_microbatches": 0,
+    "aborted_accumulation_groups": 0,
+    "mps_peak_allocated_bytes": 339024384,
+    "mps_peak_driver_bytes": 1631682560
+  },
+  "base_parameter_invariance": {
+    "shared_tensors": 176,
+    "changed_shared_tensors": 0,
+    "new_projection_tensors": 20,
+    "interpretation": "Ordinary logits and hidden states are identical to the anchor checkpoint."
+  },
+  "frozen_test": {
+    "evaluated_next_tokens": 2228589,
+    "next_token_nll": 3.666961464585187,
+    "next_token_ppl": 39.13281857134626,
+    "offsets": {
+      "2": {"nll": 3.7064676525594678, "ppl": 40.70975126447475, "unprojected_nll": 3.748618687503719, "relative_nll_improvement": 0.01124441786644358},
+      "4": {"nll": 3.7089875012994624, "ppl": 40.81246303461778, "unprojected_nll": 3.746178874718885, "relative_nll_improvement": 0.009927815692520376},
+      "8": {"nll": 3.7088817517228536, "ppl": 40.808147362125794, "unprojected_nll": 3.745664226072312, "relative_nll_improvement": 0.009820013789123972},
+      "16": {"nll": 3.7081326611077396, "ppl": 40.77758980853386, "unprojected_nll": 3.745110253395528, "relative_nll_improvement": 0.009873565739289634},
+      "32": {"nll": 3.708161010884538, "ppl": 40.77874586049015, "unprojected_nll": 3.7469825661712695, "relative_nll_improvement": 0.010360751511688986}
+    },
+    "interpretation": "The small, distance-flat gain is compatible with broad codon-distribution remapping and is not evidence of offset-specific structural learning."
+  },
+  "matched_generation": {
+    "seeds": [1337, 2027],
+    "samples_per_protocol": 160,
+    "temperature": 1.0,
+    "topk": 0,
+    "prior_weights": {"2": 0.1, "4": 0.1, "8": 0.1, "16": 0.1, "32": 0.1},
+    "cds_constrained": {
+      "terminal_stop_rate": 0.30625,
+      "hard_cap_rate": 0.69375,
+      "median_gqs": 28.179905,
+      "mean_generated_codons": 91.30625,
+      "mean_aa_identity": 0.066166
+    },
+    "multi_offset_prior_guided": {
+      "terminal_stop_rate": 0.0625,
+      "hard_cap_rate": 0.9375,
+      "median_gqs": 27.45,
+      "mean_generated_codons": 102.24375,
+      "mean_aa_identity": 0.069789
+    },
+    "paired_transitions": {
+      "control_stop_preserved_by_prior": 10,
+      "control_stop_lost_by_prior": 39,
+      "control_failure_rescued_by_prior": 0,
+      "both_failed": 111
+    },
+    "memorization_audit_seed1337": {
+      "mean_train_overlap_10": 0.0,
+      "mean_train_overlap_20": 0.0
+    }
+  },
+  "limitations": [
+    "Only one auxiliary-head training seed was run.",
+    "Decoder evaluation used a quick held-out prompt set and one predeclared equal-weight setting.",
+    "No claim is made that codon offsets directly label protein secondary structure or contacts."
+  ]
+}

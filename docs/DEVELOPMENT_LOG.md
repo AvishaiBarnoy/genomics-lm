@@ -989,7 +989,9 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
 *   **Corrected Multi-Offset Protocol Freeze (2026-08-03):** Started the Phase 5
     replay of the legacy `n+x` extension from the promoted corrected seed-1337
     checkpoint and frozen genome split. The first condition trains only independent
-    identity-initialized projection heads for `+2/+4/+8/+16/+32`; the backbone and
+    projection heads for `+2/+4/+8/+16/+32`; their linear matrices are initialized
+    to identity, but the intervening GELU makes the full mapping non-identity. The
+    backbone and
     ordinary next-token head remain frozen. Equal auxiliary weights avoid confounding
     offset distance with effective learning rate. The offsets are treated as
     multi-scale future-token probes, not as direct structural labels. Raw decoding
@@ -998,6 +1000,17 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     only the 20 new projection tensors trainable, processed 400 microbatches at
     about 19.5 sequences/second, reported no nonfinite or aborted accumulation
     groups, and saved a resumable wall-time checkpoint.
+*   **Corrected Multi-Offset Evaluation (2026-08-04):** The three-epoch head-only
+    run completed cleanly in 9,523.56 seconds. Bitwise comparison found no changes
+    among the 176 shared anchor tensors; only the 20 new projection tensors differ,
+    so ordinary logits and hidden-state/downstream probes remain identical to the
+    corrected base. Frozen-test next-token NLL/PPL stayed `3.66696`/`39.13`.
+    Per-offset heads improved NLL only `0.98-1.12%` over the unprojected token head,
+    nearly flat from `+2` through `+32`, which does not establish distance-specific
+    structural learning. Across 160 matched generations from two seeds, equal-weight
+    prior merging reduced natural stops from `30.6%` to `6.25%` and raised hard caps
+    from `69.4%` to `93.8%`. The tested merged-prior decoder is rejected; retain the
+    heads only as exploratory probes.
 
 ---
 *End of Log*

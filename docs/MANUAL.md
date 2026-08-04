@@ -297,7 +297,9 @@ python -m scripts.infer_score_mutations --run_dir runs/<RUN_ID>/checkpoints --se
   - python -m scripts.eval_generation_prefix --run_id <RUN_ID> --ckpt best.pt \
     --device cpu --preset quick --multi_offset_prior \
     --multi_offset_prior_weights '{"2": 0.05, "4": 0.05, "8": 0.05, "16": 0.03, "32": 0.02}'
-  The look-ahead weights bias decoding logits towards target structural features (e.g. helices at $x=4$ and sheets at $x=2$).
+  The look-ahead weights merge future-token logits into the next-token distribution.
+  Offsets are sequence distances, not direct labels for helices, sheets, or contacts;
+  this decoding mode must be evaluated against matched raw and constrained controls.
 
 ### Benchmarking & Evaluation
 
