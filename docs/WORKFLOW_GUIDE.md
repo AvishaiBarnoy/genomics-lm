@@ -168,6 +168,18 @@ The corrected M2/8 GB selection is batch 2, accumulation 16, and context 512.
 Context 256 is faster but truncates most Pfam/EC-labelled proteins and is not the
 primary scientific configuration.
 
+After the unweighted baseline is frozen, run the validation-selected class-balance
+ablation with:
+
+```bash
+caffeinate -i python -m src.protein_lm.train_multi_task \
+  --config configs/corrected_protein_critic_class_balanced_v1.yaml
+```
+
+This config changes only the Pfam/EC training objective. It computes square-root
+inverse-frequency weights from training labels, leaves validation loss unweighted,
+and keeps the test split sealed until the conductor promotion decision is recorded.
+
 ---
 
 ## 3. Synonymous and Shuffling Controls

@@ -27,6 +27,7 @@ from src.protein_lm.dataset import (
 )
 from src.protein_lm.train_multi_task import (
     accumulation_group_size,
+    compute_classification_class_weight,
     compute_multi_label_pos_weight,
     load_compatible_model_weights,
     task_losses,
@@ -302,6 +303,43 @@ def test_task_losses_balance_classification_and_regression():
     assert set(losses) == {"family", "stability"}
     assert losses["family"].item() < 0.1
     assert losses["stability"].item() == 0.125
+
+
+def test_classification_class_weights_upweight_rare_training_classes():
+    dataset = type(
+        "Dataset",
+        (),
+        {"samples": [{"pfam_id": 0}] * 9 + [{"pfam_id": 1}]},
+    )()
+    weights = compute_classification_class_weight(
+        dataset,
+        "family",
+        num_classes=2,
+        mode="sqrt_inverse_frequency",
+        max_weight=4.0,
+    )
+    assert weights.mean().item() == pytest.approx(1.0)
+    assert weights[1].item() == pytest.approx(3.0 * weights[0].item())
+
+
+def test_classification_class_weights_reject_missing_training_class():
+    dataset = type("Dataset", (), {"samples": [{"ec_id": 0}]})()
+    with pytest.raises(ValueError, match="no examples"):
+        compute_classification_class_weight(dataset, "function", num_classes=2)
+
+
+def test_task_losses_select_task_specific_classification_criterion():
+    logits = {
+        "family": torch.tensor([[4.0, 0.0]]),
+        "function": torch.tensor([[4.0, 0.0]]),
+    }
+    batch = {"family": torch.tensor([0]), "function": torch.tensor([0])}
+    criteria = {
+        "family": torch.nn.CrossEntropyLoss(weight=torch.tensor([1.0, 1.0])),
+        "function": torch.nn.CrossEntropyLoss(weight=torch.tensor([1.0, 2.0])),
+    }
+    losses = task_losses(logits, batch, ("family", "function"), (), criteria)
+    assert set(losses) == {"family", "function"}
 
 
 def test_partial_accumulation_group_uses_actual_size():
