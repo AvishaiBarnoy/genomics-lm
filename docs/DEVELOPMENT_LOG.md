@@ -1050,6 +1050,15 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     step, learning rate, sequence/residue throughput, per-task losses, MPS memory,
     and epoch wall time. Versioned results are in
     `docs/benchmarks/corrected_protein_critic_training_v1.json`.
+*   **ProteinCritic Class-Balance Ablation Freeze (2026-08-05):** Prepared one
+    controlled follow-up to the corrected seed-1337 critic. Pfam and EC training
+    losses use square-root inverse-frequency weights computed exclusively from the
+    frozen training split and capped at 4x; validation loss remains unweighted.
+    Dataset, architecture, context 512, batch 2/accumulation 16, seed, learning
+    rate, and ten-epoch budget are unchanged. Promotion is validation-only and
+    requires improved class-aware discrimination, no greater than a three-point
+    top-1 loss per head, and no more than 5% stability-MAE regression. Test remains
+    sealed until the decision is recorded.
 
 ---
 *End of Log*

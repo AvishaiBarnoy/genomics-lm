@@ -69,6 +69,54 @@ def compute_multi_label_pos_weight(dataset, task, max_weight=100.0):
     return weights.clamp(min=1.0, max=float(max_weight))
 
 
+def compute_classification_class_weight(
+    dataset,
+    task: str,
+    num_classes: int,
+    mode: str = "sqrt_inverse_frequency",
+    max_weight: float = 4.0,
+) -> torch.Tensor:
+    """Compute class weights from training labels only."""
+    sample_fields = {
+        "family": "pfam_id",
+        "function": "ec_id",
+        "stability": "stability_id",
+    }
+    if task not in sample_fields:
+        raise ValueError(f"Unsupported classification task: {task}")
+    if mode not in {"inverse_frequency", "sqrt_inverse_frequency"}:
+        raise ValueError(f"Unsupported classification class-weighting mode: {mode}")
+    if num_classes < 1:
+        raise ValueError("num_classes must be positive")
+    if max_weight <= 0:
+        raise ValueError("classification_class_weight_max must be positive")
+
+    counts = torch.zeros(num_classes, dtype=torch.float32)
+    field = sample_fields[task]
+    for sample in dataset.samples:
+        label = sample.get(field, -1)
+        if label is None or int(label) == -1:
+            continue
+        label = int(label)
+        if label < 0 or label >= num_classes:
+            raise ValueError(
+                f"Training label {label} for {task} is outside [0, {num_classes})"
+            )
+        counts[label] += 1
+
+    missing = torch.nonzero(counts == 0, as_tuple=False).flatten().tolist()
+    if missing:
+        raise ValueError(
+            f"Training split has no examples for {task} classes: {missing}"
+        )
+
+    weights = counts.sum() / (num_classes * counts)
+    if mode == "sqrt_inverse_frequency":
+        weights = weights.sqrt()
+    weights = weights / weights.mean()
+    return weights.clamp(max=float(max_weight))
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -118,14 +166,15 @@ def task_losses(
     batch: dict,
     classification_tasks: tuple[str, ...],
     regression_tasks: tuple[str, ...],
-    criterion: nn.Module,
+    criterion: nn.Module | dict[str, nn.Module],
 ) -> dict[str, torch.Tensor]:
     losses = {}
     for task in classification_tasks:
         targets = batch[task]
         valid = targets != -1
         if bool(valid.any()):
-            losses[task] = criterion(logits_dict[task][valid], targets[valid])
+            task_criterion = criterion[task] if isinstance(criterion, dict) else criterion
+            losses[task] = task_criterion(logits_dict[task][valid], targets[valid])
     for task in regression_tasks:
         targets = batch[task].float()
         valid = torch.isfinite(targets)
@@ -315,8 +364,34 @@ def train_multi_task(
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(cfg.get("lr", 1e-4)))
 
-    # CrossEntropyLoss with ignore_index=-1 handles the missing labels
-    criterion = nn.CrossEntropyLoss(ignore_index=-1)
+    # Class weights are derived only from the training split. Validation remains
+    # unweighted so its loss describes the frozen held-out distribution.
+    classification_weighting = cfg.get("classification_class_weighting", "none")
+    classification_weight_max = float(
+        cfg.get("classification_class_weight_max", 4.0)
+    )
+    train_classification_criteria = {}
+    for task in classification_tasks:
+        class_weight = None
+        if classification_weighting != "none":
+            class_weight = compute_classification_class_weight(
+                train_ds,
+                task,
+                task_dims[task],
+                mode=classification_weighting,
+                max_weight=classification_weight_max,
+            ).to(device)
+            print(
+                f"[*] Classification weight for {task}: "
+                f"min={float(class_weight.min().cpu()):.4f} "
+                f"max={float(class_weight.max().cpu()):.4f} "
+                f"mean={float(class_weight.mean().cpu()):.4f}",
+                flush=True,
+            )
+        train_classification_criteria[task] = nn.CrossEntropyLoss(
+            weight=class_weight, ignore_index=-1
+        )
+    validation_classification_criterion = nn.CrossEntropyLoss(ignore_index=-1)
     multi_label_criteria = {}
     pos_weight_cfg = cfg.get("multi_label_pos_weight")
     pos_weight_max = cfg.get("multi_label_pos_weight_max", 100.0)
@@ -514,7 +589,7 @@ def train_multi_task(
                 },
                 classification_tasks,
                 regression_tasks,
-                criterion,
+                train_classification_criteria,
             )
             if supervised_losses:
                 loss += torch.stack(list(supervised_losses.values())).mean()
@@ -632,7 +707,7 @@ def train_multi_task(
                     },
                     classification_tasks,
                     regression_tasks,
-                    criterion,
+                    validation_classification_criterion,
                 )
                 if supervised_losses:
                     batch_loss += torch.stack(list(supervised_losses.values())).mean()
