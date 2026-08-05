@@ -2,11 +2,14 @@ import json
 import hashlib
 
 import pytest
+import numpy as np
 import torch
 
 from scripts.eval_multi_task_critic import (
+    expected_calibration_error,
     threshold_metrics,
     top_fraction_enrichment,
+    training_regression_reference,
     verify_evaluation_artifact,
 )
 from scripts.prepare_protein_type_dataset import (
@@ -230,6 +233,25 @@ def test_eval_helpers_report_thresholds_and_enrichment():
     assert enrichment[0]["positive_rate"] == 0.5
     assert abs(enrichment[0]["enrichment"] - 1.25) < 1e-6
     assert abs(enrichment[1]["positive_rate"] - 0.4) < 1e-6
+
+
+def test_multiclass_calibration_error():
+    y_true = np.asarray([0, 1])
+    perfect = np.asarray([[1.0, 0.0], [0.0, 1.0]])
+    assert expected_calibration_error(y_true, perfect) == 0.0
+
+
+def test_regression_reference_uses_training_targets(tmp_path):
+    data = tmp_path / "train.jsonl"
+    data.write_text(
+        "".join(
+            json.dumps({"sequence": "MKT", "stability_score": value}) + "\n"
+            for value in (1.0, 2.0, 9.0)
+        )
+    )
+    reference = training_regression_reference(data, "stability")
+    assert reference["samples"] == 3
+    assert reference["median"] == 2.0
 
 
 def test_eval_verifies_checkpoint_bound_split(tmp_path):

@@ -153,6 +153,21 @@ The trainer verifies every dataset artifact against the manifest before training
 treats `stability_score` as continuous regression, and stores the dataset provenance
 and model specification in each checkpoint.
 
+Before changing physical batch size or context on MPS, run the isolated critic
+benchmark:
+
+```bash
+caffeinate -i python -m scripts.benchmark_protein_critic_training \
+  --config configs/corrected_protein_critic_v1.yaml \
+  --matrix configs/corrected_protein_critic_mps_benchmark.yaml \
+  --out runs/corrected-protein-critic-mps-benchmark \
+  --force-gpu
+```
+
+The corrected M2/8 GB selection is batch 2, accumulation 16, and context 512.
+Context 256 is faster but truncates most Pfam/EC-labelled proteins and is not the
+primary scientific configuration.
+
 ---
 
 ## 3. Synonymous and Shuffling Controls

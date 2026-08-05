@@ -173,11 +173,14 @@ corrected report passes its promotion criteria. Otherwise pause and audit.
   seven top-level EC classes, and continuous MegaScale `deltaG`. Stability has eight
   train, one validation, and one test scaffold cluster, so it is a limited
   scaffold-held-out regression rather than a universal stability probability.
-- [ ] Retrain Pfam-family, EC-function, stability, and declared structural/protein-
+- [x] Retrain Pfam-family, EC-function, stability, and declared structural/protein-
   type heads under the corrected split; do not initialize from a holdout-exposed
   critic unless the transfer protocol proves compatibility and isolation.
   The regression-aware, manifest-bound trainer and evaluator are implemented. The
-  remaining task is the full corrected training and held-out evaluation run.
+  corrected 8L8H-d256 run completed in 139 minutes with batch 2, accumulation 16,
+  and context 512. Epoch 9 is the validation-selected checkpoint. Pfam/EC learn
+  nontrivial held-out signal, while stability generalization varies by scaffold;
+  the eight training stability clusters contain 930/47/46/29/29/21/13/7 records.
 - [ ] Calibrate every probability-producing head and report class-aware metrics,
   confidence intervals, reliability, and generated-protein OOD behavior.
 - [ ] Version the passing critic checkpoint and bind it to its dataset, labels,

@@ -17,3 +17,6 @@ def test_corrected_critic_config_freezes_architecture_and_tasks():
     assert cfg["saliency_regularizer_weight"] == 0.0
     assert cfg["regression_tasks"] == ["stability"]
     assert cfg["dataset_manifest"].endswith("corrected-v2/manifest.json")
+    assert cfg["batch_size"] == 2
+    assert cfg["grad_accum_steps"] == 16
+    assert cfg["log_every_steps"] == 200

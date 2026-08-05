@@ -452,12 +452,18 @@ def train_multi_task(
     for epoch in range(start_epoch, epochs):
         if time_limit_reached:
             break
+        epoch_started = time.perf_counter()
         if dynamic_padding:
             train_loader.batch_sampler.set_epoch(epoch)
         model.train()
         train_loss = 0.0
         recent_loss = 0.0
         recent_steps = 0
+        recent_sequences = 0
+        recent_residues = 0
+        recent_task_sums = {}
+        recent_task_counts = {}
+        recent_started = time.perf_counter()
         optimizer.zero_grad()
 
         for step, batch in enumerate(train_loader):
@@ -513,6 +519,12 @@ def train_multi_task(
             if supervised_losses:
                 loss += torch.stack(list(supervised_losses.values())).mean()
                 tasks_added += 1
+                for task, task_loss in supervised_losses.items():
+                    recent_task_sums[task] = (
+                        recent_task_sums.get(task, torch.zeros((), device=device))
+                        + task_loss.detach()
+                    )
+                    recent_task_counts[task] = recent_task_counts.get(task, 0) + 1
             for task in multi_label_tasks:
                 targets = batch[task].to(device)
                 if targets.numel() and (targets >= 0).any():
@@ -528,6 +540,8 @@ def train_multi_task(
                 train_loss += loss.item() * group_size
                 recent_loss += loss.item() * group_size
                 recent_steps += 1
+                recent_sequences += input_ids.shape[0]
+                recent_residues += int(attention_mask.sum().item())
 
             if (step + 1) % grad_accum_steps == 0 or (step + 1) == len(train_loader):
                 optimizer.step()
@@ -539,18 +553,34 @@ def train_multi_task(
 
             if log_every_steps and (step + 1) % log_every_steps == 0:
                 elapsed = time.perf_counter() - start_time
+                interval_elapsed = time.perf_counter() - recent_started
                 avg_recent_loss = recent_loss / max(recent_steps, 1)
+                task_text = " ".join(
+                    f"{task}_loss={float(total.cpu()) / recent_task_counts[task]:.4f}"
+                    for task, total in sorted(recent_task_sums.items())
+                )
+                task_suffix = f" {task_text}" if task_text else ""
+                memory_suffix = mps_memory_summary() if device.type == "mps" else ""
                 print(
                     f"[progress] epoch={epoch + 1}/{epochs} "
                     f"step={step + 1}/{len(train_loader)} "
                     f"elapsed_min={elapsed / 60:.1f} "
                     f"recent_loss={avg_recent_loss:.4f} "
+                    f"optimizer_step={optimizer_step} "
+                    f"lr={optimizer.param_groups[0]['lr']:.2e} "
+                    f"seq_per_sec={recent_sequences / max(interval_elapsed, 1e-9):.2f} "
+                    f"residues_per_sec={recent_residues / max(interval_elapsed, 1e-9):.0f} "
                     f"batch_seq_len={input_ids.shape[1]}"
-                    f"{mps_memory_summary() if device.type == 'mps' else ''}",
+                    f"{task_suffix}{memory_suffix}",
                     flush=True,
                 )
                 recent_loss = 0.0
                 recent_steps = 0
+                recent_sequences = 0
+                recent_residues = 0
+                recent_task_sums = {}
+                recent_task_counts = {}
+                recent_started = time.perf_counter()
 
             # Check wall-time limit at the end of every step
             if wall_timer.expired():
@@ -625,6 +655,10 @@ def train_multi_task(
             torch.mps.empty_cache()
         print(
             f"Epoch {epoch + 1}/{epochs} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}",
+            flush=True,
+        )
+        print(
+            f"[timing] epoch={epoch + 1} wall_sec={time.perf_counter() - epoch_started:.2f}",
             flush=True,
         )
 
