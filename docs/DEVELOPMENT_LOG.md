@@ -1031,6 +1031,25 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     a held-out median baseline. Dataset v2 removes targetless records after class
     gates, reducing the trainable corpus from 34,705 to 15,054 records without
     changing the frozen source clustering or retained labels.
+*   **Corrected ProteinCritic MPS Selection and Training (2026-08-05):** The
+    initial batch-8/context-512 run entered an MPS driver-memory stall after 104
+    microbatches. An isolated real-data sweep selected batch 2, accumulation 16,
+    and context 512 at 10.60 sequences/second and 1.39 GiB peak driver memory.
+    The replacement 10-epoch run completed without a stall in about 139 minutes;
+    epoch 9 had the best validation loss (`1.76185`). Held-out Pfam top-1/top-5
+    accuracy was 36.7%/72.7% on validation and 38.5%/73.8% on test. Coarse EC
+    top-1/top-5 was 42.1%/94.3% and 43.9%/95.4%. Stability beat the training-
+    median MAE baseline on both held-out scaffolds, but validation Spearman was
+    -0.077 versus +0.296 on test. The stability training set is dominated by one
+    scaffold (930 of 1,122 records), so the head is scaffold-dependent and is not
+    yet approved as a universal stability probability or guidance signal.
+*   **ProteinCritic Evaluation and Logging Correction (2026-08-05):** Replaced
+    held-out-derived regression baselines with training-distribution mean/median
+    baselines and added balanced accuracy, macro-F1, multiclass NLL, Brier score,
+    and ECE. Future training logs report every 200 microbatches with optimizer
+    step, learning rate, sequence/residue throughput, per-task losses, MPS memory,
+    and epoch wall time. Versioned results are in
+    `docs/benchmarks/corrected_protein_critic_training_v1.json`.
 
 ---
 *End of Log*

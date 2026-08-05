@@ -18,7 +18,10 @@ from torch.utils.data import DataLoader
 from sklearn.metrics import (
     accuracy_score,
     average_precision_score,
+    balanced_accuracy_score,
     classification_report,
+    f1_score,
+    log_loss,
     precision_recall_fscore_support,
     roc_auc_score,
     mean_absolute_error,
@@ -110,6 +113,38 @@ def top_fraction_enrichment(y_true, y_prob, fractions):
             }
         )
     return rows
+
+
+def expected_calibration_error(y_true, y_prob, n_bins=15):
+    confidence = y_prob.max(axis=1)
+    predictions = y_prob.argmax(axis=1)
+    correctness = predictions == y_true
+    edges = np.linspace(0.0, 1.0, int(n_bins) + 1)
+    ece = 0.0
+    for lower, upper in zip(edges[:-1], edges[1:]):
+        mask = (confidence > lower) & (confidence <= upper)
+        if mask.any():
+            ece += mask.mean() * abs(correctness[mask].mean() - confidence[mask].mean())
+    return float(ece)
+
+
+def training_regression_reference(path, task):
+    field = "stability_score" if task == "stability" else task
+    values = []
+    with Path(path).open() as handle:
+        for line in handle:
+            value = json.loads(line).get(field)
+            if value is not None and np.isfinite(value):
+                values.append(float(value))
+    if not values:
+        raise ValueError(f"no finite training targets found for regression task {task}")
+    array = np.asarray(values, dtype=np.float64)
+    return {
+        "samples": int(array.size),
+        "mean": float(array.mean()),
+        "median": float(np.median(array)),
+        "standard_deviation": float(array.std()),
+    }
 
 
 def main():
@@ -227,7 +262,7 @@ def main():
         loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False)
 
     results = {
-        task: {"preds": [], "targets": [], "top5": [], "top10": []}
+        task: {"preds": [], "targets": [], "probs": [], "top5": [], "top10": []}
         for task in task_dims
         if task not in multi_label_tasks and task not in regression_tasks
     }
@@ -259,6 +294,9 @@ def main():
                     preds = torch.argmax(logits, dim=-1)
                     results[task]["preds"].extend(preds.cpu().tolist())
                     results[task]["targets"].extend(gold.cpu().tolist())
+                    results[task]["probs"].extend(
+                        torch.softmax(logits, dim=-1).tolist()
+                    )
 
                     # Top-5 and Top-10
                     num_classes = logits.size(-1)
@@ -301,10 +339,23 @@ def main():
         y_pred = results[task]["preds"]
         if len(y_true) > 0:
             acc = accuracy_score(y_true, y_pred)
+            balanced_acc = balanced_accuracy_score(y_true, y_pred)
+            macro_f1 = f1_score(y_true, y_pred, average="macro", zero_division=0)
+            weighted_f1 = f1_score(y_true, y_pred, average="weighted", zero_division=0)
+            probabilities = np.asarray(results[task]["probs"], dtype=np.float64)
+            probabilities /= probabilities.sum(axis=1, keepdims=True)
+            labels = np.arange(probabilities.shape[1])
+            nll = log_loss(y_true, probabilities, labels=labels)
+            one_hot = np.eye(probabilities.shape[1])[np.asarray(y_true)]
+            brier = np.mean(np.sum((probabilities - one_hot) ** 2, axis=1))
+            ece = expected_calibration_error(np.asarray(y_true), probabilities)
             print("==================================================")
             print(f"Task: {task}")
             print(f"  Samples evaluated: {len(y_true)}")
             print(f"  Top-1 Accuracy: {acc:.4f}")
+            print(f"  Balanced Accuracy: {balanced_acc:.4f}")
+            print(f"  Macro-F1: {macro_f1:.4f}")
+            print(f"  NLL: {nll:.4f} | ECE: {ece:.4f}")
             if task in ["family", "function"]:
                 top5_acc = sum(results[task]["top5"]) / len(y_true)
                 top10_acc = sum(results[task]["top10"]) / len(y_true)
@@ -313,6 +364,14 @@ def main():
             summary["single_label"][task] = {
                 "samples": len(y_true),
                 "top1_accuracy": float(acc),
+                "balanced_accuracy": float(balanced_acc),
+                "macro_f1": float(macro_f1),
+                "weighted_f1": float(weighted_f1),
+                "negative_log_likelihood": float(nll),
+                "multiclass_brier": float(brier),
+                "expected_calibration_error": float(ece),
+                "top5_accuracy": float(sum(results[task]["top5"]) / len(y_true)),
+                "top10_accuracy": float(sum(results[task]["top10"]) / len(y_true)),
             }
             print("--------------------------------------------------")
             print(classification_report(y_true, y_pred, zero_division=0))
@@ -408,23 +467,28 @@ def main():
         rmse = mean_squared_error(y_true, y_pred) ** 0.5
         pearson = pearsonr(y_true, y_pred).statistic if y_true.size > 1 else np.nan
         spearman = spearmanr(y_true, y_pred).statistic if y_true.size > 1 else np.nan
-        baseline_mae = mean_absolute_error(
-            y_true, np.full_like(y_true, np.median(y_true))
-        )
+        reference = training_regression_reference(cfg["train_data"], task)
+        median_predictions = np.full_like(y_true, reference["median"])
+        mean_predictions = np.full_like(y_true, reference["mean"])
+        baseline_mae = mean_absolute_error(y_true, median_predictions)
+        baseline_rmse = mean_squared_error(y_true, mean_predictions) ** 0.5
         summary["regression"][task] = {
             "samples": int(y_true.size),
             "mae": float(mae),
             "rmse": float(rmse),
             "pearson": _safe_float(pearson),
             "spearman": _safe_float(spearman),
-            "median_baseline_mae": float(baseline_mae),
+            "training_reference": reference,
+            "training_median_baseline_mae": float(baseline_mae),
+            "training_mean_baseline_rmse": float(baseline_rmse),
         }
         print("==================================================")
         print(f"Task: {task} ({args.split})")
         print(
             f"  Samples: {y_true.size} | MAE: {mae:.4f} | RMSE: {rmse:.4f} "
             f"| Pearson: {pearson:.4f} | Spearman: {spearman:.4f} "
-            f"| Median-baseline MAE: {baseline_mae:.4f}"
+            f"| Training-median MAE: {baseline_mae:.4f} "
+            f"| Training-mean RMSE: {baseline_rmse:.4f}"
         )
 
     if args.out_json:

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "status": "completed",
+  "device": "Apple M2 MPS",
+  "effective_batch_size": 32,
+  "selected": {
+    "context": 512,
+    "batch_size": 2,
+    "gradient_accumulation": 16,
+    "sequences_per_second": 10.5957,
+    "peak_driver_gib": 1.39
+  },
+  "context_512": [
+    {"batch_size": 1, "accumulation": 32, "sequences_per_second": 4.0257, "peak_driver_gib": 2.04},
+    {"batch_size": 2, "accumulation": 16, "sequences_per_second": 10.5957, "peak_driver_gib": 1.39},
+    {"batch_size": 4, "accumulation": 8, "sequences_per_second": 10.0695, "peak_driver_gib": 2.32},
+    {"batch_size": 8, "accumulation": 4, "sequences_per_second": 2.0176, "peak_driver_gib": 4.20}
+  ],
+  "context_256": [
+    {"batch_size": 2, "accumulation": 16, "sequences_per_second": 23.2938, "peak_driver_gib": 0.42},
+    {"batch_size": 4, "accumulation": 8, "sequences_per_second": 36.0669, "peak_driver_gib": 0.64},
+    {"batch_size": 8, "accumulation": 4, "sequences_per_second": 41.8071, "peak_driver_gib": 1.17}
+  ],
+  "decision": "Use context 512 because context 256 truncates 65.7% of training proteins and 75.0% of EC-labelled proteins."
+}

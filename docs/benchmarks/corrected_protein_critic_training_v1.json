@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "run_id": "corrected-protein-critic-v1-b2e32-seed1337",
+  "status": "trained_evaluated_not_yet_calibrated",
+  "dataset_id": "corrected-protein-critic-v2",
+  "training": {
+    "device": "mps",
+    "architecture": "bidirectional_8L8H_d256_attention_pooling",
+    "context": 512,
+    "batch_size": 2,
+    "gradient_accumulation": 16,
+    "effective_batch_size": 32,
+    "epochs": 10,
+    "runtime_minutes": 139,
+    "best_epoch": 9,
+    "best_validation_loss": 1.7618500577030523,
+    "final_validation_loss": 1.7881
+  },
+  "checkpoint_sha256": {
+    "best": "37467f1a6da8f09cddbb7d36dde0c3d7e0379d3f072105106e727d0ba55dfde0",
+    "last": "f6b730c14b5e9247c5a111011b556b5fe0b4bca5f47ec55ac6c21290c6100967"
+  },
+  "validation": {
+    "pfam": {
+      "top1_accuracy": 0.3668903803,
+      "balanced_accuracy": 0.3089989945,
+      "macro_f1": 0.2607205218,
+      "top5_accuracy": 0.7270693512,
+      "ece": 0.1037626437
+    },
+    "ec_top_level": {
+      "top1_accuracy": 0.4206500956,
+      "balanced_accuracy": 0.2190029002,
+      "macro_f1": 0.2093103741,
+      "top5_accuracy": 0.9426386233,
+      "ece": 0.0779735524
+    },
+    "stability_delta_g": {
+      "mae": 1.0923950106,
+      "rmse": 1.2948164428,
+      "pearson": -0.020507581,
+      "spearman": -0.0772620722,
+      "training_median_baseline_mae": 1.2097608129,
+      "training_mean_baseline_rmse": 1.2051391149
+    }
+  },
+  "test": {
+    "pfam": {
+      "top1_accuracy": 0.3847780127,
+      "balanced_accuracy": 0.3017729205,
+      "macro_f1": 0.2670396759,
+      "top5_accuracy": 0.7378435518,
+      "ece": 0.0608958131
+    },
+    "ec_top_level": {
+      "top1_accuracy": 0.4390715667,
+      "balanced_accuracy": 0.2380342699,
+      "macro_f1": 0.2232624696,
+      "top5_accuracy": 0.9535783366,
+      "ece": 0.0838703104
+    },
+    "stability_delta_g": {
+      "mae": 0.7618134744,
+      "rmse": 1.1218989357,
+      "pearson": 0.248130179,
+      "spearman": 0.2963662461,
+      "training_median_baseline_mae": 2.5780145115,
+      "training_mean_baseline_rmse": 2.020461319
+    }
+  },
+  "stability_scaffold_imbalance": {
+    "training_clusters": 8,
+    "records_by_cluster": [930, 47, 46, 29, 29, 21, 13, 7],
+    "validation_clusters": 1,
+    "test_clusters": 1
+  },
+  "limitations": [
+    "Classification probabilities have not been temperature calibrated.",
+    "Rare Pfam and EC classes have low or zero recall despite nontrivial top-k accuracy.",
+    "Stability behavior varies by held-out scaffold and the training labels are dominated by one scaffold.",
+    "The test split was evaluated once after selecting epoch 9 on validation and must not guide hyperparameter selection."
+  ]
+}

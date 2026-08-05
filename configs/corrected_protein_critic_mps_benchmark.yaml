@@ -1,0 +1,29 @@
+candidates:
+  - name: b1_e32_ctx512
+    batch_size: 1
+    grad_accum_steps: 32
+    block_size: 512
+  - name: b2_e32_ctx512
+    batch_size: 2
+    grad_accum_steps: 16
+    block_size: 512
+  - name: b4_e32_ctx512
+    batch_size: 4
+    grad_accum_steps: 8
+    block_size: 512
+  - name: b8_e32_ctx512
+    batch_size: 8
+    grad_accum_steps: 4
+    block_size: 512
+  - name: b2_e32_ctx256
+    batch_size: 2
+    grad_accum_steps: 16
+    block_size: 256
+  - name: b4_e32_ctx256
+    batch_size: 4
+    grad_accum_steps: 8
+    block_size: 256
+  - name: b8_e32_ctx256
+    batch_size: 8
+    grad_accum_steps: 4
+    block_size: 256
