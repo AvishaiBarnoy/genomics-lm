@@ -38,9 +38,12 @@ def test_class_balanced_critic_config_changes_only_training_objective():
         "run_id",
         "classification_class_weighting",
         "classification_class_weight_max",
+        "checkpoint_every_minutes",
     }
     for key in set(baseline) | set(ablation):
         if key not in allowed_changes:
             assert ablation[key] == baseline[key]
     assert ablation["classification_class_weighting"] == "sqrt_inverse_frequency"
     assert ablation["classification_class_weight_max"] == 4.0
+    assert ablation["checkpoint_every_minutes"] == 5
+    assert ablation["run_id"].endswith("seed1337-retry1")

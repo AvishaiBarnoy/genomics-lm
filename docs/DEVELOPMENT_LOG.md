@@ -1059,6 +1059,14 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     requires improved class-aware discrimination, no greater than a three-point
     top-1 loss per head, and no more than 5% stability-MAE regression. Test remains
     sealed until the decision is recorded.
+*   **ProteinCritic Class-Balance MPS Stall (2026-08-05):** The first ablation
+    attempt reached epoch 1 microbatch 4,400 in 21.2 active minutes, then remained
+    in macOS uninterruptible-wait state without log progress for about 84 minutes.
+    It stalled before the 30-minute periodic checkpoint and produced neither a
+    completed epoch nor a checkpoint, so it is not evaluable. The process was
+    terminated and its partial logs retained. Retry 1 keeps every scientific and
+    optimization setting fixed, uses a distinct run ID, and reduces periodic
+    checkpoint cadence to five minutes for recoverability.
 
 ---
 *End of Log*

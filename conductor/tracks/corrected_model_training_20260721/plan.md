@@ -191,6 +191,10 @@ corrected report passes its promotion criteria. Otherwise pause and audit.
   only if both heads improve balanced accuracy or macro-F1 without more than a
   three-point absolute top-1 loss, and stability validation MAE regresses by no more
   than 5%. Do not inspect test metrics until that validation decision is recorded.
+  The first attempt stalled in an MPS uninterruptible wait at epoch 1 microbatch
+  4,400 before its first 30-minute checkpoint. It produced no epoch or checkpoint
+  artifact and is excluded from evaluation. Retry 1 changes only the run ID and
+  periodic checkpoint cadence (five minutes) so another driver stall is resumable.
 - [ ] Version the passing critic checkpoint and bind it to its dataset, labels,
   architecture, and calibration artifacts.
 
