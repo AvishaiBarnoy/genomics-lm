@@ -4,6 +4,11 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
+- [ ] **Track: Shared Training Run Lifecycle**
+*Link: [./tracks/shared_training_run_lifecycle_20260805/](./tracks/shared_training_run_lifecycle_20260805/)*
+*Summary: Centralize collision-safe run allocation, locking, resume lineage and
+epoch validation, completion markers, and logging across all model trainers.*
+
 - [x] **Track: Motif Mining & Cluster Analysis**
 *Link: [./tracks/motif_mining_20260210/](./tracks/motif_mining_20260210/)*
 

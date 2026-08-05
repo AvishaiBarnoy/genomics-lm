@@ -197,6 +197,18 @@ corrected report passes its promotion criteria. Otherwise pause and audit.
   cannot distinguish them. It produced no epoch or checkpoint artifact and is
   excluded from evaluation. Retry 1 changes only the run ID and periodic checkpoint
   cadence (five minutes) so a future interruption loses at most a bounded interval.
+  Retry 1 ultimately completed after recovery. Validation-only evaluation rejects
+  class weighting: Pfam balanced accuracy/macro-F1 fell from 0.3090/0.2607 to
+  0.2846/0.2484, although EC improved from 0.2190/0.2093 to 0.2419/0.2288 and
+  stability MAE improved from 1.0924 to 1.0486. The test split remains sealed.
+- [ ] Compare the corrected critic with XGBoost on the identical frozen splits.
+  Pfam and EC controls use training-fitted amino-acid composition, sequence length,
+  and dipeptide/3-mer features; stability additionally uses declared
+  physicochemical descriptors. Select XGBoost hyperparameters on validation only
+  and report the same class-aware or regression metrics and confidence intervals.
+- [ ] Run separate XGBoost probes on frozen ProteinCritic embeddings and raw
+  sequence features. Treat improved embedding-probe performance as representation
+  evidence only when it also exceeds the matched raw-feature XGBoost control.
 - [ ] Version the passing critic checkpoint and bind it to its dataset, labels,
   architecture, and calibration artifacts.
 

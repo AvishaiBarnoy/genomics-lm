@@ -18,9 +18,14 @@ from src.protein_lm.dataset import (
 )
 from src.training.runtime import (
     PeriodicCheckpointPolicy,
-    RunLogger,
     WallTimer,
     save_checkpoint_atomic,
+)
+from src.training.run_lifecycle import (
+    TrainingRun,
+    capture_rng_state,
+    configuration_fingerprint,
+    restore_rng_state,
 )
 
 
@@ -413,6 +418,27 @@ def train_multi_task(
             )
         multi_label_criteria[task] = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
+    epochs = int(cfg.get("epochs", 5))
+    run_fingerprint = configuration_fingerprint(cfg)
+    if not run_id:
+        run_id = cfg.get("run_id", None)
+    if not run_id:
+        from datetime import date
+
+        today = date.today().strftime("%Y-%m-%d")
+        tag = Path(config_path).stem
+        run_id = f"{today}_{tag}_{model_cfg.n_layer}L{model_cfg.n_head}H_d{model_cfg.n_embd}_e{epochs}"
+    training_run = TrainingRun.open(
+        "runs",
+        run_id,
+        resume=resume_path,
+        last_checkpoint_name="last_critic.pt",
+        target_epochs=epochs,
+        config_fingerprint=run_fingerprint,
+    )
+    run_id = training_run.run_dir.name
+    cfg["run_id"] = run_id
+
     best_val_loss = float("inf")
     start_epoch = 0
     optimizer_step = 0
@@ -429,6 +455,7 @@ def train_multi_task(
         )
         best_val_loss = checkpoint.get("best_val_loss", float("inf"))
         optimizer_step = int(checkpoint.get("optimizer_step", 0))
+        restore_rng_state(checkpoint.get("rng_state"))
         print(
             f"[*] Resumed checkpoint. Next epoch: {start_epoch + 1}, "
             f"microbatch: {resume_microbatch_idx} "
@@ -437,7 +464,6 @@ def train_multi_task(
         )
 
     print("[*] Starting Multi-Task Training...", flush=True)
-    epochs = cfg.get("epochs", 5)
     grad_accum_steps = cfg.get("grad_accum_steps", 1)
     print(f"[*] Gradient accumulation steps: {grad_accum_steps}", flush=True)
     log_every_steps = cfg.get("log_every_steps", 100)
@@ -452,22 +478,9 @@ def train_multi_task(
     if max_time_minutes:
         print(f"[*] Wall-time limit configured: {max_time_minutes} minutes", flush=True)
 
-    if not run_id:
-        run_id = cfg.get("run_id", None)
-    if not run_id:
-        from datetime import date
-
-        today = date.today().strftime("%Y-%m-%d")
-        tag = Path(config_path).stem
-        run_id = f"{today}_{tag}_{model_cfg.n_layer}L{model_cfg.n_head}H_d{model_cfg.n_embd}_e{epochs}"
-
-    runs_dir = Path("runs") / run_id
-    out_dir = runs_dir / "checkpoints"
-    scores_dir = runs_dir / "scores"
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-    scores_dir.mkdir(parents=True, exist_ok=True)
-    run_logger = RunLogger(runs_dir / "logs" / "train.log")
+    out_dir = training_run.checkpoints
+    scores_dir = training_run.scores
+    run_logger = training_run.logger()
     run_logger.__enter__()
 
     log_csv = scores_dir / "curves.csv"
@@ -486,7 +499,7 @@ def train_multi_task(
     )
     current_microbatch_idx = 0
 
-    def checkpoint_payload(epoch_idx: int) -> dict:
+    def checkpoint_payload(epoch_idx: int, *, epoch_complete: bool = False) -> dict:
         return {
             "epoch": epoch_idx,
             "model_state_dict": model.state_dict(),
@@ -494,7 +507,15 @@ def train_multi_task(
             "best_val_loss": best_val_loss,
             "optimizer_step": optimizer_step,
             "microbatch_idx": current_microbatch_idx,
-            "epoch_complete": False,
+            "epoch_complete": epoch_complete,
+            "run_progress": {
+                "completed_epochs": epoch_idx + 1 if epoch_complete else epoch_idx,
+                "current_epoch": epoch_idx + 1,
+                "microbatch": 0 if epoch_complete else current_microbatch_idx,
+                "optimizer_step": optimizer_step,
+            },
+            "rng_state": capture_rng_state(),
+            "run_fingerprint": run_fingerprint,
             "cfg": cfg,
             "dataset_provenance": dataset_provenance,
             "task_vocabs": vocabs,
@@ -513,9 +534,10 @@ def train_multi_task(
         }
 
     def save_last(epoch_idx: int, reason: str) -> None:
-        payload = checkpoint_payload(epoch_idx)
+        epoch_complete = reason == "epoch"
+        payload = checkpoint_payload(epoch_idx, epoch_complete=epoch_complete)
         payload["checkpoint_reason"] = reason
-        payload["epoch_complete"] = reason == "epoch"
+        payload["epoch_complete"] = epoch_complete
         if payload["epoch_complete"]:
             payload["microbatch_idx"] = 0
         save_checkpoint_atomic(payload, out_dir / "last_critic.pt")
@@ -749,12 +771,25 @@ def train_multi_task(
         save_last(epoch, reason="epoch")
 
         if improved:
-            best_payload = checkpoint_payload(epoch)
+            best_payload = checkpoint_payload(epoch, epoch_complete=True)
             best_payload["checkpoint_reason"] = "best_epoch"
             best_payload["epoch_complete"] = True
             best_payload["microbatch_idx"] = 0
             save_checkpoint_atomic(best_payload, out_dir / "best_critic.pt")
+            save_checkpoint_atomic(
+                best_payload, out_dir / f"best_critic_epoch_{epoch + 1:03d}.pt"
+            )
             print("  -> Saved new best model.", flush=True)
+
+    if not time_limit_reached:
+        training_run.mark_complete(
+            {
+                "run_id": run_id,
+                "completed_epochs": epochs,
+                "best_validation_loss": best_val_loss,
+            }
+        )
+    training_run.close()
 
 
 if __name__ == "__main__":
