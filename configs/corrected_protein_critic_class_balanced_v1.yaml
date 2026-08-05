@@ -9,7 +9,7 @@ val_data: data/processed/protein_lm/corrected-v2/validation.jsonl
 test_data: data/processed/protein_lm/corrected-v2/test.jsonl
 task_vocabs: data/processed/protein_lm/corrected-v2/task_vocabs.json
 
-run_id: corrected-protein-critic-class-balanced-v1-seed1337
+run_id: corrected-protein-critic-class-balanced-v1-seed1337-retry1
 seed: 1337
 device: mps
 
@@ -37,5 +37,5 @@ lr: 0.0001
 dynamic_padding: true
 log_every_steps: 200
 checkpoint_every_steps: 0
-checkpoint_every_minutes: 30
+checkpoint_every_minutes: 5
 max_time_minutes: null
