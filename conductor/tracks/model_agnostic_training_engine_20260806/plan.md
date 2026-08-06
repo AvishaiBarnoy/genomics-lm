@@ -2,14 +2,14 @@
 
 ## Phase 0: Characterize Existing Behavior
 
-- [ ] Inventory every training and fine-tuning entry point and classify its task,
+- [x] Inventory every training and fine-tuning entry point and classify its task,
   update algorithm, optimizer topology, scheduler, resume granularity, and outputs.
-- [ ] Add characterization tests for standard backpropagation, gradient
+- [x] Add characterization tests for standard backpropagation, gradient
   accumulation remainders, nonfinite groups, validation selection, scheduler
   timing, interruption, and resume.
-- [ ] Define the versioned `TrainingTask`, `UpdateStrategy`, metric, callback, and
+- [x] Define the versioned `TrainingTask`, `UpdateStrategy`, metric, callback, and
   engine-state contracts without importing CodonLM or ProteinLM modules.
-- [ ] Define compatibility rules for existing checkpoints and run directories.
+- [x] Define compatibility rules for existing checkpoints and run directories.
 
 Exit gate: the contracts can represent every current trainer without model-name
 branches, and tests capture the behavior that migrations must preserve.
