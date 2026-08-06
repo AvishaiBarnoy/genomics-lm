@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from numbers import Integral
 from pathlib import Path
-from typing import Generic
+from typing import Any, Callable, Generic, Mapping
 
 import torch
 
@@ -39,6 +39,7 @@ class EngineConfig:
     minimize_monitor: bool = True
     last_checkpoint_name: str = "last.pt"
     best_checkpoint_name: str = "best.pt"
+    epoch_checkpoint_pattern: str | None = None
 
     def __post_init__(self) -> None:
         for name in ("epochs", "grad_accum_steps", "validate_every_epochs"):
@@ -88,6 +89,10 @@ class TrainingEngine(Generic[BatchT]):
         wall_timer: WallTimer | None = None,
         checkpoint_policy: PeriodicCheckpointPolicy | None = None,
         run_fingerprint: str | None = None,
+        checkpoint_decoder: Callable[[Mapping[str, Any]], TrainingCheckpoint]
+        | None = None,
+        checkpoint_payload_adapter: Callable[[dict[str, Any]], dict[str, Any]]
+        | None = None,
     ) -> None:
         self.task = task
         self.strategy = strategy
@@ -98,6 +103,8 @@ class TrainingEngine(Generic[BatchT]):
         self.wall_timer = wall_timer or WallTimer()
         self.checkpoint_policy = checkpoint_policy or PeriodicCheckpointPolicy()
         self.run_fingerprint = run_fingerprint
+        self.checkpoint_decoder = checkpoint_decoder or TrainingCheckpoint.from_payload
+        self.checkpoint_payload_adapter = checkpoint_payload_adapter
         self.state = EngineState()
         self.best_metric: float | None = None
         self.aborted_groups = 0
@@ -191,6 +198,7 @@ class TrainingEngine(Generic[BatchT]):
             validation_metrics = {}
             if (epoch + 1) % self.config.validate_every_epochs == 0:
                 validation_metrics = self._validate(epoch)
+            self.strategy.end_epoch(validation_metrics)
             self.state = EngineState(
                 completed_epochs=epoch + 1,
                 current_epoch=epoch + 1,
@@ -202,6 +210,11 @@ class TrainingEngine(Generic[BatchT]):
             if improved:
                 self.best_metric = monitored.total
             self._save(self.config.last_checkpoint_name, "epoch")
+            if self.config.epoch_checkpoint_pattern is not None:
+                self._save(
+                    self.config.epoch_checkpoint_pattern.format(epoch=epoch + 1),
+                    "epoch_archive",
+                )
             if improved:
                 self._save(self.config.best_checkpoint_name, "best")
             self._emit("epoch_completed", None, validation_metrics)
@@ -256,12 +269,14 @@ class TrainingEngine(Generic[BatchT]):
         }
         if self.run_fingerprint is not None:
             payload["run_fingerprint"] = self.run_fingerprint
+        if self.checkpoint_payload_adapter is not None:
+            payload = self.checkpoint_payload_adapter(payload)
         save_checkpoint_atomic(payload, self.run.checkpoints / filename)
         self._emit("checkpoint_saved", None, metadata={"reason": reason, "filename": filename})
 
     def _restore(self, path: Path) -> None:
         payload = torch.load(path, map_location="cpu", weights_only=False)
-        checkpoint = TrainingCheckpoint.from_payload(payload)
+        checkpoint = self.checkpoint_decoder(payload)
         self.task.load_state_dict(checkpoint.task)
         self.strategy.load_state_dict(checkpoint.strategy)
         restore_rng_state(dict(checkpoint.rng))

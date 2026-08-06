@@ -290,3 +290,18 @@ Before merging changes that modify attention kernels (e.g., GQA, SDPA) or data l
 2. Track peak RAM and VRAM footprint.
 3. Validate that training loss/perplexity curves match baseline configurations to confirm mathematical equivalence.
 4. **Never call `torch.mps.empty_cache()` inside the training step loop** unless recovering from an OOM error. Cache flushes trigger expensive synchronization barriers on Apple Silicon.
+## 6. ProteinLM Shared Engine
+
+`src.protein_lm.train_lm` now assembles `ProteinLMTask`, the shared accumulated-
+backprop strategy, and `TrainingEngine`. Its CLI remains unchanged:
+
+```bash
+python -m src.protein_lm.train_lm --config configs/protein_lm/small.yaml
+python -m src.protein_lm.train_lm --config configs/protein_lm/small.yaml \
+  --run-id <run-id> --resume runs/protein_lm/<run-id>/checkpoints/last.pt
+```
+
+New checkpoints contain the versioned `engine`, `task`, `strategy`, `rng`, and
+`metadata` namespaces and retain the legacy ProteinLM model, optimizer, scheduler,
+epoch, and progress aliases. Existing unambiguous ProteinLM `last.pt` checkpoints
+remain valid resume inputs.
