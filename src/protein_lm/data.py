@@ -51,7 +51,17 @@ class ProteinDataset(Dataset):
         return torch.tensor(input_ids, dtype=torch.long)
 
 
-def create_dataloader(split_path, batch_size, num_workers, tokenizer, block_size, shuffle=True, dataset_class=ProteinDataset, label_field=None):
+def create_dataloader(
+    split_path,
+    batch_size,
+    num_workers,
+    tokenizer,
+    block_size,
+    shuffle=True,
+    dataset_class=ProteinDataset,
+    label_field=None,
+    generator=None,
+):
     """
     Creates a DataLoader for a given dataset split.
     Can be used for both language modeling and classification.
@@ -65,7 +75,8 @@ def create_dataloader(split_path, batch_size, num_workers, tokenizer, block_size
         dataset,
         batch_size=batch_size,
         num_workers=num_workers,
-        shuffle=shuffle
+        shuffle=shuffle,
+        generator=generator,
     )
 
 class ProteinClassificationDataset(ProteinDataset):
@@ -108,5 +119,4 @@ class ProteinClassificationDataset(ProteinDataset):
         label = sample.get(self.label_field)
         
         return torch.tensor(input_ids, dtype=torch.long), torch.tensor(self.label_map.get(label, -1), dtype=torch.long)
-
 

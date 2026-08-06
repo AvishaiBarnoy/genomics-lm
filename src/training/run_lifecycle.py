@@ -3,6 +3,7 @@ from __future__ import annotations
 import atexit
 import csv
 import hashlib
+import fcntl
 import json
 import os
 import random
@@ -40,7 +41,18 @@ def configuration_fingerprint(
     config: dict[str, Any], mutable_keys: set[str] | None = None
 ) -> str:
     excluded = DEFAULT_MUTABLE_CONFIG_KEYS if mutable_keys is None else mutable_keys
-    immutable = {key: value for key, value in config.items() if key not in excluded}
+    def remove_mutable(value):
+        if isinstance(value, dict):
+            return {
+                key: remove_mutable(item)
+                for key, item in value.items()
+                if key not in excluded
+            }
+        if isinstance(value, list):
+            return [remove_mutable(item) for item in value]
+        return value
+
+    immutable = remove_mutable(config)
     encoded = json.dumps(immutable, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(encoded.encode()).hexdigest()
 
@@ -236,14 +248,16 @@ class TrainingRun:
         raise RunLifecycleError(f"Could not allocate a serial directory for {run_id}")
 
     def _acquire_lock(self) -> None:
+        self._lock_fd = os.open(self.lock_path, os.O_CREAT | os.O_RDWR, 0o644)
         try:
-            self._lock_fd = os.open(
-                self.lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644
-            )
-        except FileExistsError as exc:
+            fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            os.close(self._lock_fd)
+            self._lock_fd = None
             raise RunLifecycleError(
                 f"Run directory is already locked: {self.run_dir}"
             ) from exc
+        os.ftruncate(self._lock_fd, 0)
         os.write(self._lock_fd, f"pid={os.getpid()}\n".encode())
 
     def mark_complete(self, metadata: dict[str, Any]) -> None:
@@ -260,12 +274,12 @@ class TrainingRun:
     def close(self) -> None:
         if self._lock_fd is None:
             return
+        fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
         os.close(self._lock_fd)
         self._lock_fd = None
-        try:
-            self.lock_path.unlink()
-        except FileNotFoundError:
-            pass
+
+    def __del__(self) -> None:
+        self.close()
 
     def __enter__(self) -> "TrainingRun":
         return self

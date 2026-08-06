@@ -123,3 +123,8 @@ def test_configuration_fingerprint_ignores_operational_settings():
     assert configuration_fingerprint(baseline) != configuration_fingerprint(
         {**baseline, "lr": 2e-4}
     )
+    assert configuration_fingerprint(
+        {"training": {"epochs": 10, "lr": 1e-4}}
+    ) == configuration_fingerprint(
+        {"training": {"epochs": 20, "lr": 1e-4}}
+    )
