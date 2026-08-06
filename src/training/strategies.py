@@ -75,6 +75,8 @@ class AccumulatedBackpropStrategy(Generic[BatchT]):
         parameters=None,
         grad_clip_norm: float | None = None,
         precision: PrecisionPolicy | None = None,
+        scheduler_interval: str = "update",
+        scheduler_metric: str = "loss",
     ) -> None:
         self.optimizer = optimizer
         self.scheduler = scheduler
@@ -85,6 +87,10 @@ class AccumulatedBackpropStrategy(Generic[BatchT]):
         ]
         self.grad_clip_norm = grad_clip_norm
         self.precision = precision or PrecisionPolicy()
+        if scheduler_interval not in {"update", "epoch"}:
+            raise ValueError("scheduler_interval must be 'update' or 'epoch'")
+        self.scheduler_interval = scheduler_interval
+        self.scheduler_metric = scheduler_metric
         self._expected_group_size = 0
         self._processed = 0
 
@@ -136,7 +142,7 @@ class AccumulatedBackpropStrategy(Generic[BatchT]):
             if not math.isfinite(float(norm)):
                 return self.abort_group("nonfinite clipped gradient norm")
         self.precision.step(self.optimizer)
-        if self.scheduler is not None:
+        if self.scheduler is not None and self.scheduler_interval == "update":
             self.scheduler.step()
         self.optimizer.zero_grad(set_to_none=True)
         self._reset_group()
@@ -147,6 +153,19 @@ class AccumulatedBackpropStrategy(Generic[BatchT]):
         self._reset_group()
         return UpdateResult(committed=False, optimizer_steps=0, reason=reason)
 
+    def end_epoch(self, metrics: Mapping[str, Any]) -> None:
+        if self.scheduler is None or self.scheduler_interval != "epoch":
+            return
+        if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            metric = metrics.get(self.scheduler_metric)
+            if metric is None:
+                raise ValueError(
+                    f"epoch scheduler requires metric {self.scheduler_metric!r}"
+                )
+            self.scheduler.step(metric.total)
+        else:
+            self.scheduler.step()
+
     def _reset_group(self) -> None:
         self._expected_group_size = 0
         self._processed = 0
@@ -154,12 +173,19 @@ class AccumulatedBackpropStrategy(Generic[BatchT]):
     def state_dict(self) -> Mapping[str, Any]:
         state: dict[str, Any] = {"optimizer": self.optimizer.state_dict()}
         state["precision"] = dict(self.precision.state_dict())
+        state["scheduler_interval"] = self.scheduler_interval
         if self.scheduler is not None:
             state["scheduler"] = self.scheduler.state_dict()
         return state
 
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
         self.optimizer.load_state_dict(state["optimizer"])
+        saved_interval = state.get("scheduler_interval", self.scheduler_interval)
+        if saved_interval != self.scheduler_interval:
+            raise ValueError(
+                f"checkpoint scheduler interval {saved_interval!r} differs from "
+                f"configured interval {self.scheduler_interval!r}"
+            )
         self.precision.load_state_dict(state.get("precision", {}))
         if self.scheduler is not None:
             if "scheduler" not in state:

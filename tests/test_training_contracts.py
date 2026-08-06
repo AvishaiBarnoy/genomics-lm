@@ -62,6 +62,9 @@ class MultiOptimizerStrategy:
     def abort_group(self, reason):
         return UpdateResult(committed=False, optimizer_steps=0, reason=reason)
 
+    def end_epoch(self, metrics):
+        pass
+
     def state_dict(self):
         return {"group_size": self.group_size, "optimizers": [{}, {}, {}]}
 

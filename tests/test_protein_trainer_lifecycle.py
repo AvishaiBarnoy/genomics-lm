@@ -48,6 +48,12 @@ def test_protein_lm_serial_launch_and_completed_extension(tmp_path, monkeypatch)
     assert (first / "run_complete.json").exists()
     payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
     assert payload["run_progress"]["completed_epochs"] == 1
+    assert payload["training_contract_version"] == 1
+    assert payload["model_state_dict"].keys() == payload["task"]["model"].keys()
+    for name, tensor in payload["model_state_dict"].items():
+        assert torch.equal(tensor, payload["task"]["model"][name])
+    assert payload["optimizer_state_dict"].keys() == payload["strategy"]["optimizer"].keys()
+    assert payload["scheduler_state_dict"] == payload["strategy"]["scheduler"]
 
     train(str(config))
     assert (tmp_path / "runs" / "protein_lm" / "protein-lm-smoke-r002").exists()
