@@ -1079,6 +1079,14 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     completion markers, shared log paths, RNG capture/restore, and numbered best
     checkpoints. CodonLM and multitask ProteinCritic are the first migrated trainers;
     ProteinLM, classifier, EBM, and NoProp remain explicitly open in Phase 3.
+*   **Shared Training Lifecycle Phase 3 (2026-08-06):** Migrated ProteinLM, the
+    protein classifier, Protein EBM, and NoProp to the collision-safe run owner.
+    ProteinLM/classifier now restore model, optimizer, scheduler, RNG, and an
+    optimizer-boundary microbatch position against deterministic epoch permutations.
+    EBM restores its head optimizer at epoch boundaries. NoProp now saves `last.pt`
+    every epoch with the embedding, every block optimizer, and output-head optimizer.
+    Run locking now uses kernel-released advisory locks so a killed process cannot
+    leave a permanently stale lock file.
 
 ---
 *End of Log*

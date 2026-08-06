@@ -6,19 +6,20 @@ instead of global backpropagation.
 
 import argparse
 import yaml
-import time
-import json
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
-from pathlib import Path
 from torch.utils.data import DataLoader
 
 from .model_tiny_gpt import NoPropTinyGPT
 from .data_loading import PackedDataset, dynamic_lm_collate_fn
-from .train_codon_lm import _ensure_path_list, _normalize_run_id, _auto_run_id, _prepare_output_dirs
+from .train_codon_lm import _ensure_path_list, _normalize_run_id, _auto_run_id
 from src.training.runtime import save_checkpoint_atomic
+from src.training.run_lifecycle import (
+    TrainingRun,
+    capture_rng_state,
+    configuration_fingerprint,
+    restore_rng_state,
+)
 from .training.vocabulary import (
     resolve_vocabulary_contract,
     snapshot_vocabulary,
@@ -31,6 +32,7 @@ def main():
     ap.add_argument("--run_id", default=None)
     ap.add_argument("--device", default=None)
     ap.add_argument("--noise_sigma", type=float, default=0.1, help="Sigma of Gaussian noise added to targets")
+    ap.add_argument("--resume", default=None)
     args = ap.parse_args()
 
     with open(args.config, "r") as f:
@@ -45,7 +47,21 @@ def main():
 
     # Set run ID
     run_id = _normalize_run_id(args.run_id) or _auto_run_id(cfg, args.config)
-    ckpt_root, scores_root = _prepare_output_dirs("runs", "runs", run_id)
+    epochs = int(cfg.get("epochs", 5))
+    run_fingerprint = configuration_fingerprint(
+        {**cfg, "noise_sigma": args.noise_sigma}
+    )
+    training_run = TrainingRun.open(
+        "runs",
+        run_id,
+        resume=args.resume,
+        target_epochs=epochs,
+        config_fingerprint=run_fingerprint,
+    )
+    run_id = training_run.run_dir.name
+    ckpt_root, scores_root = training_run.checkpoints, training_run.scores
+    run_logger = training_run.logger()
+    run_logger.__enter__()
     print(f"[noprop] run_id: {run_id}")
 
     # Load datasets
@@ -95,13 +111,26 @@ def main():
     opts_blocks = [torch.optim.AdamW(block.parameters(), lr=lr) for block in model.blocks]
     opt_head = torch.optim.AdamW(list(model.ln_f.parameters()) + list(model.head.parameters()), lr=lr)
 
-    epochs = cfg.get("epochs", 5)
     noise_sigma = args.noise_sigma
+    start_epoch = 1
+    best_val_loss = float("inf")
+    if args.resume:
+        checkpoint = torch.load(args.resume, map_location=device, weights_only=False)
+        model.load_state_dict(checkpoint["model"])
+        opt_emb.load_state_dict(checkpoint["optimizers"]["embedding"])
+        for optimizer, state in zip(opts_blocks, checkpoint["optimizers"]["blocks"]):
+            optimizer.load_state_dict(state)
+        opt_head.load_state_dict(checkpoint["optimizers"]["head"])
+        best_val_loss = float(checkpoint.get("best_val_loss", float("inf")))
+        start_epoch = int(checkpoint["epoch"]) + 1
+        restore_rng_state(checkpoint.get("rng_state"))
 
     print(f"[noprop] starting training for {epochs} epochs")
-    best_val_loss = float("inf")
+    curves_path = scores_root / "curves.csv"
+    if not curves_path.exists():
+        curves_path.write_text("epoch,train_ce,val_ce\n")
 
-    for epoch in range(1, epochs + 1):
+    for epoch in range(start_epoch, epochs + 1):
         # Training loop
         model.train()
         train_loss_ce = 0.0
@@ -135,23 +164,23 @@ def main():
             h_prev = h
 
             # Step-by-step block-wise training
-            for l, block in enumerate(model.blocks):
+            for layer_index, block in enumerate(model.blocks):
                 # Detach context input from graph to stop gradient propagation
-                h_in = h_prev.detach() if l > 0 else h_prev
+                h_in = h_prev.detach() if layer_index > 0 else h_prev
 
-                opts_blocks[l].zero_grad()
+                opts_blocks[layer_index].zero_grad()
                 h_out, pred_y = block(h_in, noisy_targets=y_noisy, attn_mask=attn_mask)
 
                 loss_mse_elementwise = F.mse_loss(pred_y, y_clean, reduction="none")
                 loss_mse = (loss_mse_elementwise * non_pad_mask).sum() / (non_pad_mask.sum() * pred_y.size(-1) + 1e-8)
                 loss_mse.backward()
 
-                opts_blocks[l].step()
-                if l == 0:
+                opts_blocks[layer_index].step()
+                if layer_index == 0:
                     # Also update embeddings via block 0 output
                     opt_emb.step()
 
-                train_loss_blocks[l] += loss_mse.item()
+                train_loss_blocks[layer_index] += loss_mse.item()
                 h_prev = h_out
 
             # 2. Step final head
@@ -190,11 +219,11 @@ def main():
                     attn_mask = (seg.unsqueeze(-1) == seg.unsqueeze(-2)).unsqueeze(1)
 
                 h_prev = h
-                for l, block in enumerate(model.blocks):
+                for layer_index, block in enumerate(model.blocks):
                     h_out, pred_y = block(h_prev, noisy_targets=y_clean, attn_mask=attn_mask)
                     loss_mse_elementwise = F.mse_loss(pred_y, y_clean, reduction="none")
                     loss_mse = (loss_mse_elementwise * non_pad_mask).sum() / (non_pad_mask.sum() * pred_y.size(-1) + 1e-8)
-                    val_loss_blocks[l] += loss_mse.item()
+                    val_loss_blocks[layer_index] += loss_mse.item()
                     h_prev = h_out
 
                 h_final = model.ln_f(h_prev)
@@ -211,15 +240,40 @@ def main():
 
         # Save checkpoint
         avg_val_loss = val_loss_ce / n_val
+        payload = {
+            "model": model.state_dict(),
+            "optimizers": {
+                "embedding": opt_emb.state_dict(),
+                "blocks": [optimizer.state_dict() for optimizer in opts_blocks],
+                "head": opt_head.state_dict(),
+            },
+            "epoch": epoch,
+            "epoch_complete": True,
+            "val_loss": avg_val_loss,
+            "best_val_loss": min(best_val_loss, avg_val_loss),
+            "run_fingerprint": run_fingerprint,
+            "rng_state": capture_rng_state(),
+            "run_progress": {
+                "completed_epochs": epoch,
+                "current_epoch": epoch,
+                "microbatch": 0,
+                "optimizer_step": epoch * len(train_loader),
+            },
+        }
+        save_checkpoint_atomic(payload, ckpt_root / "last.pt")
+        with curves_path.open("a") as handle:
+            handle.write(f"{epoch},{train_loss_ce / n_train:.6f},{avg_val_loss:.6f}\n")
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             ckpt_path = ckpt_root / "best.pt"
-            save_checkpoint_atomic({
-                "model": model.state_dict(),
-                "epoch": epoch,
-                "val_loss": avg_val_loss
-            }, ckpt_path)
+            save_checkpoint_atomic(payload, ckpt_path)
+            save_checkpoint_atomic(payload, ckpt_root / f"best_epoch_{epoch:03d}.pt")
             print(f"  [noprop] saved new best checkpoint to {ckpt_path}")
+
+    training_run.mark_complete(
+        {"completed_epochs": epochs, "best_validation_loss": best_val_loss}
+    )
+    training_run.close()
 
 if __name__ == "__main__":
     main()

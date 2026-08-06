@@ -19,15 +19,16 @@
 
 ## Phase 3: Remaining Model Trainers
 
-- [ ] Migrate protein LM and protein classifier.
-- [ ] Add resume support and migrate Protein EBM.
-- [ ] Migrate NoProp and explicitly document its experimental checkpoint contract.
+- [x] Migrate protein LM and protein classifier with deterministic mid-epoch resume.
+- [x] Add epoch-boundary resume support and migrate Protein EBM.
+- [x] Migrate NoProp, including all layer-specific optimizer states, and explicitly
+  document its experimental checkpoint contract.
 - [ ] Inventory ancillary fine-tuning entry points and either migrate or mark them
   non-resumable with overwrite protection.
 
 ## Phase 4: Documentation and Enforcement
 
-- [ ] Document fresh, resume, fork, and completed-run commands.
+- [x] Document fresh, resume, fork, and completed-run commands.
 - [ ] Add CI contract tests covering every registered trainer.
 - [ ] Record migration status in the development log.
 - [ ] Reject direct unguarded writes to canonical `last`/`best` paths in trainers.

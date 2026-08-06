@@ -133,6 +133,12 @@ with that run's newest `last` checkpoint and a configured total epoch target gre
 than its completed epoch count. Use a new run ID to fork from an older or best
 checkpoint; best checkpoints are evaluation artifacts, not in-place resume points.
 
+This lifecycle also applies to ProteinLM, the single-task protein classifier,
+Protein EBM, and NoProp. ProteinLM/classifier checkpoints can resume at recorded
+optimizer-safe microbatch boundaries using a deterministic epoch sampler. EBM and
+NoProp currently resume only from completed epochs. NoProp checkpoints include the
+embedding, per-block, and output-head optimizer states.
+
 Build the homology-cluster-held-out critic artifacts before critic training:
 
 ```bash

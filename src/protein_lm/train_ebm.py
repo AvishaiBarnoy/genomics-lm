@@ -9,7 +9,6 @@ import argparse
 import random
 import yaml
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from pathlib import Path
@@ -19,6 +18,13 @@ from src.protein_lm.dataset import MultiTaskProteinDataset, LengthBucketBatchSam
 from src.protein_lm.models_multi import MultiTaskProteinClassifier
 from src.protein_lm.config import ProteinClassifierConfig
 from src.protein_lm.ebm import ProteinLatentEBM
+from src.training.run_lifecycle import (
+    TrainingRun,
+    capture_rng_state,
+    configuration_fingerprint,
+    restore_rng_state,
+)
+from src.training.runtime import save_checkpoint_atomic
 
 AMINO_ACIDS = ['A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V']
 
@@ -43,6 +49,8 @@ def parse_args():
     parser.add_argument("--function_dim", type=int, default=1000, help="Classifier function dimension")
     parser.add_argument("--hidden_dim", type=int, default=512, help="Hidden size of the EBM network")
     parser.add_argument("--out_dir", default="runs/protein_ebm", help="Output directory for checkpoints")
+    parser.add_argument("--run_id", default=None)
+    parser.add_argument("--resume", default=None)
     parser.add_argument("--seed", type=int, default=1337, help="RNG seed")
     return parser.parse_args()
 
@@ -59,9 +67,34 @@ def main():
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
 
+    requested_dir = Path(args.out_dir)
+    run_id = args.run_id or requested_dir.name
+    fingerprint = configuration_fingerprint(
+        {
+            **cfg,
+            "critic_ckpt": str(Path(args.critic_ckpt).resolve()),
+            "lr": args.lr,
+            "pooling": args.pooling,
+            "family_dim": args.family_dim,
+            "function_dim": args.function_dim,
+            "hidden_dim": args.hidden_dim,
+            "seed": args.seed,
+        }
+    )
+    training_run = TrainingRun.open(
+        requested_dir.parent,
+        run_id,
+        resume=args.resume,
+        last_checkpoint_name="last_ebm.pt",
+        target_epochs=args.epochs,
+        config_fingerprint=fingerprint,
+    )
+    run_logger = training_run.logger()
+    run_logger.__enter__()
+
     # Initialize tokenizer and datasets
     tokenizer = ProteinTokenizer()
-    print(f"[ebm-train] loading dataset paths from config")
+    print("[ebm-train] loading dataset paths from config")
     train_dataset = MultiTaskProteinDataset(cfg["train_data"], tokenizer, max_length=cfg.get("block_size", 512))
     val_dataset = MultiTaskProteinDataset(cfg["val_data"], tokenizer, max_length=cfg.get("block_size", 512))
 
@@ -69,7 +102,8 @@ def main():
     train_sampler = LengthBucketBatchSampler(train_dataset, batch_size=batch_size, shuffle=True)
     val_sampler = LengthBucketBatchSampler(val_dataset, batch_size=batch_size, shuffle=False)
 
-    collate_fn = lambda b: collate_protein_batch(b, pad_token_id=tokenizer.pad_token_id)
+    def collate_fn(batch):
+        return collate_protein_batch(batch, pad_token_id=tokenizer.pad_token_id)
     train_loader = DataLoader(train_dataset, batch_sampler=train_sampler, collate_fn=collate_fn)
     val_loader = DataLoader(val_dataset, batch_sampler=val_sampler, collate_fn=collate_fn)
 
@@ -107,14 +141,9 @@ def main():
 
     optimizer = torch.optim.AdamW(ebm.parameters(), lr=args.lr, weight_decay=0.01)
 
-    out_dir = Path(args.out_dir)
-    ckpt_dir = out_dir / "checkpoints"
-    scores_dir = out_dir / "scores"
-    logs_dir = out_dir / "logs"
-
-    ckpt_dir.mkdir(parents=True, exist_ok=True)
-    scores_dir.mkdir(parents=True, exist_ok=True)
-    logs_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = training_run.run_dir
+    ckpt_dir = training_run.checkpoints
+    scores_dir = training_run.scores
 
     # Copy config
     import shutil
@@ -125,15 +154,25 @@ def main():
 
     # Initialize curves.csv
     curves_path = scores_dir / "curves.csv"
-    with open(curves_path, "w") as f:
-        f.write("epoch,train_loss,val_loss\n")
+    if not curves_path.exists():
+        with open(curves_path, "w") as f:
+            f.write("epoch,train_loss,val_loss\n")
 
     print(f"[ebm-train] starting EBM training: epochs={args.epochs}, lr={args.lr}")
     
     best_val_loss = float("inf")
     best_epoch = 0
+    start_epoch = 1
+    if args.resume:
+        checkpoint = torch.load(args.resume, map_location=device, weights_only=False)
+        ebm.load_state_dict(checkpoint["model"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        best_val_loss = float(checkpoint.get("best_val_loss", float("inf")))
+        best_epoch = int(checkpoint.get("best_epoch", 0))
+        start_epoch = int(checkpoint["epoch"]) + 1
+        restore_rng_state(checkpoint.get("rng_state"))
 
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(start_epoch, args.epochs + 1):
         ebm.train()
         total_loss = 0.0
         n_batches = 0
@@ -231,23 +270,36 @@ def main():
             "model": ebm.state_dict(),
             "epoch": epoch,
             "val_loss": avg_val,
+            "optimizer_state_dict": optimizer.state_dict(),
+            "best_val_loss": min(best_val_loss, avg_val),
+            "best_epoch": epoch if avg_val < best_val_loss else best_epoch,
+            "epoch_complete": True,
+            "run_fingerprint": fingerprint,
+            "rng_state": capture_rng_state(),
+            "run_progress": {
+                "completed_epochs": epoch,
+                "current_epoch": epoch,
+                "microbatch": 0,
+                "optimizer_step": epoch * len(train_loader),
+            },
         }
         
         # Save epoch checkpoint
         ckpt_path = ckpt_dir / f"ebm_epoch_{epoch}.pt"
-        torch.save(payload, ckpt_path)
+        save_checkpoint_atomic(payload, ckpt_path)
         print(f"[saved] {ckpt_path}")
 
         # Save last checkpoint
         last_path = ckpt_dir / "last_ebm.pt"
-        torch.save(payload, last_path)
+        save_checkpoint_atomic(payload, last_path)
         
         # Save best checkpoint
         if avg_val < best_val_loss:
             best_val_loss = avg_val
             best_epoch = epoch
             best_path = ckpt_dir / "best_ebm.pt"
-            torch.save(payload, best_path)
+            save_checkpoint_atomic(payload, best_path)
+            save_checkpoint_atomic(payload, ckpt_dir / f"best_ebm_epoch_{epoch:03d}.pt")
             print(f"[saved] {best_path} (new best validation loss: {best_val_loss:.4f})")
 
     # Generate summary.md
@@ -268,6 +320,11 @@ def main():
 - **Backbone Critic Checkpoint:** `{args.critic_ckpt}`
 """
     summary_path.write_text(summary_content)
+    training_run.mark_complete(
+        {"completed_epochs": args.epochs, "best_epoch": best_epoch,
+         "best_validation_loss": best_val_loss}
+    )
+    training_run.close()
     print(f"[summary] Wrote run summary to {summary_path}")
     print("[ebm-train] Done training!")
 
