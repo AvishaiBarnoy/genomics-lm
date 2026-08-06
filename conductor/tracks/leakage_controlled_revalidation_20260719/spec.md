@@ -101,12 +101,21 @@ declared head, measure generated-protein out-of-distribution behavior, and bind 
 checkpoint to its dataset and evaluation artifacts. Legacy critic results remain
 exploratory.
 
+The critic evaluation must include classical XGBoost controls on training-fitted raw
+protein features under the identical homology/scaffold splits. Classification uses
+amino-acid composition, length, and local k-mers; stability regression may add
+declared physicochemical descriptors. XGBoost on frozen model embeddings is a
+separate nonlinear-probe condition and must be compared directly with raw-feature
+XGBoost before attributing gains to pretrained representations.
+
 ## Corrected Evaluation Protocol
 1. Compare uniform, unigram, bigram, trigram, and CodonLM loss, perplexity, and
    bits/codon on identical token streams.
 2. Extract embeddings causally from corrected checkpoints with complete provenance.
 3. Rerun EC, essentiality, AMR, and DNA-shape evaluations with controlled group or
    protein-homology holdouts and shared folds for all controls.
+   Include paired XGBoost-on-embedding and XGBoost-on-raw-feature conditions where
+   sample size and label support permit them.
 4. Report balanced accuracy, macro-F1, macro-AUPRC, AUROC where defined, and
    class-aware confidence intervals.
 5. Audit generated sequences against training nucleotide and protein records before

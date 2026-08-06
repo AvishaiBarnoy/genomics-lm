@@ -27,11 +27,16 @@ from src.codonlm.data_loading import (
 from src.codonlm.replay import GeneratedTerminationReplayDataset
 from src.training.runtime import (
     PeriodicCheckpointPolicy,
-    RunLogger,
     WallTimeLimitException,
     WallTimer,
     save_checkpoint_atomic,
     default_device,
+)
+from src.training.run_lifecycle import (
+    TrainingRun,
+    capture_rng_state,
+    configuration_fingerprint,
+    restore_rng_state,
 )
 
 from src.codonlm.training.config import (
@@ -39,7 +44,6 @@ from src.codonlm.training.config import (
     _ensure_path_list,
     _normalize_run_id,
     _auto_run_id,
-    _prepare_output_dirs,
     _normalize_offset_weights,
 )
 from src.codonlm.training.checkpoint import _read_itos, _load_transfer_state_dict
@@ -405,9 +409,20 @@ def run_training(cfg: dict, args) -> None:
         run_id = _auto_run_id(cfg, args.config)
     if run_id:
         cfg["run_id"] = run_id
-    outdir = cfg["out_dir"]
-    scores_base = cfg.get("scores_dir", "outputs/scores")
-    ckpt_dir, scores_dir = _prepare_output_dirs(outdir, scores_base, run_id)
+    configured_epochs = cfg.get("epochs")
+    target_epochs = int(configured_epochs) if configured_epochs is not None else None
+    run_fingerprint = configuration_fingerprint(cfg)
+    training_run = TrainingRun.open(
+        "runs",
+        run_id,
+        resume=resume_path,
+        last_checkpoint_name="last.pt",
+        target_epochs=target_epochs,
+        config_fingerprint=run_fingerprint,
+    )
+    run_id = training_run.run_dir.name
+    cfg["run_id"] = run_id
+    ckpt_dir, scores_dir = training_run.checkpoints, training_run.scores
     accumulation_health = AccumulationHealth()
 
     vocabulary_snapshot = snapshot_vocabulary(
@@ -421,7 +436,7 @@ def run_training(cfg: dict, args) -> None:
     )
 
     shutil.copy2(args.config, ckpt_dir / "config.yaml")
-    run_logger = RunLogger(ckpt_dir.parent / "logs" / "train.log")
+    run_logger = training_run.logger()
     run_logger.__enter__()
 
     def write_failure_meta(exc: Exception) -> None:
@@ -881,6 +896,7 @@ def run_training(cfg: dict, args) -> None:
                     scheduler.load_state_dict(ckpt_resume["scheduler"])
                 except Exception as exc:
                     print(f"[resume] scheduler state load failed: {exc}")
+            restore_rng_state(ckpt_resume.get("rng_state"))
             start_epoch = int(ckpt_resume.get("epoch", 0))
             step = int(ckpt_resume.get("step", step))
             consumed_train_tokens = int(
@@ -971,6 +987,20 @@ def run_training(cfg: dict, args) -> None:
                 "accumulation_health": accumulation_health.state_dict(),
                 "max_nonfinite_accumulation_groups": max_nonfinite_groups,
                 "epoch_train_metrics": dict(epoch_train_metrics),
+                "run_progress": {
+                    "completed_epochs": (
+                        epoch_idx if val_loss != float("inf") else max(0, epoch_idx - 1)
+                    ),
+                    "current_epoch": epoch_idx,
+                    "microbatch": (
+                        0
+                        if val_loss != float("inf")
+                        else int(current_resume_microbatch_idx)
+                    ),
+                    "optimizer_step": step,
+                },
+                "rng_state": capture_rng_state(),
+                "run_fingerprint": run_fingerprint,
             }
             if use_shape_guidance and encoder is not None:
                 payload["encoder"] = encoder.state_dict()
@@ -1408,6 +1438,9 @@ def run_training(cfg: dict, args) -> None:
 
             if improved:
                 save_checkpoint_atomic(ckpt_payload, ckpt_dir / "best.pt")
+                save_checkpoint_atomic(
+                    ckpt_payload, ckpt_dir / f"best_epoch_{epoch_idx:03d}.pt"
+                )
             elif int(cfg.get("early_stop_patience", 5)) > 0 and no_improve >= int(
                 cfg.get("early_stop_patience", 5)
             ):
@@ -1421,6 +1454,7 @@ def run_training(cfg: dict, args) -> None:
             f"[checkpoint] saved {ckpt_dir / 'last.pt'} after nonfinite-group limit"
         )
         write_failure_meta(exc)
+        training_run.close()
         raise
     except WallTimeLimitException:
         print(f"\n[info] Wall-time limit of {max_time_minutes} minutes reached mid-epoch.")
@@ -1462,6 +1496,7 @@ def run_training(cfg: dict, args) -> None:
         write_meta(ckpt_dir, meta)
 
         print(f"[timing] train_wall_sec={total_time:.2f} train_cpu_sec={train_cpu1-train_cpu0:.2f}")
+        training_run.close()
         return
     except Exception as exc:
         exc_str = str(exc).lower()
@@ -1510,10 +1545,12 @@ def run_training(cfg: dict, args) -> None:
                     "[OOM SAFEGUARD] Immutable primary config was not modified; "
                     "a new versioned runtime contract is required to change batch size."
                 )
+            training_run.close()
             raise exc
         else:
             print(f"[error] training failed: {exc}", file=sys.stderr)
             write_failure_meta(exc)
+            training_run.close()
             raise
 
     train_wall1 = time.perf_counter()
@@ -1548,5 +1585,14 @@ def run_training(cfg: dict, args) -> None:
         metrics_path.write_text(json.dumps(meta, indent=2) + "\n")
 
     write_meta(ckpt_dir, meta)
+    training_run.mark_complete(
+        {
+            "run_id": run_id,
+            "completed_epochs": history[-1]["epoch"] if history else start_epoch,
+            "best_epoch": best_epoch,
+            "best_validation_loss": meta["best_val_loss"],
+        }
+    )
+    training_run.close()
 
     print(f"[timing] train_wall_sec={total_time:.2f} train_cpu_sec={train_cpu1-train_cpu0:.2f}")

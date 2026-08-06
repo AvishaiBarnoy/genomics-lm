@@ -102,6 +102,11 @@ reported downstream evidence uses corrected checkpoints and controlled splits.
   the declared family, function, stability, and structural tasks.
 - [ ] Report leakage, class balance, discrimination, calibration, confidence
   intervals, and generated-protein OOD behavior for every head.
+- [ ] Benchmark Pfam/EC classification and stability regression against XGBoost
+  trained on raw protein composition, length, local k-mers, and declared
+  physicochemical descriptors using the identical frozen splits.
+- [ ] Compare XGBoost on corrected embeddings with XGBoost on raw sequence features
+  so nonlinear probe capacity is not confused with pretrained representation value.
 - [ ] Version and provenance-bind any critic allowed to support corrected evaluation
   or generation guidance.
 

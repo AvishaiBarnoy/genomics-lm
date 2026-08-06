@@ -110,6 +110,13 @@ cluster leakage, per-head discrimination, calibration, confidence intervals, and
 out-of-distribution behavior on generated proteins. Legacy critic checkpoints remain
 exploratory and cannot decide corrected CodonLM promotion.
 
+Use XGBoost as a classical nonlinear control on the same homology/scaffold splits.
+For Pfam and EC, compare the critic with amino-acid composition, length, and local
+k-mer features. For stability, add predeclared physicochemical descriptors and use
+regression. Also compare XGBoost on frozen critic embeddings with XGBoost on raw
+features; classifier capacity must not be attributed to representation learning.
+All preprocessing and hyperparameter selection are training/validation-only.
+
 ## Stage 4: Multi-Offset Long-Range Extension
 
 Multi-offset heads predict future tokens such as `n+4`, `n+8`, `n+16`, and `n+32`

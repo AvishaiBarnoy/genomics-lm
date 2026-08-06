@@ -127,6 +127,12 @@ python -m scripts.evaluate_test \
 
 ## Corrected ProteinCritic Dataset
 
+Training runs are collision-safe. A fresh launch whose run ID already exists is
+written to the next `-rNNN` directory. In-place continuation requires `--resume`
+with that run's newest `last` checkpoint and a configured total epoch target greater
+than its completed epoch count. Use a new run ID to fork from an older or best
+checkpoint; best checkpoints are evaluation artifacts, not in-place resume points.
+
 Build the homology-cluster-held-out critic artifacts before critic training:
 
 ```bash

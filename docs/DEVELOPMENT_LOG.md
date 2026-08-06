@@ -1068,6 +1068,17 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     was terminated and its partial logs retained. Retry 1 keeps every scientific
     and optimization setting fixed, uses a distinct run ID, and reduces periodic
     checkpoint cadence to five minutes for recoverability.
+*   **ProteinCritic Class-Balance Decision (2026-08-05):** The recovered run's
+    validation-selected epoch 9 reached loss 1.75596. Square-root class weighting
+    improved EC balanced accuracy/macro-F1 by 0.0229/0.0195 and stability MAE by
+    4.0%, but reduced Pfam balanced accuracy/macro-F1 by 0.0244/0.0124. It therefore
+    fails the predeclared two-head gate and is not promoted; test remains sealed.
+*   **Shared Training Lifecycle Phase 1-2 (2026-08-05):** Added a common run owner
+    with atomic serial allocation, exclusive writer locks, newest-last resume and
+    total-epoch validation, curve-history checks, immutable-setting fingerprints,
+    completion markers, shared log paths, RNG capture/restore, and numbered best
+    checkpoints. CodonLM and multitask ProteinCritic are the first migrated trainers;
+    ProteinLM, classifier, EBM, and NoProp remain explicitly open in Phase 3.
 
 ---
 *End of Log*
