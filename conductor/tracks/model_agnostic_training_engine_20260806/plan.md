@@ -16,11 +16,11 @@ branches, and tests capture the behavior that migrations must preserve.
 
 ## Phase 1: Minimal Shared Engine
 
-- [ ] Implement a model-agnostic `TrainingEngine` over `TrainingRun`.
-- [ ] Implement standard accumulated-backprop and optimizer/scheduler strategies.
-- [ ] Add shared device, precision, clipping, nonfinite, wall-time, validation,
+- [x] Implement a model-agnostic `TrainingEngine` over `TrainingRun`.
+- [x] Implement standard accumulated-backprop and optimizer/scheduler strategies.
+- [x] Add shared device, precision, clipping, nonfinite, wall-time, validation,
   metric aggregation, callback, and checkpoint policies.
-- [ ] Add engine contract tests with synthetic tasks and deterministic failures.
+- [x] Add engine contract tests with synthetic tasks and deterministic failures.
 
 Exit gate: synthetic tasks prove exact fresh, partial-group, interrupted, resumed,
 and completed behavior without importing a biological model.

@@ -1099,6 +1099,12 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     are now checkpointed and checked on resume. Historical results from this legacy
     classifier require revalidation; the corrected multitask ProteinCritic remains a
     separate model.
+*   **Model-Agnostic Engine Phase 1 (2026-08-06):** Added the shared synthetic-task
+    engine, actual-size accumulated-backprop strategy, optimizer/scheduler state,
+    precision policy, clipping and nonfinite recovery, weighted metrics, callbacks,
+    validation selection, wall-time interruption, and namespaced checkpoint resume.
+    Biological trainers remain on their existing loops until individual parity gates
+    pass.
 
 ---
 *End of Log*

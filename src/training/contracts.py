@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Iterable, Mapping, Protocol, TypeVar, runtime_checkable
+from typing import Any, Iterator, Mapping, Protocol, TypeVar, runtime_checkable
 
 import torch
 
@@ -16,6 +16,14 @@ import torch
 TRAINING_CONTRACT_VERSION = 1
 
 BatchT = TypeVar("BatchT")
+
+
+class BatchStream(Protocol[BatchT]):
+    """Re-iterable or single-pass batch source with a declared finite length."""
+
+    def __iter__(self) -> Iterator[BatchT]: ...
+
+    def __len__(self) -> int: ...
 
 
 class TrainingPhase(str, Enum):
@@ -165,9 +173,11 @@ class UpdateResult:
 class TrainingTask(Protocol[BatchT]):
     """Model/data/objective adapter used by a training engine."""
 
-    def train_batches(self, epoch: int) -> Iterable[BatchT]: ...
+    def begin_phase(self, phase: TrainingPhase, epoch: int) -> None: ...
 
-    def validation_batches(self, epoch: int) -> Iterable[BatchT]: ...
+    def train_batches(self, epoch: int) -> BatchStream[BatchT]: ...
+
+    def validation_batches(self, epoch: int) -> BatchStream[BatchT]: ...
 
     def training_step(self, batch: BatchT, context: StepContext) -> StepOutput: ...
 
