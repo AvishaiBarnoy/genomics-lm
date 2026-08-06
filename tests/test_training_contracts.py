@@ -22,6 +22,9 @@ from src.training.contracts import (
 
 
 class SyntheticTask:
+    def begin_phase(self, phase, epoch):
+        self.phase = phase
+
     def train_batches(self, epoch):
         return [torch.tensor([float(epoch + 1)])]
 
