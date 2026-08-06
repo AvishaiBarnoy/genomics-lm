@@ -60,6 +60,7 @@ def create_dataloader(
     shuffle=True,
     dataset_class=ProteinDataset,
     label_field=None,
+    label_map=None,
     generator=None,
 ):
     """
@@ -67,7 +68,13 @@ def create_dataloader(
     Can be used for both language modeling and classification.
     """
     if dataset_class == ProteinClassificationDataset:
-        dataset = dataset_class(split_path, tokenizer, block_size, label_field=label_field)
+        dataset = dataset_class(
+            split_path,
+            tokenizer,
+            block_size,
+            label_field=label_field,
+            label_map=label_map,
+        )
     else:
         dataset = dataset_class(split_path, tokenizer, block_size)
         
@@ -80,13 +87,33 @@ def create_dataloader(
     )
 
 class ProteinClassificationDataset(ProteinDataset):
-    def __init__(self, file_path: str, tokenizer: ProteinTokenizer, block_size: int, label_field: str):
+    def __init__(
+        self,
+        file_path: str,
+        tokenizer: ProteinTokenizer,
+        block_size: int,
+        label_field: str,
+        label_map: dict | None = None,
+    ):
         super().__init__(file_path, tokenizer, block_size)
         self.label_field = label_field
-        
-        # Build label map dynamically from the data
-        self.labels = sorted(list(set(s[self.label_field] for s in self.samples if self.label_field in s)))
-        self.label_map = {label: i for i, label in enumerate(self.labels)}
+
+        observed_labels = sorted(
+            {sample[self.label_field] for sample in self.samples if self.label_field in sample}
+        )
+        self.label_map = (
+            dict(label_map)
+            if label_map is not None
+            else {label: index for index, label in enumerate(observed_labels)}
+        )
+        unknown = sorted(set(observed_labels).difference(self.label_map))
+        if unknown:
+            raise ValueError(
+                f"{file_path} contains labels absent from the training label map: {unknown}"
+            )
+        self.labels = [
+            label for label, _ in sorted(self.label_map.items(), key=lambda item: item[1])
+        ]
         print(f"Found labels: {self.label_map}")
 
     def __getitem__(self, idx):
@@ -96,9 +123,9 @@ class ProteinClassificationDataset(ProteinDataset):
         sequence = sample['sequence']
 
         conditions = []
-        if 'func_label' in sample:
+        if 'func_label' in sample and self.label_field != 'func_label':
             conditions.append(f"<FUNC:{sample['func_label'].upper()}>")
-        if 'topo_label' in sample:
+        if 'topo_label' in sample and self.label_field != 'topo_label':
             conditions.append(f"<TOPO:{sample['topo_label'].upper()}>")
 
         condition_ids = self.tokenizer.encode_conditions(conditions)
@@ -116,7 +143,12 @@ class ProteinClassificationDataset(ProteinDataset):
         else:
             input_ids = input_ids[:self.block_size]
             
-        label = sample.get(self.label_field)
-        
-        return torch.tensor(input_ids, dtype=torch.long), torch.tensor(self.label_map.get(label, -1), dtype=torch.long)
+        if self.label_field not in sample:
+            raise ValueError(
+                f"sample {idx} has no required label field {self.label_field!r}"
+            )
+        label = sample[self.label_field]
 
+        return torch.tensor(input_ids, dtype=torch.long), torch.tensor(
+            self.label_map[label], dtype=torch.long
+        )

@@ -32,6 +32,51 @@ def test_classifier_forward_pass():
 
     assert logits.shape == (4, config.num_classes)
 
+
+def test_classifier_bos_representation_depends_on_later_residues():
+    torch.manual_seed(7)
+    config = ProteinClassifierConfig(
+        vocab_size=30,
+        n_layer=1,
+        n_head=2,
+        n_embd=16,
+        block_size=8,
+        dropout=0.0,
+        num_classes=2,
+    )
+    model = ProteinClassifier(config).eval()
+    first = torch.tensor([[1, 3, 4, 5, 0, 0]])
+    second = torch.tensor([[1, 8, 9, 10, 0, 0]])
+
+    with torch.no_grad():
+        first_logits = model(first)
+        second_logits = model(second)
+
+    assert not torch.allclose(first_logits, second_logits)
+
+
+def test_classifier_ignores_explicitly_masked_padding_tokens():
+    torch.manual_seed(11)
+    config = ProteinClassifierConfig(
+        vocab_size=30,
+        n_layer=1,
+        n_head=2,
+        n_embd=16,
+        block_size=8,
+        dropout=0.0,
+        num_classes=2,
+    )
+    model = ProteinClassifier(config).eval()
+    attention_mask = torch.tensor([[1, 1, 1, 0, 0]])
+    first = torch.tensor([[1, 3, 4, 0, 0]])
+    second = torch.tensor([[1, 3, 4, 8, 9]])
+
+    with torch.no_grad():
+        first_logits = model(first, attention_mask)
+        second_logits = model(second, attention_mask)
+
+    assert torch.allclose(first_logits, second_logits, atol=1e-6)
+
 def test_causal_mask():
     """
     Tests the causal masking of the language model.
