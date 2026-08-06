@@ -1093,6 +1093,12 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     preserve the necessary semantics of causal LMs, bidirectional critics,
     contrastive EBMs, and NoProp. Fixed-seed parity and interruption/resume gates
     are required before each legacy loop can be removed.
+*   **Legacy Protein Classifier Correction (2026-08-06):** Removed direct target
+    leakage from conditional tokens, made BOS pooling bidirectional and padding-aware,
+    and bound validation labels to the training-fitted class vocabulary. Class maps
+    are now checkpointed and checked on resume. Historical results from this legacy
+    classifier require revalidation; the corrected multitask ProteinCritic remains a
+    separate model.
 
 ---
 *End of Log*

@@ -80,7 +80,11 @@ class ProteinClassifier(nn.Module):
 
         self.classification_head = nn.Linear(config.n_embd, config.num_classes)
 
-    def forward(self, input_ids: torch.LongTensor) -> torch.Tensor:
+    def forward(
+        self,
+        input_ids: torch.LongTensor,
+        attention_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         """
         Forward pass for the classifier.
 
@@ -99,17 +103,16 @@ class ProteinClassifier(nn.Module):
         pos_embeds = self.backbone.position_embedding(torch.arange(seq_length, device=input_ids.device))
         x = self.backbone.dropout(token_embeds + pos_embeds)
 
-        # We don't need a causal mask for the classifier, as we want to use the whole sequence.
-        # However, to reuse the backbone, we are using the same forward pass.
-        # For classification, it is common to use a non-causal mask, but for simplicity
-        # and to reuse the code, we will use the causal mask.
-        causal_mask = nn.Transformer.generate_square_subsequent_mask(seq_length, device=input_ids.device)
+        if attention_mask is None:
+            attention_mask = input_ids.ne(0)
+        else:
+            attention_mask = attention_mask.to(device=input_ids.device, dtype=torch.bool)
+        padding_mask = ~attention_mask
 
         for block in self.backbone.transformer_blocks:
-            x = block(x, src_mask=causal_mask)
+            x = block(x, src_key_padding_mask=padding_mask)
 
-        # We pool the representation of the [BOS] token, which is at the first position.
-        # This is a common technique to get a fixed-size representation of the sequence.
+        # Bidirectional attention lets the BOS representation summarize the full protein.
         bos_representation = x[:, 0, :]
 
         logits = self.classification_head(bos_representation)

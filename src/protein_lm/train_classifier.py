@@ -73,13 +73,16 @@ def train_classifier(config_path: str, resume=None, run_id=None):
         block_size=classifier_config.block_size,
         shuffle=False,
         dataset_class=ProteinClassificationDataset,
-        label_field='func_label'
+        label_field='func_label',
+        label_map=train_loader.dataset.label_map,
     )
-    
-    # Dynamically set num_classes from the dataset if not in config
-    if not hasattr(classifier_config, 'num_classes') or classifier_config.num_classes is None:
-        classifier_config.num_classes = len(train_loader.dataset.label_map)
-        print(f"Number of classes detected from dataset: {classifier_config.num_classes}")
+
+    detected_classes = len(train_loader.dataset.label_map)
+    if classifier_config.num_classes != detected_classes:
+        raise ValueError(
+            f"Configured num_classes={classifier_config.num_classes}, but the training "
+            f"label map contains {detected_classes} classes"
+        )
 
 
     # --- 4. Model Initialization ---
@@ -97,6 +100,12 @@ def train_classifier(config_path: str, resume=None, run_id=None):
     resume_microbatch = 0
     if resume:
         checkpoint = torch.load(resume, map_location=device, weights_only=False)
+        checkpoint_label_map = checkpoint.get("label_map")
+        if (
+            checkpoint_label_map is not None
+            and checkpoint_label_map != train_loader.dataset.label_map
+        ):
+            raise ValueError("Resume checkpoint label map differs from the training data")
         model.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
@@ -118,6 +127,7 @@ def train_classifier(config_path: str, resume=None, run_id=None):
             'optimizer_step': optimizer_step,
             'checkpoint_reason': reason,
             'cfg': config_data,
+            'label_map': dict(train_loader.dataset.label_map),
             'epoch_complete': complete,
             'microbatch_idx': 0 if complete else current_microbatch,
             'run_fingerprint': run_fingerprint,
