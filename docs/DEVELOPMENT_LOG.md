@@ -1087,6 +1087,12 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     every epoch with the embedding, every block optimizer, and output-head optimizer.
     Run locking now uses kernel-released advisory locks so a killed process cannot
     leave a permanently stale lock file.
+*   **Model-Agnostic Training Engine Track (2026-08-06):** Opened a successor track
+    to centralize iteration, optimization, precision, validation, logging,
+    checkpoint, and resume mechanics. Separate task and update-strategy boundaries
+    preserve the necessary semantics of causal LMs, bidirectional critics,
+    contrastive EBMs, and NoProp. Fixed-seed parity and interruption/resume gates
+    are required before each legacy loop can be removed.
 
 ---
 *End of Log*
