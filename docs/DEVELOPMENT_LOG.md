@@ -1116,6 +1116,16 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     end-of-phase metric hook required by supervised protein migrations. Metrics such
     as F1 can now be computed once from the complete validation prediction set rather
     than incorrectly averaging independent batch F1 values.
+*   **Model-Agnostic ProteinCritic Migration (2026-08-09):** Moved the corrected
+    bidirectional multitask critic onto the shared engine while preserving dynamic
+    length buckets, mixed classification/regression/multilabel loss semantics,
+    class weighting, wall-time interruption, and evaluator-compatible checkpoint
+    fields. The task now reports whole-phase accuracy and regression MAE, the engine
+    exposes train-phase summaries to callbacks, and improved checkpoints retain both
+    stable and numbered names. Legacy critic checkpoints remain resumable. The
+    hand-written motif-attention regularizer was retired: existing zero-valued
+    configuration remains valid, while nonzero legacy use now fails explicitly
+    instead of imposing four unvalidated motifs on corrected training.
 
 ---
 *End of Log*

@@ -31,7 +31,14 @@ from src.protein_lm.train_multi_task import (
     compute_multi_label_pos_weight,
     load_compatible_model_weights,
     task_losses,
+    validate_retired_saliency_regularizer,
 )
+from src.protein_lm.critic_task import (
+    ProteinCriticTask,
+    adapt_protein_critic_checkpoint,
+    decode_protein_critic_checkpoint,
+)
+from src.training.contracts import StepContext, TrainingPhase
 
 
 def test_protein_type_label_extraction():
@@ -346,3 +353,98 @@ def test_partial_accumulation_group_uses_actual_size():
     assert accumulation_group_size(0, loader_length=10, grad_accum_steps=4) == 4
     assert accumulation_group_size(8, loader_length=10, grad_accum_steps=4) == 2
     assert accumulation_group_size(9, loader_length=10, grad_accum_steps=4) == 2
+
+
+@pytest.mark.parametrize("config", [{}, {"saliency_regularizer_weight": 0}, {"saliency_regularizer_weight": 0.0}])
+def test_retired_saliency_regularizer_accepts_compatible_disabled_config(config):
+    validate_retired_saliency_regularizer(config)
+
+
+def test_retired_saliency_regularizer_rejects_nonzero_legacy_objective():
+    with pytest.raises(ValueError, match="no longer supported"):
+        validate_retired_saliency_regularizer({"saliency_regularizer_weight": 0.1})
+
+
+@pytest.mark.parametrize("value", [True, "0"])
+def test_retired_saliency_regularizer_rejects_invalid_type(value):
+    with pytest.raises(TypeError, match="must be numeric"):
+        validate_retired_saliency_regularizer({"saliency_regularizer_weight": value})
+
+
+def test_critic_task_combines_objectives_and_reports_complete_phase_metrics():
+    class FixedCritic(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.scale = torch.nn.Parameter(torch.tensor(1.0))
+
+        def forward(self, input_ids, attention_mask=None):
+            batch = input_ids.shape[0]
+            family = torch.tensor([[4.0, 0.0], [0.0, 4.0]])[:batch] * self.scale
+            stability = torch.tensor([[1.0], [3.0]])[:batch] * self.scale
+            protein_type = torch.tensor([[2.0, -2.0], [-2.0, 2.0]])[:batch] * self.scale
+            return {"family": family, "stability": stability, "protein_type": protein_type}
+
+    model = FixedCritic()
+    batch = {
+        "input_ids": torch.ones((2, 4), dtype=torch.long),
+        "attention_mask": torch.ones((2, 4), dtype=torch.long),
+        "sequence": ["AAAA", "BBBB"],
+        "family": torch.tensor([0, 1]),
+        "stability": torch.tensor([1.0, 2.0]),
+        "protein_type": torch.tensor([[1.0, 0.0], [0.0, 1.0]]),
+    }
+    task = ProteinCriticTask(
+        model=model,
+        train_loader=[batch],
+        validation_loader=[batch],
+        device=torch.device("cpu"),
+        classification_tasks=("family",),
+        regression_tasks=("stability",),
+        multi_label_tasks=("protein_type",),
+        train_classification_criteria={"family": torch.nn.CrossEntropyLoss()},
+        validation_classification_criterion=torch.nn.CrossEntropyLoss(),
+        multi_label_criteria={"protein_type": torch.nn.BCEWithLogitsLoss()},
+    )
+    task.begin_phase(TrainingPhase.VALIDATION, 0)
+    output = task.validation_step(
+        batch, StepContext(TrainingPhase.VALIDATION, 0, 0, 0, torch.device("cpu"))
+    )
+    metrics = task.end_phase(TrainingPhase.VALIDATION, 0)
+
+    assert output.loss.requires_grad
+    assert set(output.metrics) >= {"loss", "family_loss", "stability_loss", "protein_type_loss"}
+    assert metrics["family_accuracy"].total == 1.0
+    assert metrics["stability_mae"].total == 0.5
+    assert metrics["protein_type_accuracy"].total == 1.0
+
+
+def test_critic_checkpoint_legacy_round_trip():
+    model = torch.nn.Linear(2, 2)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    legacy = {
+        "epoch": 2,
+        "epoch_complete": False,
+        "microbatch_idx": 7,
+        "optimizer_step": 4,
+        "best_val_loss": 0.75,
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "rng_state": {},
+    }
+    decoded = decode_protein_critic_checkpoint(legacy)
+    assert decoded.engine.current_epoch == 2
+    assert decoded.engine.microbatch == 7
+    assert decoded.metadata["best_metric"] == 0.75
+
+    payload = decoded.to_payload()
+    payload["metadata"] = {"reason": "best", "best_metric": 0.5}
+    adapted = adapt_protein_critic_checkpoint(
+        payload,
+        config={"epochs": 3},
+        dataset_provenance={"status": "test"},
+        task_vocabs={"pfam": {}},
+        model_spec={"task_dims": {"family": 2}},
+    )
+    assert adapted["checkpoint_reason"] == "best_epoch"
+    assert adapted["best_val_loss"] == 0.5
+    assert adapted["model_state_dict"] is payload["task"]["model"]

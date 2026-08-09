@@ -39,6 +39,7 @@ class EngineConfig:
     minimize_monitor: bool = True
     last_checkpoint_name: str = "last.pt"
     best_checkpoint_name: str = "best.pt"
+    best_checkpoint_pattern: str | None = None
     epoch_checkpoint_pattern: str | None = None
 
     def __post_init__(self) -> None:
@@ -195,7 +196,8 @@ class TrainingEngine(Generic[BatchT]):
                         self.state, "interrupted", self.best_metric, self.aborted_groups
                     )
 
-            self.task.end_phase(TrainingPhase.TRAIN, epoch)
+            training_metrics = dict(self.task.end_phase(TrainingPhase.TRAIN, epoch))
+            self._emit("training_completed", None, training_metrics)
             validation_metrics = {}
             if (epoch + 1) % self.config.validate_every_epochs == 0:
                 validation_metrics = self._validate(epoch)
@@ -218,7 +220,21 @@ class TrainingEngine(Generic[BatchT]):
                 )
             if improved:
                 self._save(self.config.best_checkpoint_name, "best")
-            self._emit("epoch_completed", None, validation_metrics)
+                if self.config.best_checkpoint_pattern is not None:
+                    self._save(
+                        self.config.best_checkpoint_pattern.format(epoch=epoch + 1),
+                        "best_archive",
+                    )
+            self._emit(
+                "epoch_completed",
+                None,
+                validation_metrics,
+                {
+                    "epoch": epoch + 1,
+                    "training_metrics": training_metrics,
+                    "improved": improved,
+                },
+            )
 
         self.run.mark_complete(
             {

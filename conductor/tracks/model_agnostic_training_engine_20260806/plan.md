@@ -40,13 +40,17 @@ configuration, task, strategy, and engine assembly.
 
 - [x] Add an end-of-phase metric hook so non-decomposable supervised metrics such
   as F1 are computed over the complete prediction set rather than averaged per batch.
-- [ ] Implement the bidirectional multitask `ProteinCriticTask`.
+- [x] Implement the bidirectional multitask `ProteinCriticTask`.
 - [ ] Implement the protein classifier task or consolidate it with a generic
   supervised-sequence task when the contracts genuinely match.
 - [ ] Implement `ProteinEBMTask`, keeping positive/negative construction and energy
   metrics task-owned while using the shared optimization strategy.
-- [ ] Verify class/regression metric aggregation, frozen-backbone state, validation
-  selection, and resume parity.
+- [ ] Verify frozen-backbone state for the EBM and classifier migrations.
+- [x] Verify ProteinCritic class/regression metric aggregation, validation
+  selection, legacy checkpoint compatibility, and optimizer-boundary resume parity.
+- [ ] Add validated per-task loss weights in a separate scientific-feature PR,
+  preserving the present objective as the default and selecting weights using
+  training/validation diagnostics rather than the test split.
 
 Exit gate: protein trainers share orchestration without changing their architectures,
 decoy distributions, losses, or scientific metrics.

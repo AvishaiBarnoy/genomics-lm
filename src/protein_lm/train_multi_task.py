@@ -7,6 +7,8 @@ import argparse
 import yaml
 import hashlib
 import random
+import csv
+import sys
 from pathlib import Path
 from src.protein_lm.tokenizer import ProteinTokenizer
 from src.protein_lm.models_multi import MultiTaskProteinClassifier
@@ -16,16 +18,18 @@ from src.protein_lm.dataset import (
     LengthBucketBatchSampler,
     collate_protein_batch,
 )
-from src.training.runtime import (
-    PeriodicCheckpointPolicy,
-    WallTimer,
-    save_checkpoint_atomic,
-)
+from src.training.engine import EngineConfig, TrainingEngine
+from src.training.optimizers import build_optimizer
+from src.training.runtime import PeriodicCheckpointPolicy, WallTimer
 from src.training.run_lifecycle import (
     TrainingRun,
-    capture_rng_state,
     configuration_fingerprint,
-    restore_rng_state,
+)
+from src.training.strategies import AccumulatedBackpropStrategy
+from src.protein_lm.critic_task import (
+    ProteinCriticTask,
+    decode_protein_critic_checkpoint,
+    make_protein_critic_checkpoint_adapter,
 )
 
 
@@ -213,6 +217,18 @@ def mps_memory_summary():
     return " | " + " | ".join(parts) if parts else ""
 
 
+def validate_retired_saliency_regularizer(cfg: dict) -> None:
+    """Accept legacy disabled settings but reject the removed motif objective."""
+    value = cfg.get("saliency_regularizer_weight", 0.0)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError("saliency_regularizer_weight must be numeric")
+    if float(value) != 0.0:
+        raise ValueError(
+            "saliency_regularizer_weight is no longer supported; set it to 0. "
+            "Known and learned motifs must be evaluated outside the training loss."
+        )
+
+
 def train_multi_task(
     config_path,
     resume_path=None,
@@ -224,6 +240,7 @@ def train_multi_task(
         cfg = yaml.safe_load(f)
     if max_time_minutes is not None:
         cfg["max_time_minutes"] = float(max_time_minutes)
+    validate_retired_saliency_regularizer(cfg)
 
     device_name = cfg.get(
         "device", "mps" if torch.backends.mps.is_available() else "cpu"
@@ -367,7 +384,7 @@ def train_multi_task(
         flush=True,
     )
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=float(cfg.get("lr", 1e-4)))
+    optimizer = build_optimizer(model.parameters(), cfg)
 
     # Class weights are derived only from the training split. Validation remains
     # unweighted so its loss describes the frozen held-out distribution.
@@ -439,32 +456,8 @@ def train_multi_task(
     run_id = training_run.run_dir.name
     cfg["run_id"] = run_id
 
-    best_val_loss = float("inf")
-    start_epoch = 0
-    optimizer_step = 0
-    resume_microbatch_idx = 0
-    if resume_path and Path(resume_path).exists():
-        print(f"[*] Resuming from checkpoint: {resume_path}", flush=True)
-        checkpoint = torch.load(resume_path, map_location=device)
-        model.load_state_dict(checkpoint["model_state_dict"])
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        epoch_complete = bool(checkpoint.get("epoch_complete", True))
-        start_epoch = checkpoint["epoch"] + (1 if epoch_complete else 0)
-        resume_microbatch_idx = (
-            0 if epoch_complete else int(checkpoint.get("microbatch_idx", 0))
-        )
-        best_val_loss = checkpoint.get("best_val_loss", float("inf"))
-        optimizer_step = int(checkpoint.get("optimizer_step", 0))
-        restore_rng_state(checkpoint.get("rng_state"))
-        print(
-            f"[*] Resumed checkpoint. Next epoch: {start_epoch + 1}, "
-            f"microbatch: {resume_microbatch_idx} "
-            f"with best val loss: {best_val_loss:.4f}",
-            flush=True,
-        )
-
     print("[*] Starting Multi-Task Training...", flush=True)
-    grad_accum_steps = cfg.get("grad_accum_steps", 1)
+    grad_accum_steps = int(cfg.get("grad_accum_steps", 1))
     print(f"[*] Gradient accumulation steps: {grad_accum_steps}", flush=True)
     log_every_steps = cfg.get("log_every_steps", 100)
     checkpoint_every_steps = cfg.get("checkpoint_every_steps", 0)
@@ -478,318 +471,134 @@ def train_multi_task(
     if max_time_minutes:
         print(f"[*] Wall-time limit configured: {max_time_minutes} minutes", flush=True)
 
-    out_dir = training_run.checkpoints
-    scores_dir = training_run.scores
     run_logger = training_run.logger()
     run_logger.__enter__()
-
-    log_csv = scores_dir / "curves.csv"
-    import csv
-
+    log_csv = training_run.scores / "curves.csv"
     if not log_csv.exists():
         with open(log_csv, "w", newline="") as f:
             csv.writer(f).writerow(["epoch", "train_loss", "val_loss"])
+    model_spec = {
+        "vocab_size": model_cfg.vocab_size,
+        "block_size": model_cfg.block_size,
+        "n_layer": model_cfg.n_layer,
+        "n_head": model_cfg.n_head,
+        "n_embd": model_cfg.n_embd,
+        "dropout": model_cfg.dropout,
+        "pooling": model_cfg.pooling,
+        "bidirectional": model_cfg.bidirectional,
+        "task_dims": task_dims,
+        "regression_tasks": list(regression_tasks),
+    }
 
-    time_limit_reached = False
-    start_time = time.perf_counter()
-    wall_timer = WallTimer(max_time_minutes)
-    checkpoint_policy = PeriodicCheckpointPolicy(
-        every_steps=int(cfg.get("checkpoint_every_steps", 0) or 0),
-        every_minutes=float(cfg.get("checkpoint_every_minutes", 0.0) or 0.0),
+    class CriticLogger:
+        def __init__(self):
+            self.started = time.perf_counter()
+            self.interval_started = self.started
+            self.units = {"sequences": 0, "residues": 0}
+            self.train_metrics = {}
+            self.epoch_started = self.started
+            self.current_epoch = None
+
+        def on_event(self, event):
+            if event.name == "group_committed":
+                if event.context.epoch != self.current_epoch:
+                    self.current_epoch = event.context.epoch
+                    self.epoch_started = time.perf_counter()
+                for name, value in event.metadata.get("committed_units", {}).items():
+                    self.units[name] = self.units.get(name, 0) + value
+                microbatch = event.context.microbatch + 1
+                crossed_log_boundary = (
+                    log_every_steps
+                    and microbatch % log_every_steps < event.context.group_size
+                )
+                if crossed_log_boundary:
+                    elapsed = max(time.perf_counter() - self.interval_started, 1e-9)
+                    loss = event.metrics.get("loss")
+                    print(
+                        f"[progress] epoch={event.context.epoch + 1}/{epochs} "
+                        f"step={event.context.microbatch + 1}/{len(train_loader)} "
+                        f"optimizer_step={event.context.optimizer_step + 1} "
+                        f"recent_loss={loss.total if loss else float('nan'):.4f} "
+                        f"lr={optimizer.param_groups[0]['lr']:.2e} "
+                        f"seq_per_sec={self.units['sequences'] / elapsed:.2f} "
+                        f"residues_per_sec={self.units['residues'] / elapsed:.0f}"
+                        f"{mps_memory_summary() if device.type == 'mps' else ''}",
+                        flush=True,
+                    )
+                    self.interval_started = time.perf_counter()
+                    self.units = {"sequences": 0, "residues": 0}
+            elif event.name == "training_completed":
+                self.train_metrics = dict(event.metrics)
+            elif event.name == "epoch_completed":
+                train_loss = self.train_metrics.get("loss")
+                val_loss = event.metrics.get("loss")
+                epoch = int(event.metadata["epoch"])
+                with open(log_csv, "a", newline="") as handle:
+                    csv.writer(handle).writerow(
+                        [epoch, f"{train_loss.total:.4f}", f"{val_loss.total:.4f}"]
+                    )
+                print(
+                    f"Epoch {epoch}/{epochs} | Train Loss: {train_loss.total:.4f} | "
+                    f"Val Loss: {val_loss.total:.4f}",
+                    flush=True,
+                )
+                print(
+                    f"[timing] epoch={epoch} "
+                    f"wall_sec={time.perf_counter() - self.epoch_started:.2f}",
+                    flush=True,
+                )
+            elif event.name == "checkpoint_saved":
+                print(
+                    f"[checkpoint] saved {event.metadata['filename']} "
+                    f"reason={event.metadata['reason']}",
+                    flush=True,
+                )
+
+    task = ProteinCriticTask(
+        model=model,
+        train_loader=train_loader,
+        validation_loader=val_loader,
+        device=device,
+        classification_tasks=classification_tasks,
+        regression_tasks=regression_tasks,
+        multi_label_tasks=multi_label_tasks,
+        train_classification_criteria=train_classification_criteria,
+        validation_classification_criterion=validation_classification_criterion,
+        multi_label_criteria=multi_label_criteria,
     )
-    current_microbatch_idx = 0
-
-    def checkpoint_payload(epoch_idx: int, *, epoch_complete: bool = False) -> dict:
-        return {
-            "epoch": epoch_idx,
-            "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "best_val_loss": best_val_loss,
-            "optimizer_step": optimizer_step,
-            "microbatch_idx": current_microbatch_idx,
-            "epoch_complete": epoch_complete,
-            "run_progress": {
-                "completed_epochs": epoch_idx + 1 if epoch_complete else epoch_idx,
-                "current_epoch": epoch_idx + 1,
-                "microbatch": 0 if epoch_complete else current_microbatch_idx,
-                "optimizer_step": optimizer_step,
-            },
-            "rng_state": capture_rng_state(),
-            "run_fingerprint": run_fingerprint,
-            "cfg": cfg,
-            "dataset_provenance": dataset_provenance,
-            "task_vocabs": vocabs,
-            "model_spec": {
-                "vocab_size": model_cfg.vocab_size,
-                "block_size": model_cfg.block_size,
-                "n_layer": model_cfg.n_layer,
-                "n_head": model_cfg.n_head,
-                "n_embd": model_cfg.n_embd,
-                "dropout": model_cfg.dropout,
-                "pooling": model_cfg.pooling,
-                "bidirectional": model_cfg.bidirectional,
-                "task_dims": task_dims,
-                "regression_tasks": list(regression_tasks),
-            },
-        }
-
-    def save_last(epoch_idx: int, reason: str) -> None:
-        epoch_complete = reason == "epoch"
-        payload = checkpoint_payload(epoch_idx, epoch_complete=epoch_complete)
-        payload["checkpoint_reason"] = reason
-        payload["epoch_complete"] = epoch_complete
-        if payload["epoch_complete"]:
-            payload["microbatch_idx"] = 0
-        save_checkpoint_atomic(payload, out_dir / "last_critic.pt")
-        checkpoint_policy.mark_saved(optimizer_step)
-        print(
-            f"[checkpoint] saved {out_dir / 'last_critic.pt'} reason={reason} step={optimizer_step}"
+    strategy = AccumulatedBackpropStrategy(optimizer, parameters=model.parameters())
+    try:
+        engine = TrainingEngine(
+            task=task,
+            strategy=strategy,
+            run=training_run,
+            config=EngineConfig(
+                epochs=epochs,
+                grad_accum_steps=grad_accum_steps,
+                last_checkpoint_name="last_critic.pt",
+                best_checkpoint_name="best_critic.pt",
+                best_checkpoint_pattern="best_critic_epoch_{epoch:03d}.pt",
+            ),
+            device=device,
+            callbacks=[CriticLogger()],
+            wall_timer=WallTimer(max_time_minutes),
+            checkpoint_policy=PeriodicCheckpointPolicy(
+                every_steps=int(cfg.get("checkpoint_every_steps", 0) or 0),
+                every_minutes=float(cfg.get("checkpoint_every_minutes", 0.0) or 0.0),
+            ),
+            run_fingerprint=run_fingerprint,
+            checkpoint_decoder=decode_protein_critic_checkpoint,
+            checkpoint_payload_adapter=make_protein_critic_checkpoint_adapter(
+                config=cfg,
+                dataset_provenance=dataset_provenance,
+                task_vocabs=vocabs,
+                model_spec=model_spec,
+            ),
         )
-
-    for epoch in range(start_epoch, epochs):
-        if time_limit_reached:
-            break
-        epoch_started = time.perf_counter()
-        if dynamic_padding:
-            train_loader.batch_sampler.set_epoch(epoch)
-        model.train()
-        train_loss = 0.0
-        recent_loss = 0.0
-        recent_steps = 0
-        recent_sequences = 0
-        recent_residues = 0
-        recent_task_sums = {}
-        recent_task_counts = {}
-        recent_started = time.perf_counter()
-        optimizer.zero_grad()
-
-        for step, batch in enumerate(train_loader):
-            if epoch == start_epoch and step < resume_microbatch_idx:
-                continue
-            current_microbatch_idx = step + 1
-            input_ids = batch["input_ids"].to(device)
-            attention_mask = batch.get("attention_mask")
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(device)
-
-            logits_dict = model(input_ids, attention_mask=attention_mask)
-
-            loss = 0
-            tasks_added = 0
-
-            # Legacy motif supervision is opt-in and disabled for corrected critics.
-            saliency_regularizer_weight = float(
-                cfg.get("saliency_regularizer_weight", 0.0)
-            )
-            if saliency_regularizer_weight > 0.0 and "attention_weights" in logits_dict:
-                attn_weights = logits_dict["attention_weights"]  # (B, T)
-                saliency_loss = 0.0
-                saliency_count = 0
-                MOTIFS = ["GDSGG", "HIGH", "KMSKS", "DXD"]
-                for i, seq in enumerate(batch["sequence"]):
-                    active_indices = []
-                    for motif in MOTIFS:
-                        start_idx = seq.find(motif)
-                        if start_idx != -1:
-                            for offset in range(len(motif)):
-                                idx = start_idx + 1 + offset
-                                if idx < attn_weights.shape[1]:
-                                    active_indices.append(idx)
-                    if active_indices:
-                        active_mass = attn_weights[i, active_indices].sum()
-                        saliency_loss += -torch.log(active_mass + 1e-8)
-                        saliency_count += 1
-                if saliency_count > 0:
-                    loss += saliency_regularizer_weight * (
-                        saliency_loss / saliency_count
-                    )
-            supervised_losses = task_losses(
-                logits_dict,
-                {
-                    task: batch[task].to(device)
-                    for task in (*classification_tasks, *regression_tasks)
-                },
-                classification_tasks,
-                regression_tasks,
-                train_classification_criteria,
-            )
-            if supervised_losses:
-                loss += torch.stack(list(supervised_losses.values())).mean()
-                tasks_added += 1
-                for task, task_loss in supervised_losses.items():
-                    recent_task_sums[task] = (
-                        recent_task_sums.get(task, torch.zeros((), device=device))
-                        + task_loss.detach()
-                    )
-                    recent_task_counts[task] = recent_task_counts.get(task, 0) + 1
-            for task in multi_label_tasks:
-                targets = batch[task].to(device)
-                if targets.numel() and (targets >= 0).any():
-                    loss += multi_label_criteria[task](logits_dict[task], targets)
-                    tasks_added += 1
-
-            if tasks_added > 0:
-                group_size = accumulation_group_size(
-                    step, len(train_loader), grad_accum_steps
-                )
-                loss = loss / group_size
-                loss.backward()
-                train_loss += loss.item() * group_size
-                recent_loss += loss.item() * group_size
-                recent_steps += 1
-                recent_sequences += input_ids.shape[0]
-                recent_residues += int(attention_mask.sum().item())
-
-            if (step + 1) % grad_accum_steps == 0 or (step + 1) == len(train_loader):
-                optimizer.step()
-                optimizer.zero_grad()
-                optimizer_step += 1
-
-                if checkpoint_policy.should_save(optimizer_step):
-                    save_last(epoch, reason="periodic")
-
-            if log_every_steps and (step + 1) % log_every_steps == 0:
-                elapsed = time.perf_counter() - start_time
-                interval_elapsed = time.perf_counter() - recent_started
-                avg_recent_loss = recent_loss / max(recent_steps, 1)
-                task_text = " ".join(
-                    f"{task}_loss={float(total.cpu()) / recent_task_counts[task]:.4f}"
-                    for task, total in sorted(recent_task_sums.items())
-                )
-                task_suffix = f" {task_text}" if task_text else ""
-                memory_suffix = mps_memory_summary() if device.type == "mps" else ""
-                print(
-                    f"[progress] epoch={epoch + 1}/{epochs} "
-                    f"step={step + 1}/{len(train_loader)} "
-                    f"elapsed_min={elapsed / 60:.1f} "
-                    f"recent_loss={avg_recent_loss:.4f} "
-                    f"optimizer_step={optimizer_step} "
-                    f"lr={optimizer.param_groups[0]['lr']:.2e} "
-                    f"seq_per_sec={recent_sequences / max(interval_elapsed, 1e-9):.2f} "
-                    f"residues_per_sec={recent_residues / max(interval_elapsed, 1e-9):.0f} "
-                    f"batch_seq_len={input_ids.shape[1]}"
-                    f"{task_suffix}{memory_suffix}",
-                    flush=True,
-                )
-                recent_loss = 0.0
-                recent_steps = 0
-                recent_sequences = 0
-                recent_residues = 0
-                recent_task_sums = {}
-                recent_task_counts = {}
-                recent_started = time.perf_counter()
-
-            # Check wall-time limit at the end of every step
-            if wall_timer.expired():
-                print(
-                    f"\n[info] Wall-time limit of {max_time_minutes} minutes reached mid-epoch.",
-                    flush=True,
-                )
-                optimizer_boundary = (step + 1) % grad_accum_steps == 0 or (
-                    step + 1
-                ) == len(train_loader)
-                if not optimizer_boundary:
-                    optimizer.zero_grad(set_to_none=True)
-                    current_microbatch_idx = (
-                        step // grad_accum_steps
-                    ) * grad_accum_steps
-                save_last(epoch, reason="wall_time")
-                print(
-                    f"[success] Gracefully saved checkpoint to {out_dir / 'last_critic.pt'}. Exiting.",
-                    flush=True,
-                )
-                time_limit_reached = True
-                break
-
-        if time_limit_reached:
-            break
-        resume_microbatch_idx = 0
-        train_loss /= len(train_loader)
-        if device.type == "mps":
-            torch.mps.empty_cache()
-
-        model.eval()
-        val_loss = 0.0
-        val_tasks_total = 0
-        with torch.no_grad():
-            for batch in val_loader:
-                input_ids = batch["input_ids"].to(device)
-                attention_mask = batch.get("attention_mask")
-                if attention_mask is not None:
-                    attention_mask = attention_mask.to(device)
-                logits_dict = model(input_ids, attention_mask=attention_mask)
-
-                batch_loss = 0
-                batch_tasks = 0
-                supervised_losses = task_losses(
-                    logits_dict,
-                    {
-                        task: batch[task].to(device)
-                        for task in (*classification_tasks, *regression_tasks)
-                    },
-                    classification_tasks,
-                    regression_tasks,
-                    validation_classification_criterion,
-                )
-                if supervised_losses:
-                    batch_loss += torch.stack(list(supervised_losses.values())).mean()
-                    batch_tasks += 1
-                for task in multi_label_tasks:
-                    targets = batch[task].to(device)
-                    if targets.numel() and (targets >= 0).any():
-                        batch_loss += multi_label_criteria[task](
-                            logits_dict[task], targets
-                        )
-                        batch_tasks += 1
-
-                if batch_tasks > 0:
-                    val_loss += batch_loss.item()
-                    val_tasks_total += 1
-
-        if val_tasks_total > 0:
-            val_loss /= val_tasks_total
-        if device.type == "mps":
-            torch.mps.empty_cache()
-        print(
-            f"Epoch {epoch + 1}/{epochs} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}",
-            flush=True,
-        )
-        print(
-            f"[timing] epoch={epoch + 1} wall_sec={time.perf_counter() - epoch_started:.2f}",
-            flush=True,
-        )
-
-        with open(log_csv, "a", newline="") as f:
-            csv.writer(f).writerow([epoch + 1, f"{train_loss:.4f}", f"{val_loss:.4f}"])
-
-        improved = False
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            improved = True
-
-        # Save last checkpoint for resilience
-        save_last(epoch, reason="epoch")
-
-        if improved:
-            best_payload = checkpoint_payload(epoch, epoch_complete=True)
-            best_payload["checkpoint_reason"] = "best_epoch"
-            best_payload["epoch_complete"] = True
-            best_payload["microbatch_idx"] = 0
-            save_checkpoint_atomic(best_payload, out_dir / "best_critic.pt")
-            save_checkpoint_atomic(
-                best_payload, out_dir / f"best_critic_epoch_{epoch + 1:03d}.pt"
-            )
-            print("  -> Saved new best model.", flush=True)
-
-    if not time_limit_reached:
-        training_run.mark_complete(
-            {
-                "run_id": run_id,
-                "completed_epochs": epochs,
-                "best_validation_loss": best_val_loss,
-            }
-        )
-    training_run.close()
+        return engine.fit()
+    finally:
+        training_run.close()
+        run_logger.__exit__(*sys.exc_info())
 
 
 if __name__ == "__main__":
