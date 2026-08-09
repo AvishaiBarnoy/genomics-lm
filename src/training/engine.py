@@ -108,6 +108,7 @@ class TrainingEngine(Generic[BatchT]):
         self.checkpoint_payload_adapter = checkpoint_payload_adapter
         self.state = EngineState()
         self.best_metric: float | None = None
+        self.best_epoch: int | None = None
         self.aborted_groups = 0
 
     def fit(self) -> EngineResult:
@@ -212,6 +213,7 @@ class TrainingEngine(Generic[BatchT]):
             improved = monitored is not None and self._is_better(monitored.total)
             if improved:
                 self.best_metric = monitored.total
+                self.best_epoch = epoch + 1
             self._save(self.config.last_checkpoint_name, "epoch", validation_metrics)
             if self.config.epoch_checkpoint_pattern is not None:
                 self._save(
@@ -243,6 +245,7 @@ class TrainingEngine(Generic[BatchT]):
                 "completed_epochs": self.state.completed_epochs,
                 "optimizer_step": self.state.optimizer_step,
                 "best_metric": self.best_metric,
+                "best_epoch": self.best_epoch,
             }
         )
         return EngineResult(self.state, "complete", self.best_metric, self.aborted_groups)
@@ -286,6 +289,7 @@ class TrainingEngine(Generic[BatchT]):
             metadata={
                 "reason": reason,
                 "best_metric": self.best_metric,
+                "best_epoch": self.best_epoch,
                 "metrics": {
                     name: value.total for name, value in (metrics or {}).items()
                 },
@@ -314,6 +318,8 @@ class TrainingEngine(Generic[BatchT]):
         self.state = checkpoint.engine
         best = checkpoint.metadata.get("best_metric")
         self.best_metric = None if best is None else float(best)
+        best_epoch = checkpoint.metadata.get("best_epoch")
+        self.best_epoch = None if best_epoch is None else int(best_epoch)
 
     def _emit(self, name, context=None, metrics=None, metadata=None) -> None:
         event = EngineEvent(name, context, metrics or {}, metadata or {})

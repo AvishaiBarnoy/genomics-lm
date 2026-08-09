@@ -1133,6 +1133,14 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     the engine owns actual-size accumulation, cosine scheduling, nonfinite recovery,
     wall-time interruption, and epoch archives. Versioned checkpoints retain the
     legacy model, optimizer, scheduler, label-map, loss, and progress aliases.
+*   **Model-Agnostic Protein EBM Migration (2026-08-09):** Moved latent
+    real-versus-corrupted ranking onto the shared engine while keeping decoy
+    construction and softplus energy ranking task-owned. The critic is now checked
+    as completely frozen, only the EBM head reaches the optimizer, and validation
+    reports positive/negative energies and their gap. The loader accepts raw,
+    legacy, and versioned ProteinCritic weights, while EBM checkpoints retain their
+    one-based epoch, best-epoch, optimizer, validation-loss, and model aliases.
+    Phase 3 supervised and contrastive protein trainer migrations are complete.
 
 ---
 *End of Log*

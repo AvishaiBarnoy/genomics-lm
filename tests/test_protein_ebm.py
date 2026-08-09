@@ -1,6 +1,4 @@
 import torch
-import numpy as np
-from pathlib import Path
 
 from src.protein_lm.tokenizer import ProteinTokenizer
 from src.protein_lm.ebm import ProteinLatentEBM

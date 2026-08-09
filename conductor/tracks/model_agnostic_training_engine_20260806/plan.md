@@ -44,17 +44,14 @@ configuration, task, strategy, and engine assembly.
 - [x] Implement the corrected single-label `ProteinClassifierTask`; retain its
   train-fitted label vocabulary as task-owned state rather than over-generalizing
   the multitask critic adapter.
-- [ ] Implement `ProteinEBMTask`, keeping positive/negative construction and energy
+- [x] Implement `ProteinEBMTask`, keeping positive/negative construction and energy
   metrics task-owned while using the shared optimization strategy.
-- [ ] Verify frozen-backbone state for the EBM migration.
+- [x] Verify the frozen-backbone invariant, head-only updates, validation selection,
+  versioned critic loading, legacy EBM aliases, and interrupted resume parity.
 - [x] Verify ProteinCritic class/regression metric aggregation, validation
   selection, legacy checkpoint compatibility, and optimizer-boundary resume parity.
 - [x] Verify ProteinClassifier complete-set accuracy/weighted-F1, label-map
   compatibility, scheduler state, legacy aliases, and interrupted resume parity.
-- [ ] Add validated per-task loss weights in a separate scientific-feature PR,
-  preserving the present objective as the default and selecting weights using
-  training/validation diagnostics rather than the test split.
-
 Exit gate: protein trainers share orchestration without changing their architectures,
 decoy distributions, losses, or scientific metrics.
 
@@ -94,6 +91,12 @@ update algorithm without model-specific branches.
 Exit gate: reusable mechanics have one maintained implementation, all supported
 trainers use it, and task-specific code contains only scientifically necessary
 behavior.
+
+## Future Scientific Features
+
+- [ ] Add validated per-task ProteinCritic loss weights in a separate PR,
+  preserving the present objective as the default and selecting weights using
+  training/validation diagnostics rather than the test split.
 
 ## Planned Pull Requests
 

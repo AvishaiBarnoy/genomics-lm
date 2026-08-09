@@ -280,6 +280,7 @@ def test_training_metrics_and_numbered_best_are_emitted(tmp_path):
     assert training.metrics["epoch_loss"].total == 1.25
     assert completed.metadata["training_metrics"]["epoch_loss"].total == 1.25
     assert completed.metadata["improved"] is True
+    assert engine.best_epoch == 1
     assert (run.checkpoints / "best_epoch_001.pt").exists()
     run.close()
 
