@@ -51,6 +51,9 @@ class ProteinLMTask:
         else:
             self.model.eval()
 
+    def end_phase(self, phase: TrainingPhase, epoch: int):
+        return {}
+
     def train_batches(self, epoch: int):
         return self.train_loader
 

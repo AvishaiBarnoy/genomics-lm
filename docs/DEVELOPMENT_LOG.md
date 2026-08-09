@@ -1112,6 +1112,10 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     their actual size instead of being under-scaled by the configured full group.
     A fail-fast ProteinLM configuration validator and allow-listed AdamW/Adam/SGD
     optimizer factory were added before migration review; AdamW remains the default.
+*   **Model-Agnostic Engine Phase 3 Metrics (2026-08-09):** Added a task-owned
+    end-of-phase metric hook required by supervised protein migrations. Metrics such
+    as F1 can now be computed once from the complete validation prediction set rather
+    than incorrectly averaging independent batch F1 values.
 
 ---
 *End of Log*

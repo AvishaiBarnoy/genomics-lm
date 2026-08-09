@@ -195,6 +195,7 @@ class TrainingEngine(Generic[BatchT]):
                         self.state, "interrupted", self.best_metric, self.aborted_groups
                     )
 
+            self.task.end_phase(TrainingPhase.TRAIN, epoch)
             validation_metrics = {}
             if (epoch + 1) % self.config.validate_every_epochs == 0:
                 validation_metrics = self._validate(epoch)
@@ -244,6 +245,7 @@ class TrainingEngine(Generic[BatchT]):
             output.validate()
             accumulator.add(output.metrics)
         metrics = accumulator.averages()
+        metrics.update(self.task.end_phase(TrainingPhase.VALIDATION, epoch))
         self._emit("validation_completed", None, metrics)
         return metrics
 

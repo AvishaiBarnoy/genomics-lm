@@ -20,6 +20,9 @@ class LinearTask:
         self.phase = phase
         self.model.train(phase == TrainingPhase.TRAIN)
 
+    def end_phase(self, phase, epoch):
+        return {}
+
     def train_batches(self, epoch):
         return [torch.tensor([[value]]) for value in self.values]
 
@@ -76,6 +79,11 @@ class WeightedValidationTask(LinearTask):
             self.model(batch).square().mean(),
             {"score": MetricValue(value * weight, weight)},
         )
+
+    def end_phase(self, phase, epoch):
+        if phase == TrainingPhase.VALIDATION:
+            return {"weighted_f1": MetricValue(0.75)}
+        return {}
 
 
 def _build_engine(tmp_path, run, task, *, epochs=1, timer=None):
@@ -236,6 +244,7 @@ def test_validation_metrics_are_weighted_and_emitted_to_callbacks(tmp_path):
         event for event in recorder.events if event.name == "validation_completed"
     )
     assert validation.metrics["score"].total == expected
+    assert validation.metrics["weighted_f1"].total == 0.75
     assert result.best_metric == expected
     run.close()
 
