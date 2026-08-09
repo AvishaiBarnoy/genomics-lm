@@ -69,11 +69,11 @@ changing their objective, update exposure, or checkpoint compatibility.
 
 ## Phase 5: Nonstandard Update Algorithms
 
-- [ ] Implement a layer-local `NoPropUpdateStrategy` with complete per-layer
+- [x] Implement a layer-local `NoPropUpdateStrategy` with complete per-layer
   optimizer state and resume parity.
-- [ ] Evaluate whether frozen-backbone and discriminative-learning-rate behavior
+- [x] Evaluate whether frozen-backbone and discriminative-learning-rate behavior
   require strategies, optimizer factories, or parameter-group configuration.
-- [ ] Document how future training algorithms register without editing the engine.
+- [x] Document how future training algorithms register without editing the engine.
 
 Exit gate: NoProp demonstrates that the engine supports a genuinely different
 update algorithm without model-specific branches.
@@ -105,4 +105,5 @@ behavior.
 3. ProteinLM reference migration.
 4. ProteinCritic, classifier, and EBM migrations.
 5. CodonLM migration and MPS parity gate.
-6. NoProp strategy, CI enforcement, documentation, and cleanup.
+6. NoProp strategy.
+7. CI enforcement, ancillary-trainer decisions, documentation, and cleanup.

@@ -1147,6 +1147,14 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     families. The track requires strict amino-acid validation, per-decoy provenance,
     shortcut baselines, matched validation-only selection, and external mutation-
     effect validation before interpreting EBM energy as biological quality.
+*   **Model-Agnostic NoProp Migration (2026-08-09):** Replaced NoProp's standalone
+    epoch loop with a task adapter and a layer-local update strategy. The strategy
+    preserves the embedding update through block zero, isolated per-block AdamW
+    steps, and detached output-head update; all optimizer states now participate in
+    exact optimizer-boundary interruption and resume. The shared engine owns
+    validation, best/last checkpoints, RNG restoration, run completion, and callback
+    reporting while legacy NoProp checkpoint aliases remain available. Fixed-seed
+    tests cover direct-update parity, legacy translation, and interrupted resume.
 
 ---
 *End of Log*
