@@ -27,10 +27,10 @@ and completed behavior without importing a biological model.
 
 ## Phase 2: ProteinLM Reference Migration
 
-- [ ] Implement `ProteinLMTask` as the simplest causal-language-model adapter.
-- [ ] Demonstrate fixed-seed parity for updates, scheduler state, validation loss,
+- [x] Implement `ProteinLMTask` as the simplest causal-language-model adapter.
+- [x] Demonstrate fixed-seed parity for updates, scheduler state, validation loss,
   checkpoint payload, and interrupted/resumed parameters.
-- [ ] Replace ProteinLM loop orchestration while retaining its CLI and legacy
+- [x] Replace ProteinLM loop orchestration while retaining its CLI and legacy
   checkpoint compatibility.
 
 Exit gate: ProteinLM behavior is equivalent and its trainer contains only argument,

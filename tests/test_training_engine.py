@@ -238,3 +238,15 @@ def test_validation_metrics_are_weighted_and_emitted_to_callbacks(tmp_path):
     assert validation.metrics["score"].total == expected
     assert result.best_metric == expected
     run.close()
+
+
+def test_strategy_checkpoint_rejects_different_optimizer_class():
+    model = torch.nn.Linear(1, 1)
+    adamw = AccumulatedBackpropStrategy(
+        torch.optim.AdamW(model.parameters(), lr=1e-3)
+    )
+    state = adamw.state_dict()
+    sgd = AccumulatedBackpropStrategy(torch.optim.SGD(model.parameters(), lr=0.1))
+
+    with pytest.raises(ValueError, match="checkpoint optimizer"):
+        sgd.load_state_dict(state)

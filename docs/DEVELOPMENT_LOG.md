@@ -1105,6 +1105,13 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     validation selection, wall-time interruption, and namespaced checkpoint resume.
     Biological trainers remain on their existing loops until individual parity gates
     pass.
+*   **Model-Agnostic Engine Phase 2 (2026-08-06):** Migrated ProteinLM as the first
+    biological task adapter. Fixed-seed tests preserve its causal loss, AdamW update,
+    epoch-level cosine scheduler, validation averaging, legacy checkpoint aliases,
+    and exact optimizer-boundary resume. Final partial accumulation groups now use
+    their actual size instead of being under-scaled by the configured full group.
+    A fail-fast ProteinLM configuration validator and allow-listed AdamW/Adam/SGD
+    optimizer factory were added before migration review; AdamW remains the default.
 
 ---
 *End of Log*
