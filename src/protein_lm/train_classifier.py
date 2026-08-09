@@ -164,8 +164,21 @@ def train_classifier(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a protein classifier.")
-    parser.add_argument("--config", required=True)
-    parser.add_argument("--resume")
-    parser.add_argument("--run-id")
+    parser.add_argument(
+        "--config",
+        type=str,
+        required=True,
+        help="Path to the classifier YAML configuration.",
+    )
+    parser.add_argument(
+        "--resume",
+        type=str,
+        help="Path to a classifier checkpoint to resume.",
+    )
+    parser.add_argument(
+        "--run-id",
+        type=str,
+        help="Run identifier; fresh collisions receive a serial suffix.",
+    )
     args = parser.parse_args()
     train_classifier(args.config, resume=args.resume, run_id=args.run_id)
