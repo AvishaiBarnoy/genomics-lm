@@ -108,6 +108,24 @@ class ProteinClassifierConfig:
     pooling: str = "mean"
     bidirectional: bool = True
 
+
+def validate_protein_classifier_config(config, model_config, tokenizer) -> None:
+    """Validate shared protein settings plus classifier-specific values."""
+    validate_protein_lm_config(config, model_config, tokenizer)
+    if isinstance(model_config.num_classes, bool) or not isinstance(
+        model_config.num_classes, Integral
+    ):
+        raise TypeError("model.num_classes must be an integer")
+    if model_config.num_classes < 2:
+        raise ValueError("model.num_classes must be at least 2")
+    if not isinstance(model_config.bidirectional, bool):
+        raise TypeError("model.bidirectional must be a boolean")
+    if not model_config.bidirectional:
+        raise ValueError("the corrected protein classifier must be bidirectional")
+    label_field = config.get("data", {}).get("label_field", "func_label")
+    if not isinstance(label_field, str) or not label_field:
+        raise ValueError("data.label_field must be a non-empty string")
+
 def load_config(path: str, config_class, overrides=None):
     """
     Loads a model configuration from a YAML file.
