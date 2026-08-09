@@ -4,6 +4,13 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
+- [ ] **Track: Directed ProteinEBM Corruption And Validation**
+*Link: [./tracks/ebm_directed_corruption_20260809/](./tracks/ebm_directed_corruption_20260809/)*
+*Summary: Replace uniform-only substitutions with a controlled, provenance-rich
+mixture of uniform, BLOSUM-conservative, Grantham-radical, and ProteinLM-contextual
+decoys; select on validation and externally test what EBM energy represents before
+using it as a biological quality score.*
+
 - [ ] **Track: Shared Training Run Lifecycle**
 *Link: [./tracks/shared_training_run_lifecycle_20260805/](./tracks/shared_training_run_lifecycle_20260805/)*
 *Summary: Centralize collision-safe run allocation, locking, resume lineage and
