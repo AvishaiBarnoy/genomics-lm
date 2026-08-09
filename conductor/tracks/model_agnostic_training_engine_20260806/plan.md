@@ -38,6 +38,8 @@ configuration, task, strategy, and engine assembly.
 
 ## Phase 3: Supervised And Contrastive Protein Tasks
 
+- [x] Add an end-of-phase metric hook so non-decomposable supervised metrics such
+  as F1 are computed over the complete prediction set rather than averaged per batch.
 - [ ] Implement the bidirectional multitask `ProteinCriticTask`.
 - [ ] Implement the protein classifier task or consolidate it with a generic
   supervised-sequence task when the contracts genuinely match.
