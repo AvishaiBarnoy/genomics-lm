@@ -86,6 +86,13 @@ class WeightedValidationTask(LinearTask):
         return {}
 
 
+class PhaseMetricTask(LinearTask):
+    def end_phase(self, phase, epoch):
+        if phase == TrainingPhase.TRAIN:
+            return {"epoch_loss": MetricValue(1.25)}
+        return {}
+
+
 def _build_engine(tmp_path, run, task, *, epochs=1, timer=None):
     optimizer = torch.optim.SGD(task.model.parameters(), lr=0.1)
     scheduler = torch.optim.lr_scheduler.LambdaLR(
@@ -246,6 +253,34 @@ def test_validation_metrics_are_weighted_and_emitted_to_callbacks(tmp_path):
     assert validation.metrics["score"].total == expected
     assert validation.metrics["weighted_f1"].total == 0.75
     assert result.best_metric == expected
+    run.close()
+
+
+def test_training_metrics_and_numbered_best_are_emitted(tmp_path):
+    task = PhaseMetricTask([1.0])
+    run = TrainingRun.open(tmp_path, "phase-metrics")
+    optimizer = torch.optim.SGD(task.model.parameters(), lr=0.0)
+    recorder = EventRecorder()
+    engine = TrainingEngine(
+        task=task,
+        strategy=AccumulatedBackpropStrategy(optimizer),
+        run=run,
+        config=EngineConfig(
+            epochs=1,
+            best_checkpoint_pattern="best_epoch_{epoch:03d}.pt",
+        ),
+        device=torch.device("cpu"),
+        callbacks=[recorder],
+    )
+
+    engine.fit()
+
+    training = next(event for event in recorder.events if event.name == "training_completed")
+    completed = next(event for event in recorder.events if event.name == "epoch_completed")
+    assert training.metrics["epoch_loss"].total == 1.25
+    assert completed.metadata["training_metrics"]["epoch_loss"].total == 1.25
+    assert completed.metadata["improved"] is True
+    assert (run.checkpoints / "best_epoch_001.pt").exists()
     run.close()
 
 

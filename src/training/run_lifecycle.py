@@ -116,12 +116,12 @@ def restore_rng_state(state: dict[str, Any] | None) -> None:
             numpy_state["cached_gaussian"],
         )
     )
-    torch.set_rng_state(state["torch_cpu"])
+    torch.set_rng_state(state["torch_cpu"].cpu())
     if "torch_cuda" in state and torch.cuda.is_available():
         torch.cuda.set_rng_state_all(state["torch_cuda"])
     set_mps_state = getattr(torch.mps, "set_rng_state", None)
     if "torch_mps" in state and callable(set_mps_state):
-        set_mps_state(state["torch_mps"])
+        set_mps_state(state["torch_mps"].cpu())
 
 
 class TrainingRun:
