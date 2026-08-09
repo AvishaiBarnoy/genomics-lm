@@ -6,7 +6,12 @@ import torch
 
 from src.protein_lm.config import ProteinLMConfig
 from src.protein_lm.models import ProteinConditionalTransformer
-from src.protein_lm.tasks import ProteinLMTask, decode_protein_lm_checkpoint
+from src.protein_lm.tasks import (
+    ProteinLMTask,
+    adapt_protein_lm_checkpoint,
+    decode_protein_lm_checkpoint,
+    make_protein_lm_checkpoint_adapter,
+)
 from src.protein_lm.tokenizer import ProteinTokenizer
 from src.training.engine import EngineConfig, TrainingEngine
 from src.training.run_lifecycle import TrainingRun
@@ -160,6 +165,28 @@ def test_legacy_protein_lm_checkpoint_is_translated_without_guessing():
     assert translated.strategy["optimizer"].keys() == legacy[
         "optimizer_state_dict"
     ].keys()
+
+
+def test_named_checkpoint_adapter_can_be_called_directly_or_bound():
+    payload = {
+        "engine": {
+            "completed_epochs": 1,
+            "current_epoch": 1,
+            "microbatch": 0,
+            "optimizer_step": 2,
+        },
+        "metadata": {"reason": "epoch"},
+        "task": {"model": {}},
+        "strategy": {"optimizer": {}, "scheduler": {}},
+        "rng": {},
+    }
+    direct = adapt_protein_lm_checkpoint(
+        copy.deepcopy(payload), config={"name": "x"}
+    )
+    bound = make_protein_lm_checkpoint_adapter({"name": "x"})
+
+    assert direct == bound(copy.deepcopy(payload))
+    assert direct["cfg"] == {"name": "x"}
 
 
 def test_protein_lm_interrupted_resume_matches_uninterrupted_run(tmp_path):

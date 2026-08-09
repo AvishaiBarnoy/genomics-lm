@@ -17,7 +17,6 @@ def _write_config(tmp_path: Path, epochs: int) -> Path:
     config = {
         "run_id": "protein-lm-smoke",
         "model": {
-            "vocab_size": 1,
             "n_layer": 1,
             "n_head": 1,
             "n_embd": 16,

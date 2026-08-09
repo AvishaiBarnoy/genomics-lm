@@ -1110,6 +1110,8 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     epoch-level cosine scheduler, validation averaging, legacy checkpoint aliases,
     and exact optimizer-boundary resume. Final partial accumulation groups now use
     their actual size instead of being under-scaled by the configured full group.
+    A fail-fast ProteinLM configuration validator and allow-listed AdamW/Adam/SGD
+    optimizer factory were added before migration review; AdamW remains the default.
 
 ---
 *End of Log*

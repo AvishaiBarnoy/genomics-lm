@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from functools import partial
 from typing import Any
 
 import torch
@@ -120,32 +121,36 @@ def decode_protein_lm_checkpoint(payload: Mapping[str, Any]) -> TrainingCheckpoi
     )
 
 
-def protein_lm_checkpoint_adapter(config: Mapping[str, Any]):
-    """Retain legacy aliases while writing the versioned checkpoint envelope."""
+def adapt_protein_lm_checkpoint(
+    payload: dict[str, Any], *, config: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Add legacy ProteinLM aliases to a versioned checkpoint payload."""
 
-    def adapt(payload: dict[str, Any]) -> dict[str, Any]:
-        engine = payload["engine"]
-        reason = payload["metadata"]["reason"]
-        complete = reason in {"epoch", "epoch_archive", "best"}
-        payload.update(
-            {
-                "epoch": (
-                    int(engine["completed_epochs"]) - 1
-                    if complete
-                    else int(engine["current_epoch"])
-                ),
-                "epoch_complete": complete,
-                "microbatch_idx": 0 if complete else int(engine["microbatch"]),
-                "optimizer_step": int(engine["optimizer_step"]),
-                "model_state_dict": payload["task"]["model"],
-                "optimizer_state_dict": payload["strategy"]["optimizer"],
-                "scheduler_state_dict": payload["strategy"].get("scheduler"),
-                "checkpoint_reason": reason,
-                "cfg": dict(config),
-                "rng_state": payload["rng"],
-            }
-        )
-        return payload
+    engine = payload["engine"]
+    reason = payload["metadata"]["reason"]
+    complete = reason in {"epoch", "epoch_archive", "best"}
+    payload.update(
+        {
+            "epoch": (
+                int(engine["completed_epochs"]) - 1
+                if complete
+                else int(engine["current_epoch"])
+            ),
+            "epoch_complete": complete,
+            "microbatch_idx": 0 if complete else int(engine["microbatch"]),
+            "optimizer_step": int(engine["optimizer_step"]),
+            "model_state_dict": payload["task"]["model"],
+            "optimizer_state_dict": payload["strategy"]["optimizer"],
+            "scheduler_state_dict": payload["strategy"].get("scheduler"),
+            "checkpoint_reason": reason,
+            "cfg": dict(config),
+            "rng_state": payload["rng"],
+        }
+    )
+    return payload
 
-    return adapt
 
+def make_protein_lm_checkpoint_adapter(config: Mapping[str, Any]):
+    """Bind a run configuration to the engine's one-argument adapter callback."""
+
+    return partial(adapt_protein_lm_checkpoint, config=config)

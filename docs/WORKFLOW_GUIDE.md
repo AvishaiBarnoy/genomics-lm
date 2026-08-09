@@ -305,3 +305,18 @@ New checkpoints contain the versioned `engine`, `task`, `strategy`, `rng`, and
 `metadata` namespaces and retain the legacy ProteinLM model, optimizer, scheduler,
 epoch, and progress aliases. Existing unambiguous ProteinLM `last.pt` checkpoints
 remain valid resume inputs.
+
+AdamW remains the default optimizer. ProteinLM also accepts registered Adam and SGD
+configurations without changing task or engine code:
+
+```yaml
+training:
+  optimizer:
+    name: sgd
+    lr: 0.01
+    momentum: 0.9
+    weight_decay: 0.0
+```
+
+Unknown optimizer names and unsupported algorithm-specific options fail before a
+run directory is allocated.

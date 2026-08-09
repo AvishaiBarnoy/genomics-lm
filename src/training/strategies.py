@@ -171,7 +171,13 @@ class AccumulatedBackpropStrategy(Generic[BatchT]):
         self._processed = 0
 
     def state_dict(self) -> Mapping[str, Any]:
-        state: dict[str, Any] = {"optimizer": self.optimizer.state_dict()}
+        optimizer_type = (
+            f"{type(self.optimizer).__module__}.{type(self.optimizer).__qualname__}"
+        )
+        state: dict[str, Any] = {
+            "optimizer": self.optimizer.state_dict(),
+            "optimizer_type": optimizer_type,
+        }
         state["precision"] = dict(self.precision.state_dict())
         state["scheduler_interval"] = self.scheduler_interval
         if self.scheduler is not None:
@@ -179,6 +185,18 @@ class AccumulatedBackpropStrategy(Generic[BatchT]):
         return state
 
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        saved_optimizer_type = state.get("optimizer_type")
+        current_optimizer_type = (
+            f"{type(self.optimizer).__module__}.{type(self.optimizer).__qualname__}"
+        )
+        if (
+            saved_optimizer_type is not None
+            and saved_optimizer_type != current_optimizer_type
+        ):
+            raise ValueError(
+                f"checkpoint optimizer {saved_optimizer_type!r} differs from "
+                f"configured optimizer {current_optimizer_type!r}"
+            )
         self.optimizer.load_state_dict(state["optimizer"])
         saved_interval = state.get("scheduler_interval", self.scheduler_interval)
         if saved_interval != self.scheduler_interval:
