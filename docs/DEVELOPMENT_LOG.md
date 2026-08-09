@@ -1122,7 +1122,10 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     class weighting, wall-time interruption, and evaluator-compatible checkpoint
     fields. The task now reports whole-phase accuracy and regression MAE, the engine
     exposes train-phase summaries to callbacks, and improved checkpoints retain both
-    stable and numbered names. Legacy critic checkpoints remain resumable.
+    stable and numbered names. Legacy critic checkpoints remain resumable. The
+    hand-written motif-attention regularizer was retired: existing zero-valued
+    configuration remains valid, while nonzero legacy use now fails explicitly
+    instead of imposing four unvalidated motifs on corrected training.
 
 ---
 *End of Log*

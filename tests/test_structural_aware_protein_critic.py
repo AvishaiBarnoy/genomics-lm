@@ -31,6 +31,7 @@ from src.protein_lm.train_multi_task import (
     compute_multi_label_pos_weight,
     load_compatible_model_weights,
     task_losses,
+    validate_retired_saliency_regularizer,
 )
 from src.protein_lm.critic_task import (
     ProteinCriticTask,
@@ -352,6 +353,22 @@ def test_partial_accumulation_group_uses_actual_size():
     assert accumulation_group_size(0, loader_length=10, grad_accum_steps=4) == 4
     assert accumulation_group_size(8, loader_length=10, grad_accum_steps=4) == 2
     assert accumulation_group_size(9, loader_length=10, grad_accum_steps=4) == 2
+
+
+@pytest.mark.parametrize("config", [{}, {"saliency_regularizer_weight": 0}, {"saliency_regularizer_weight": 0.0}])
+def test_retired_saliency_regularizer_accepts_compatible_disabled_config(config):
+    validate_retired_saliency_regularizer(config)
+
+
+def test_retired_saliency_regularizer_rejects_nonzero_legacy_objective():
+    with pytest.raises(ValueError, match="no longer supported"):
+        validate_retired_saliency_regularizer({"saliency_regularizer_weight": 0.1})
+
+
+@pytest.mark.parametrize("value", [True, "0"])
+def test_retired_saliency_regularizer_rejects_invalid_type(value):
+    with pytest.raises(TypeError, match="must be numeric"):
+        validate_retired_saliency_regularizer({"saliency_regularizer_weight": value})
 
 
 def test_critic_task_combines_objectives_and_reports_complete_phase_metrics():

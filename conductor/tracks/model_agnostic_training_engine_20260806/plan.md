@@ -48,6 +48,9 @@ configuration, task, strategy, and engine assembly.
 - [ ] Verify frozen-backbone state for the EBM and classifier migrations.
 - [x] Verify ProteinCritic class/regression metric aggregation, validation
   selection, legacy checkpoint compatibility, and optimizer-boundary resume parity.
+- [ ] Add validated per-task loss weights in a separate scientific-feature PR,
+  preserving the present objective as the default and selecting weights using
+  training/validation diagnostics rather than the test split.
 
 Exit gate: protein trainers share orchestration without changing their architectures,
 decoy distributions, losses, or scientific metrics.

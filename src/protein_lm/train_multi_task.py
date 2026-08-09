@@ -217,6 +217,18 @@ def mps_memory_summary():
     return " | " + " | ".join(parts) if parts else ""
 
 
+def validate_retired_saliency_regularizer(cfg: dict) -> None:
+    """Accept legacy disabled settings but reject the removed motif objective."""
+    value = cfg.get("saliency_regularizer_weight", 0.0)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError("saliency_regularizer_weight must be numeric")
+    if float(value) != 0.0:
+        raise ValueError(
+            "saliency_regularizer_weight is no longer supported; set it to 0. "
+            "Known and learned motifs must be evaluated outside the training loss."
+        )
+
+
 def train_multi_task(
     config_path,
     resume_path=None,
@@ -228,6 +240,7 @@ def train_multi_task(
         cfg = yaml.safe_load(f)
     if max_time_minutes is not None:
         cfg["max_time_minutes"] = float(max_time_minutes)
+    validate_retired_saliency_regularizer(cfg)
 
     device_name = cfg.get(
         "device", "mps" if torch.backends.mps.is_available() else "cpu"
@@ -552,7 +565,6 @@ def train_multi_task(
         train_classification_criteria=train_classification_criteria,
         validation_classification_criterion=validation_classification_criterion,
         multi_label_criteria=multi_label_criteria,
-        saliency_regularizer_weight=cfg.get("saliency_regularizer_weight", 0.0),
     )
     strategy = AccumulatedBackpropStrategy(optimizer, parameters=model.parameters())
     try:

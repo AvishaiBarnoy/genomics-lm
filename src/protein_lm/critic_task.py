@@ -48,8 +48,6 @@ def task_losses(
 class ProteinCriticTask:
     """Protein classification/regression objectives behind a generic task contract."""
 
-    MOTIFS = ("GDSGG", "HIGH", "KMSKS", "DXD")
-
     def __init__(
         self,
         *,
@@ -63,7 +61,6 @@ class ProteinCriticTask:
         train_classification_criteria: Mapping[str, nn.Module],
         validation_classification_criterion: nn.Module,
         multi_label_criteria: Mapping[str, nn.Module],
-        saliency_regularizer_weight: float = 0.0,
     ) -> None:
         self.model = model
         self.train_loader = train_loader
@@ -75,7 +72,6 @@ class ProteinCriticTask:
         self.train_classification_criteria = dict(train_classification_criteria)
         self.validation_classification_criterion = validation_classification_criterion
         self.multi_label_criteria = dict(multi_label_criteria)
-        self.saliency_regularizer_weight = float(saliency_regularizer_weight)
         self._phase_totals: dict[str, float] = {}
         self._phase_weights: dict[str, float] = {}
 
@@ -167,8 +163,6 @@ class ProteinCriticTask:
 
         if components:
             loss = torch.stack(components).sum()
-            if training and self.saliency_regularizer_weight > 0:
-                loss = loss + self._saliency_loss(logits, batch)
         else:
             # Keep accumulation boundaries deterministic even for an unlabeled batch.
             loss = sum((value.sum() * 0.0 for value in logits.values()))
@@ -190,27 +184,6 @@ class ProteinCriticTask:
     def _record(self, name: str, total: float, weight: float) -> None:
         self._phase_totals[name] = self._phase_totals.get(name, 0.0) + float(total)
         self._phase_weights[name] = self._phase_weights.get(name, 0.0) + float(weight)
-
-    def _saliency_loss(self, logits: Mapping[str, torch.Tensor], batch) -> torch.Tensor:
-        attention = logits.get("attention_weights")
-        if attention is None:
-            return next(iter(logits.values())).sum() * 0.0
-        values = []
-        for index, sequence in enumerate(batch["sequence"]):
-            active = []
-            for motif in self.MOTIFS:
-                start = sequence.find(motif)
-                if start >= 0:
-                    active.extend(
-                        position
-                        for position in range(start + 1, start + 1 + len(motif))
-                        if position < attention.shape[1]
-                    )
-            if active:
-                values.append(-torch.log(attention[index, active].sum() + 1e-8))
-        if not values:
-            return attention.sum() * 0.0
-        return self.saliency_regularizer_weight * torch.stack(values).mean()
 
     def state_dict(self) -> Mapping[str, Any]:
         return {"model": self.model.state_dict()}
