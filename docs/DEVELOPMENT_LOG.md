@@ -1155,6 +1155,14 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     validation, best/last checkpoints, RNG restoration, run completion, and callback
     reporting while legacy NoProp checkpoint aliases remain available. Fixed-seed
     tests cover direct-update parity, legacy translation, and interrupted resume.
+*   **Protein Feature-Head Migration (2026-08-09):** Migrated the standalone
+    Pfam, EC, and categorical-stability MLP feature classifiers to the shared
+    engine. A single AdamW instance remains equivalent to the former independent
+    optimizers because only one head receives gradients per batch, while enabling
+    atomic optimizer-boundary checkpoints and exact deterministic resume. Runs are
+    collision-safe, retain independently selected best states for every head, emit
+    per-head curves and a legacy-format unified artifact, and reject missing or
+    out-of-vocabulary labels instead of silently producing incomplete checkpoints.
 
 ---
 *End of Log*
