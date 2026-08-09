@@ -212,18 +212,20 @@ class TrainingEngine(Generic[BatchT]):
             improved = monitored is not None and self._is_better(monitored.total)
             if improved:
                 self.best_metric = monitored.total
-            self._save(self.config.last_checkpoint_name, "epoch")
+            self._save(self.config.last_checkpoint_name, "epoch", validation_metrics)
             if self.config.epoch_checkpoint_pattern is not None:
                 self._save(
                     self.config.epoch_checkpoint_pattern.format(epoch=epoch + 1),
                     "epoch_archive",
+                    validation_metrics,
                 )
             if improved:
-                self._save(self.config.best_checkpoint_name, "best")
+                self._save(self.config.best_checkpoint_name, "best", validation_metrics)
                 if self.config.best_checkpoint_pattern is not None:
                     self._save(
                         self.config.best_checkpoint_pattern.format(epoch=epoch + 1),
                         "best_archive",
+                        validation_metrics,
                     )
             self._emit(
                 "epoch_completed",
@@ -270,13 +272,24 @@ class TrainingEngine(Generic[BatchT]):
             return True
         return value < self.best_metric if self.config.minimize_monitor else value > self.best_metric
 
-    def _save(self, filename: str, reason: str) -> None:
+    def _save(
+        self,
+        filename: str,
+        reason: str,
+        metrics: Mapping[str, MetricValue] | None = None,
+    ) -> None:
         checkpoint = TrainingCheckpoint(
             engine=self.state,
             task=self.task.state_dict(),
             strategy=self.strategy.state_dict(),
             rng=capture_rng_state(),
-            metadata={"reason": reason, "best_metric": self.best_metric},
+            metadata={
+                "reason": reason,
+                "best_metric": self.best_metric,
+                "metrics": {
+                    name: value.total for name, value in (metrics or {}).items()
+                },
+            },
         )
         payload = checkpoint.to_payload()
         payload["run_progress"] = {

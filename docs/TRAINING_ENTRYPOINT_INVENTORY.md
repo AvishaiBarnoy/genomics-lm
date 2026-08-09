@@ -8,7 +8,7 @@ Diagnostic harnesses may execute optimizer steps but are not production trainers
 | --- | --- | --- | --- | --- |
 | `src/codonlm/train_codon_lm.py` / `src/codonlm/training/loop.py` | causal codon LM with optional auxiliary objectives | AdamW, accumulated backprop, scheduler per committed group | exact optimizer boundary | Phase 4 |
 | `src/protein_lm/train_lm.py` | causal amino-acid LM | AdamW, accumulated backprop, cosine scheduler | optimizer boundary | Phase 2 reference |
-| `src/protein_lm/train_classifier.py` | protein sequence classifier | AdamW, accumulated backprop, cosine scheduler | optimizer boundary | Phase 3 |
+| `src/protein_lm/train_classifier.py` | protein sequence classifier | shared engine: configurable optimizer, accumulated backprop, cosine scheduler | optimizer boundary | Phase 3 migrated |
 | `src/protein_lm/train_multi_task.py` | bidirectional multitask ProteinCritic | AdamW, accumulated backprop, mixed classification/regression loss | optimizer boundary | Phase 3 |
 | `src/protein_lm/train_ebm.py` | latent real-versus-corrupted ranking | AdamW on EBM head; frozen critic | epoch boundary | Phase 3 |
 | `src/codonlm/train_noprop.py` | layer-local NoProp codon model | embedding, per-block, and head optimizers | epoch boundary | Phase 5 |

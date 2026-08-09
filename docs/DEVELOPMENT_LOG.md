@@ -1126,6 +1126,13 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     hand-written motif-attention regularizer was retired: existing zero-valued
     configuration remains valid, while nonzero legacy use now fails explicitly
     instead of imposing four unvalidated motifs on corrected training.
+*   **Model-Agnostic Protein Classifier Migration (2026-08-09):** Moved the
+    corrected single-label bidirectional classifier onto the shared engine. The
+    task retains the training-fitted label map, complete-phase accuracy and
+    weighted-F1, deterministic epoch permutations, and padding-aware inputs while
+    the engine owns actual-size accumulation, cosine scheduling, nonfinite recovery,
+    wall-time interruption, and epoch archives. Versioned checkpoints retain the
+    legacy model, optimizer, scheduler, label-map, loss, and progress aliases.
 
 ---
 *End of Log*
