@@ -11,7 +11,7 @@ Diagnostic harnesses may execute optimizer steps but are not production trainers
 | `src/protein_lm/train_classifier.py` | protein sequence classifier | shared engine: configurable optimizer, accumulated backprop, cosine scheduler | optimizer boundary | Phase 3 migrated |
 | `src/protein_lm/train_multi_task.py` | bidirectional multitask ProteinCritic | AdamW, accumulated backprop, mixed classification/regression loss | optimizer boundary | Phase 3 |
 | `src/protein_lm/train_ebm.py` | latent real-versus-corrupted ranking | shared engine: AdamW on EBM head; frozen critic | optimizer boundary | Phase 3 migrated |
-| `src/codonlm/train_noprop.py` | layer-local NoProp codon model | embedding, per-block, and head optimizers | epoch boundary | Phase 5 |
+| `src/codonlm/train_noprop.py` | layer-local NoProp codon model | shared engine: embedding, per-block, and head optimizers committed by `NoPropUpdateStrategy` | optimizer boundary | Phase 5 migrated |
 | `src/protein_lm/train_mlp_heads.py` | standalone heads over frozen features | one AdamW optimizer per head | none | ancillary; migrate or explicitly guard |
 | `scripts/train_biophysics_fusion.py` | nucleotide biophysics encoder pretraining/fusion assembly | AdamW encoder pretraining | none | ancillary; migrate or explicitly guard |
 
@@ -39,6 +39,16 @@ Diagnostic harnesses may execute optimizer steps but are not production trainers
 
 The migration parity suite will build on these tests and add fixed-seed parameter
 comparisons for each trainer before its existing orchestration loop is removed.
+
+## Registering Update Algorithms
+
+A trainer whose only differences are frozen parameters, optimizer type, or
+discriminative learning rates should use the standard accumulated-backprop strategy
+with appropriate optimizer parameter groups. A custom `UpdateStrategy` is reserved
+for algorithms that change update timing or gradient flow. NoProp is the reference:
+its strategy owns the embedding, per-block, and head optimizers, while its task owns
+the layer-local denoising objectives and explicit detach boundaries. The generic
+engine requires no model-name branch.
 
 ## Checkpoint Compatibility Rules
 
