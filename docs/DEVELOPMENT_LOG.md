@@ -1141,6 +1141,12 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     legacy, and versioned ProteinCritic weights, while EBM checkpoints retain their
     one-based epoch, best-epoch, optimizer, validation-loss, and model aliases.
     Phase 3 supervised and contrastive protein trainer migrations are complete.
+*   **Directed ProteinEBM Corruption Track (2026-08-09):** Opened a separate
+    scientific track to replace uniform-only substitution with controlled uniform,
+    BLOSUM-conservative, Grantham-radical, and ProteinLM-contextual negative
+    families. The track requires strict amino-acid validation, per-decoy provenance,
+    shortcut baselines, matched validation-only selection, and external mutation-
+    effect validation before interpreting EBM energy as biological quality.
 
 ---
 *End of Log*
