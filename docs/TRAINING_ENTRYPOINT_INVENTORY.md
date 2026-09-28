@@ -13,7 +13,7 @@ Diagnostic harnesses may execute optimizer steps but are not production trainers
 | `src/protein_lm/train_ebm.py` | latent real-versus-corrupted ranking | shared engine: AdamW on EBM head; frozen critic | optimizer boundary | Phase 3 migrated |
 | `src/codonlm/train_noprop.py` | layer-local NoProp codon model | shared engine: embedding, per-block, and head optimizers committed by `NoPropUpdateStrategy` | optimizer boundary | Phase 5 migrated |
 | `src/protein_lm/train_mlp_heads.py` | Pfam/EC/stability classifiers over frozen feature arrays | shared engine: one AdamW optimizer with independent head parameters | optimizer boundary | ancillary migrated |
-| `scripts/train_biophysics_fusion.py` | nucleotide biophysics encoder pretraining/fusion assembly | AdamW encoder pretraining | none | ancillary; migrate or explicitly guard |
+| `scripts/train_biophysics_fusion.py` | synthetic DNA-shape encoder pretraining plus optional fusion smoke test | shared engine: AdamW encoder regression | optimizer boundary | ancillary migrated |
 
 ## Diagnostic And Library Code
 
@@ -55,6 +55,19 @@ stores versioned `last.pt`/`best.pt` checkpoints, the selected legacy-format
 `checkpoints/mlp_heads.pt`, per-head loss curves, and a run log. Use `--resume` with
 the newest `last.pt` and the allocated `--run_id`; periodic and wall-time controls
 are available through `--checkpoint_every_steps` and `--max_time_minutes`.
+
+The biophysics script trains only the nucleotide encoder; it does not fine-tune the
+CodonLM generator. It stores a validation-selected raw encoder artifact alongside
+versioned engine checkpoints. Pass `--generator-run` only to perform the optional
+post-training fusion smoke test. Shape-guided CodonLM training can select either the
+raw artifact or a versioned engine checkpoint through
+`biophysics_encoder_checkpoint`; the historical `runs/biophysics_encoder.pt` path
+remains a fallback for legacy configurations.
+
+The encoder protocol defaults live in `configs/biophysics_encoder.yaml`. The total
+synthetic corpus is generated once from its seed, then split by the configured
+train/validation/test fractions. The resolved counts and settings are copied into
+each run directory, and the held-out test split is reported only after training.
 
 ## Checkpoint Compatibility Rules
 

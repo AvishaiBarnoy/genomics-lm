@@ -1163,6 +1163,21 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     collision-safe, retain independently selected best states for every head, emit
     per-head curves and a legacy-format unified artifact, and reject missing or
     out-of-vocabulary labels instead of silently producing incomplete checkpoints.
+*   **Biophysics Encoder Migration (2026-09-28):** Migrated synthetic DNA-shape
+    encoder pretraining to the shared engine with seeded data generation,
+    deterministic shuffling, optimizer-boundary resume, collision-safe run
+    directories, validation-selected raw encoder export, curves, and logs. Corrected
+    the script's scope: it trains the encoder and can optionally smoke-test fusion,
+    but does not itself fine-tune CodonLM. Shape-guided training and query paths now
+    accept an explicit `biophysics_encoder_checkpoint`, load raw or versioned
+    checkpoint schemas, and use the canonical tokenizer vocabulary fallback.
+*   **Biophysics Encoder Protocol Configuration (2026-09-28):** Added
+    `configs/biophysics_encoder.yaml` as the source of truth for sequence length,
+    data-generation seed, total synthetic sample count, split fractions, and training
+    defaults. A single seeded corpus is partitioned into non-overlapping train,
+    validation, and held-out test examples; resolved settings and counts are saved
+    with each run, and test MSE is written after model selection. The fusion smoke
+    test now derives its nucleotide tensor dimensions from batch and context lengths.
 
 ---
 *End of Log*
