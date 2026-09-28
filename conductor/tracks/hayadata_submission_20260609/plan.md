@@ -1,5 +1,12 @@
 # hayaData 2026 Submission Implementation Plan
 
+**State:** Closed (submissions were not accepted)
+
+The proposal materials were submitted to multiple conferences and are retained in
+`conference/` as a record of the completed submission work. The presentation,
+demo-polish, and rehearsal phases below are no longer planned following the
+rejections.
+
 This plan details the steps required to finalize the hayaData 2026 submission and prepare the presentation materials.
 
 ---

@@ -1,5 +1,11 @@
 # hayaData 2026 Submission Track Specification
 
+**Status:** Closed after submission; proposals were not accepted.
+
+The submitted abstracts are retained under `conference/`. Presentation and
+rehearsal deliverables are historical plans and will not be pursued under this
+track.
+
 ## 1. Overview
 This track governs the preparation, drafting, review, and rehearsal of the `genomics-lm` talk proposals for the **hayaData 2026** conference. The primary objective is to select the best track/abstract, format it to Sessionize CFP standards, draft presentation slides, and prepare a local dry-run before the event.
 
