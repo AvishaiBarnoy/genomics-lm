@@ -519,16 +519,16 @@ def run_training(cfg: dict, args) -> None:
     encoder = None
     lookup_table = None
     if use_shape_guidance:
-        from src.codonlm.biophysics import NucleotideEncoder, generate_shape_training_data
+        from src.codonlm.biophysics import NucleotideEncoder, generate_shape_training_data, load_nucleotide_encoder_state
         from scripts.train_biophysics_fusion import build_one_hot_lookup
         
         encoder = NucleotideEncoder(d_shape=3).to(device)
-        enc_ckpt = Path("runs/biophysics_encoder.pt")
+        enc_ckpt = Path(cfg.get("biophysics_encoder_checkpoint", "runs/biophysics_encoder.pt"))
         if enc_ckpt.exists():
             print(f"[biophysics] Loading pre-trained encoder from {enc_ckpt}")
-            encoder.load_state_dict(torch.load(enc_ckpt, map_location=device))
+            encoder.load_state_dict(load_nucleotide_encoder_state(enc_ckpt))
         else:
-            print("[biophysics] runs/biophysics_encoder.pt not found. Pre-training on-the-fly...")
+            print(f"[biophysics] {enc_ckpt} not found. Pre-training on-the-fly...")
             train_x, train_y = generate_shape_training_data(num_samples=5000, seq_len_codons=60)
             optimizer_enc = torch.optim.AdamW(encoder.parameters(), lr=0.005)
             criterion_enc = nn.MSELoss()
@@ -552,7 +552,7 @@ def run_training(cfg: dict, args) -> None:
         if itos_file.exists():
             itos = [line.strip() for line in itos_file.read_text().splitlines() if line.strip()]
         else:
-            from src.codonlm.generate import CODON_ITOS
+            from src.codonlm.codon_tokenize import itos as CODON_ITOS
             itos = CODON_ITOS
         lookup_table = build_one_hot_lookup(itos, device)
 

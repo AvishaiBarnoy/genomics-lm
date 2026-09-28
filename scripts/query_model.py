@@ -120,7 +120,7 @@ def build_model_from_state(
     model.eval()
     
     if getattr(model, "use_shape_guidance", False) and setup_shape_runtime:
-        from src.codonlm.biophysics import NucleotideEncoder
+        from src.codonlm.biophysics import NucleotideEncoder, load_nucleotide_encoder_state
         from scripts.train_biophysics_fusion import build_one_hot_lookup
         
         encoder = NucleotideEncoder(d_shape=3)
@@ -130,13 +130,13 @@ def build_model_from_state(
             encoder.load_state_dict(checkpoint["encoder"])
             loaded = True
         else:
-            enc_ckpt = Path("runs/biophysics_encoder.pt")
+            enc_ckpt = Path(cfg.get("biophysics_encoder_checkpoint", "runs/biophysics_encoder.pt"))
             if enc_ckpt.exists():
-                encoder.load_state_dict(torch.load(enc_ckpt, map_location="cpu"))
+                encoder.load_state_dict(load_nucleotide_encoder_state(enc_ckpt))
                 loaded = True
                 
         if not loaded:
-            print("[warn] No biophysics encoder checkpoint or runs/biophysics_encoder.pt found.")
+            print(f"[warn] No embedded encoder or checkpoint at {enc_ckpt} found.")
             
         encoder.eval()
         
@@ -147,7 +147,7 @@ def build_model_from_state(
             itos = [line.strip() for line in itos_path.read_text().splitlines() if line.strip()]
         else:
             try:
-                from src.codonlm.generate import CODON_ITOS
+                from src.codonlm.codon_tokenize import itos as CODON_ITOS
                 itos = CODON_ITOS
             except ImportError:
                 from src.codonlm.codon_tokenize import VOCAB
