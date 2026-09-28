@@ -227,7 +227,7 @@ def train_ebm(args):
         requested_dir.parent,
         run_id,
         resume=args.resume,
-        fork_from=args.fork_from,
+        fork_from=getattr(args, "fork_from", None),
         last_checkpoint_name="last_ebm.pt",
         target_epochs=args.epochs,
         config_fingerprint=fingerprint,

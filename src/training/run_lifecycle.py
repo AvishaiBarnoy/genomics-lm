@@ -175,6 +175,18 @@ class TrainingRun:
                 )
             payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
             progress = checkpoint_progress(payload)
+            source_fingerprint = payload.get("run_fingerprint")
+            if not isinstance(source_fingerprint, str):
+                raise RunLifecycleError(
+                    "Fork checkpoint has no immutable configuration fingerprint. "
+                    "Use an explicit weights-only transfer for legacy checkpoints."
+                )
+            if config_fingerprint != source_fingerprint:
+                raise RunLifecycleError(
+                    "A full-state checkpoint fork requires the source configuration's "
+                    "immutable settings. Use a weights-only transfer for a changed "
+                    "model or optimization configuration."
+                )
             if target_epochs is not None and int(target_epochs) <= progress.completed_epochs:
                 raise RunLifecycleError(
                     f"Fork source has {progress.completed_epochs} completed epochs, but "
@@ -188,7 +200,7 @@ class TrainingRun:
                     checkpoint=checkpoint,
                     source_run_dir=source_run_dir,
                     progress=progress,
-                    source_fingerprint=payload.get("run_fingerprint"),
+                    source_fingerprint=source_fingerprint,
                     config_fingerprint=config_fingerprint,
                 )
             except BaseException:

@@ -101,7 +101,7 @@ def test_fork_accepts_best_checkpoint_and_records_lineage(tmp_path):
         "forked",
         fork_from=best,
         target_epochs=4,
-        config_fingerprint="fork-fingerprint",
+        config_fingerprint="source-fingerprint",
     )
 
     assert fork.run_dir == tmp_path / "forked"
@@ -113,7 +113,7 @@ def test_fork_accepts_best_checkpoint_and_records_lineage(tmp_path):
     assert lineage["source_checkpoint"] == str(best.resolve())
     assert lineage["source_run_id"] == "source"
     assert lineage["source_run_fingerprint"] == "source-fingerprint"
-    assert lineage["fork_run_fingerprint"] == "fork-fingerprint"
+    assert lineage["fork_run_fingerprint"] == "source-fingerprint"
     assert lineage["source_progress"]["completed_epochs"] == 2
     assert len(lineage["source_checkpoint_sha256"]) == 64
     fork.close()
@@ -122,7 +122,7 @@ def test_fork_accepts_best_checkpoint_and_records_lineage(tmp_path):
 def test_fork_requires_distinct_run_id(tmp_path):
     source = TrainingRun.open(tmp_path, "source")
     checkpoint = source.checkpoints / "best.pt"
-    _checkpoint(checkpoint, completed_epochs=1)
+    _checkpoint(checkpoint, completed_epochs=1, run_fingerprint="same")
     source.close()
 
     with pytest.raises(RunLifecycleError, match="requires a new run ID"):
@@ -150,7 +150,7 @@ def test_fork_and_resume_are_mutually_exclusive(tmp_path):
 def test_fork_rejects_non_increasing_epoch_target(tmp_path):
     source = TrainingRun.open(tmp_path, "source")
     checkpoint = source.checkpoints / "best.pt"
-    _checkpoint(checkpoint, completed_epochs=3)
+    _checkpoint(checkpoint, completed_epochs=3, run_fingerprint="same")
     source.close()
 
     with pytest.raises(RunLifecycleError, match="3 completed epochs"):
@@ -159,6 +159,39 @@ def test_fork_rejects_non_increasing_epoch_target(tmp_path):
             "forked",
             fork_from=checkpoint,
             target_epochs=3,
+            config_fingerprint="same",
+        )
+
+
+def test_fork_rejects_changed_immutable_configuration(tmp_path):
+    source = TrainingRun.open(tmp_path, "source")
+    checkpoint = source.checkpoints / "best.pt"
+    _checkpoint(checkpoint, completed_epochs=1, run_fingerprint="source")
+    source.close()
+
+    with pytest.raises(RunLifecycleError, match="weights-only transfer"):
+        TrainingRun.open(
+            tmp_path,
+            "forked",
+            fork_from=checkpoint,
+            target_epochs=2,
+            config_fingerprint="changed",
+        )
+
+
+def test_fork_rejects_checkpoint_without_configuration_fingerprint(tmp_path):
+    source = TrainingRun.open(tmp_path, "source")
+    checkpoint = source.checkpoints / "best.pt"
+    _checkpoint(checkpoint, completed_epochs=1)
+    source.close()
+
+    with pytest.raises(RunLifecycleError, match="no immutable configuration fingerprint"):
+        TrainingRun.open(
+            tmp_path,
+            "forked",
+            fork_from=checkpoint,
+            target_epochs=2,
+            config_fingerprint="configured",
         )
 
 

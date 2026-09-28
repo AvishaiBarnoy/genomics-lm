@@ -1,6 +1,6 @@
 # Shared Training Run Lifecycle Plan
 
-**State:** Closed (completed on 2026-09-28)
+**State:** Reopened after retrospective review on 2026-09-28
 
 ## Phase 1: Runtime Contract
 
@@ -13,10 +13,11 @@
 
 ## Phase 2: Primary Trainers
 
-- [x] Migrate CodonLM without changing its existing checkpoint fields or scientific logic.
+- [ ] Migrate CodonLM without changing its existing checkpoint fields or scientific logic.
 - [x] Migrate multitask ProteinCritic and preserve `last_critic.pt` compatibility.
 - [x] Verify fresh serial allocation, mid-epoch resume, completion, and logging on CPU.
-- [x] Verify the bounded train-save-resume lifecycle preflight on Apple MPS.
+- [x] Verify the legacy CodonLM train-save-resume preflight on Apple MPS.
+- [x] Verify shared-engine full-state fork behavior on Apple MPS.
 
 ## Phase 3: Remaining Model Trainers
 
