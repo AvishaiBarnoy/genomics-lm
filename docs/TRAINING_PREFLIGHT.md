@@ -37,3 +37,10 @@ tokens before restart, 4 steps and 80 tokens after resume, zero invalid groups,
 approximately 90 KB peak live MPS tensor allocation, approximately 20.9 MB peak MPS
 driver allocation, and 4.43 seconds total preflight wall time. These figures validate
 the lifecycle only; they are not training-throughput or model-quality measurements.
+
+The lifecycle gate was repeated after shared-engine enforcement on 2026-09-28. It
+passed on MPS with optimizer steps advancing from 2 to 4, committed tokens from 40
+to 80, and scheduler steps from 2 to 4. All non-finite and aborted-group counters
+remained zero. Peak live MPS tensor allocation was 96,768 bytes, peak MPS driver
+allocation was 21,266,432 bytes, and total preflight wall time was 8.73 seconds on
+PyTorch 2.12.0. This completed the shared training lifecycle acceptance gate.

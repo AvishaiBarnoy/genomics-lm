@@ -1,5 +1,7 @@
 # Shared Training Run Lifecycle Plan
 
+**State:** Closed (completed on 2026-09-28)
+
 ## Phase 1: Runtime Contract
 
 - [x] Add atomic serial-directory allocation and active-run locking.
@@ -14,7 +16,7 @@
 - [x] Migrate CodonLM without changing its existing checkpoint fields or scientific logic.
 - [x] Migrate multitask ProteinCritic and preserve `last_critic.pt` compatibility.
 - [x] Verify fresh serial allocation, mid-epoch resume, completion, and logging on CPU.
-  A bounded MPS lifecycle preflight remains required before global enforcement.
+- [x] Verify the bounded train-save-resume lifecycle preflight on Apple MPS.
 
 ## Phase 3: Remaining Model Trainers
 
