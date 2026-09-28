@@ -1171,6 +1171,13 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     but does not itself fine-tune CodonLM. Shape-guided training and query paths now
     accept an explicit `biophysics_encoder_checkpoint`, load raw or versioned
     checkpoint schemas, and use the canonical tokenizer vocabulary fallback.
+*   **Biophysics Encoder Protocol Configuration (2026-09-28):** Added
+    `configs/biophysics_encoder.yaml` as the source of truth for sequence length,
+    data-generation seed, total synthetic sample count, split fractions, and training
+    defaults. A single seeded corpus is partitioned into non-overlapping train,
+    validation, and held-out test examples; resolved settings and counts are saved
+    with each run, and test MSE is written after model selection. The fusion smoke
+    test now derives its nucleotide tensor dimensions from batch and context lengths.
 
 ---
 *End of Log*

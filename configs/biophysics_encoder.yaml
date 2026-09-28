@@ -1,0 +1,13 @@
+# Synthetic DNA-shape encoder pretraining protocol.
+run_id: shape-encoder
+seed: 1337
+sequence_codons: 60
+total_samples: 10000
+split_fractions:
+  train: 0.8
+  validation: 0.1
+  test: 0.1
+epochs: 5
+batch_size: 64
+learning_rate: 0.005
+d_shape: 3

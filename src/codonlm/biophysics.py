@@ -58,12 +58,18 @@ class NucleotideEncoder(nn.Module):
 
 
 def generate_shape_training_data(
-    num_samples: int = 5000, seq_len_codons: int = 50
+    num_samples: int = 5000,
+    seq_len_codons: int = 50,
+    *,
+    seed: int | None = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Generates synthetic DNA sequences and computes their theoretical shape targets
     (MGW, Roll, EP) averaged over each codon.
     """
+    if num_samples < 1 or seq_len_codons < 1:
+        raise ValueError("num_samples and seq_len_codons must be positive")
+    rng = random.Random(seed) if seed is not None else random
     bases = ["A", "C", "G", "T"]
     base_to_idx = {"A": 0, "C": 1, "G": 2, "T": 3}
 
@@ -73,7 +79,7 @@ def generate_shape_training_data(
 
     for _ in range(num_samples):
         # Generate random DNA sequence
-        seq = "".join(random.choice(bases) for _ in range(seq_len_nt))
+        seq = "".join(rng.choice(bases) for _ in range(seq_len_nt))
 
         # One-hot encoding
         oh = torch.zeros(seq_len_nt, 4)

@@ -4,11 +4,12 @@
 from __future__ import annotations
 
 import argparse
-import random
+import json
 import sys
 from pathlib import Path
 
 import torch
+import yaml
 from torch.utils.data import DataLoader, TensorDataset
 
 from src.codonlm.biophysics import NucleotideEncoder, generate_shape_training_data
@@ -108,53 +109,94 @@ def validate_fusion(encoder, generator_run, device):
     lookup = build_one_hot_lookup(itos, device)
     generator.eval()
     encoder.eval()
-    tokens = torch.randint(0, len(itos), (4, 32), device=device)
+    batch_size = min(4, len(itos))
+    context_length = min(32, generator.block_size)
+    tokens = torch.randint(0, len(itos), (batch_size, context_length), device=device)
     with torch.no_grad():
-        shapes = encoder(lookup[tokens].view(4, 96, 4))
+        one_hot = lookup[tokens].reshape(batch_size, context_length * 3, 4)
+        shapes = encoder(one_hot)
         logits, _ = generator(tokens, shape_embeddings=shapes)
-    if logits.shape != (4, 32, len(itos)):
+    if logits.shape != (batch_size, context_length, len(itos)):
         raise RuntimeError(f"unexpected fusion logits shape: {tuple(logits.shape)}")
     print(f"[success] Fusion smoke test passed: logits={tuple(logits.shape)}")
 
 
 def train_encoder(
     *,
+    config_path="configs/biophysics_encoder.yaml",
     out_dir="runs/biophysics_encoder",
-    run_id="shape-encoder",
+    run_id=None,
     resume=None,
-    epochs=5,
-    batch_size=64,
-    learning_rate=0.005,
-    train_samples=8000,
-    validation_samples=1000,
-    sequence_codons=60,
-    seed=1337,
+    epochs=None,
+    batch_size=None,
+    learning_rate=None,
+    total_samples=None,
+    sequence_codons=None,
+    seed=None,
     device_name=None,
     generator_run=None,
     max_time_minutes=None,
     checkpoint_every_steps=0,
 ):
+    with open(config_path) as handle:
+        source_config = yaml.safe_load(handle)
+    if not isinstance(source_config, dict):
+        raise TypeError("biophysics encoder config must be a mapping")
+    epochs = int(source_config["epochs"] if epochs is None else epochs)
+    batch_size = int(source_config["batch_size"] if batch_size is None else batch_size)
+    learning_rate = float(
+        source_config["learning_rate"] if learning_rate is None else learning_rate
+    )
+    total_samples = int(
+        source_config["total_samples"] if total_samples is None else total_samples
+    )
+    sequence_codons = int(
+        source_config["sequence_codons"] if sequence_codons is None else sequence_codons
+    )
+    seed = int(source_config["seed"] if seed is None else seed)
+    run_id = run_id or source_config.get("run_id", "shape-encoder")
+    model_config = {"d_shape": int(source_config.get("d_shape", 3))}
+    if model_config["d_shape"] != 3:
+        raise ValueError("d_shape must remain 3 for compatibility with CodonLM fusion")
+    split_fractions = source_config.get(
+        "split_fractions", {"train": 0.8, "validation": 0.1, "test": 0.1}
+    )
+    if set(split_fractions) != {"train", "validation", "test"}:
+        raise ValueError("split_fractions must define train, validation, and test")
+    fractions = [
+        float(split_fractions[name]) for name in ("train", "validation", "test")
+    ]
+    if any(fraction <= 0 for fraction in fractions) or abs(sum(fractions) - 1) > 1e-8:
+        raise ValueError("split fractions must be positive and sum to 1")
     for name, value in {
         "epochs": epochs,
         "batch_size": batch_size,
-        "train_samples": train_samples,
-        "validation_samples": validation_samples,
+        "total_samples": total_samples,
         "sequence_codons": sequence_codons,
     }.items():
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
             raise ValueError(f"{name} must be a positive integer")
     if learning_rate <= 0:
         raise ValueError("learning_rate must be positive")
-    config = {
+    n_train = int(total_samples * fractions[0])
+    n_validation = int(total_samples * fractions[1])
+    n_test = total_samples - n_train - n_validation
+    if min(n_train, n_validation, n_test) < 1:
+        raise ValueError(
+            "total_samples is too small for the configured split fractions"
+        )
+    resolved_config = {
         "epochs": epochs,
         "batch_size": batch_size,
         "learning_rate": learning_rate,
-        "train_samples": train_samples,
-        "validation_samples": validation_samples,
+        "total_samples": total_samples,
+        "split_fractions": dict(split_fractions),
+        "split_counts": {"train": n_train, "validation": n_validation, "test": n_test},
         "sequence_codons": sequence_codons,
         "seed": seed,
+        "model": model_config,
     }
-    fingerprint = configuration_fingerprint(config)
+    fingerprint = configuration_fingerprint(resolved_config)
     run = TrainingRun.open(
         out_dir,
         run_id,
@@ -166,10 +208,15 @@ def train_encoder(
     logger.__enter__()
     try:
         device = torch.device(device_name) if device_name else default_device()
-        random.seed(seed)
         torch.manual_seed(seed)
-        train_x, train_y = generate_shape_training_data(train_samples, sequence_codons)
-        val_x, val_y = generate_shape_training_data(validation_samples, sequence_codons)
+        all_x, all_y = generate_shape_training_data(
+            total_samples, sequence_codons, seed=seed
+        )
+        train_x, train_y = all_x[:n_train], all_y[:n_train]
+        val_x = all_x[n_train : n_train + n_validation]
+        val_y = all_y[n_train : n_train + n_validation]
+        test_x = all_x[n_train + n_validation :]
+        test_y = all_y[n_train + n_validation :]
         generator = torch.Generator().manual_seed(seed)
         train_loader = DataLoader(
             TensorDataset(train_x, train_y),
@@ -178,7 +225,8 @@ def train_encoder(
             generator=generator,
         )
         val_loader = DataLoader(TensorDataset(val_x, val_y), batch_size=batch_size)
-        encoder = NucleotideEncoder(d_shape=3).to(device)
+        test_loader = DataLoader(TensorDataset(test_x, test_y), batch_size=batch_size)
+        encoder = NucleotideEncoder(**model_config).to(device)
         optimizer = torch.optim.AdamW(encoder.parameters(), lr=learning_rate)
         task = BiophysicsEncoderTask(
             model=encoder,
@@ -187,6 +235,9 @@ def train_encoder(
             device=device,
             train_generator=generator,
             seed=seed,
+        )
+        (run.run_dir / "config.resolved.json").write_text(
+            json.dumps(resolved_config, indent=2, sort_keys=True) + "\n"
         )
         curves_path = run.scores / "curves.csv"
         if not curves_path.exists():
@@ -214,8 +265,27 @@ def train_encoder(
             run_fingerprint=fingerprint,
         )
         result = engine.fit()
-        if result.status == "complete" and generator_run:
-            validate_fusion(encoder, generator_run, device)
+        if result.status == "complete":
+            encoder.eval()
+            total_loss = 0.0
+            total_weight = 0
+            with torch.no_grad():
+                for one_hot, targets in test_loader:
+                    one_hot, targets = one_hot.to(device), targets.to(device)
+                    weight = one_hot.size(0)
+                    total_loss += (
+                        float(torch.nn.functional.mse_loss(encoder(one_hot), targets))
+                        * weight
+                    )
+                    total_weight += weight
+            test_loss = total_loss / total_weight
+            (run.scores / "test_metrics.json").write_text(
+                json.dumps({"test_mse": test_loss, "test_samples": n_test}, indent=2)
+                + "\n"
+            )
+            print(f"[test] held-out synthetic DNA-shape MSE: {test_loss:.6f}")
+            if generator_run:
+                validate_fusion(encoder, generator_run, device)
         return result
     finally:
         run.close()
@@ -226,30 +296,30 @@ def main():
     parser = argparse.ArgumentParser(
         description="Pretrain the DNA-shape encoder and optionally test CodonLM fusion."
     )
+    parser.add_argument("--config", default="configs/biophysics_encoder.yaml")
     parser.add_argument("--out-dir", default="runs/biophysics_encoder")
-    parser.add_argument("--run-id", default="shape-encoder")
+    parser.add_argument("--run-id")
     parser.add_argument("--resume")
-    parser.add_argument("--epochs", type=int, default=5)
-    parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--learning-rate", type=float, default=0.005)
-    parser.add_argument("--train-samples", type=int, default=8000)
-    parser.add_argument("--validation-samples", type=int, default=1000)
-    parser.add_argument("--sequence-codons", type=int, default=60)
-    parser.add_argument("--seed", type=int, default=1337)
+    parser.add_argument("--epochs", type=int)
+    parser.add_argument("--batch-size", type=int)
+    parser.add_argument("--learning-rate", type=float)
+    parser.add_argument("--total-samples", type=int)
+    parser.add_argument("--sequence-codons", type=int)
+    parser.add_argument("--seed", type=int)
     parser.add_argument("--device")
     parser.add_argument("--generator-run")
     parser.add_argument("--max-time-minutes", type=float)
     parser.add_argument("--checkpoint-every-steps", type=int, default=0)
     args = parser.parse_args()
     train_encoder(
+        config_path=args.config,
         out_dir=args.out_dir,
         run_id=args.run_id,
         resume=args.resume,
         epochs=args.epochs,
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
-        train_samples=args.train_samples,
-        validation_samples=args.validation_samples,
+        total_samples=args.total_samples,
         sequence_codons=args.sequence_codons,
         seed=args.seed,
         device_name=args.device,

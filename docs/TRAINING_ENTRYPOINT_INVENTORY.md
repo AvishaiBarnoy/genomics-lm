@@ -64,6 +64,11 @@ raw artifact or a versioned engine checkpoint through
 `biophysics_encoder_checkpoint`; the historical `runs/biophysics_encoder.pt` path
 remains a fallback for legacy configurations.
 
+The encoder protocol defaults live in `configs/biophysics_encoder.yaml`. The total
+synthetic corpus is generated once from its seed, then split by the configured
+train/validation/test fractions. The resolved counts and settings are copied into
+each run directory, and the held-out test split is reported only after training.
+
 ## Checkpoint Compatibility Rules
 
 New engine checkpoints use a versioned, namespaced envelope with `engine`, `task`,

@@ -1,6 +1,13 @@
-import torch
+import json
 
-from scripts.train_biophysics_fusion import build_one_hot_lookup, train_encoder
+import torch
+import yaml
+
+from scripts.train_biophysics_fusion import (
+    build_one_hot_lookup,
+    train_encoder,
+    validate_fusion,
+)
 from src.codonlm.biophysics import (
     NucleotideEncoder,
     generate_shape_training_data,
@@ -76,16 +83,61 @@ def test_encoder_checkpoint_loader_accepts_raw_and_engine_payloads(tmp_path):
             assert torch.equal(loaded[name], tensor)
 
 
+def test_fusion_smoke_uses_actual_vocabulary_and_context_dimensions(tmp_path):
+    itos = ["AAA", "CCC", "GGG", "TTT", "<PAD>"]
+    run_dir = tmp_path / "tiny-generator"
+    checkpoint_dir = run_dir / "checkpoints"
+    checkpoint_dir.mkdir(parents=True)
+    (run_dir / "itos.txt").write_text("\n".join(itos) + "\n")
+    model = TinyGPT(
+        vocab_size=len(itos),
+        block_size=8,
+        n_layer=1,
+        n_head=1,
+        n_embd=16,
+        use_shape_guidance=False,
+    )
+    torch.save(
+        {
+            "model": model.state_dict(),
+            "cfg": {
+                "block_size": 8,
+                "n_layer": 1,
+                "n_head": 1,
+                "n_embd": 16,
+                "dropout": 0.0,
+            },
+        },
+        checkpoint_dir / "best.pt",
+    )
+
+    validate_fusion(NucleotideEncoder(), run_dir, torch.device("cpu"))
+
+
 def test_encoder_training_is_collision_safe(tmp_path):
     root = tmp_path / "runs"
+    config_path = tmp_path / "biophysics.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "shape-encoder",
+                "seed": 9,
+                "sequence_codons": 3,
+                "total_samples": 6,
+                "split_fractions": {"train": 0.5, "validation": 0.25, "test": 0.25},
+                "epochs": 1,
+                "batch_size": 2,
+                "learning_rate": 0.001,
+                "d_shape": 3,
+            }
+        )
+    )
     for _ in range(2):
         result = train_encoder(
+            config_path=config_path,
             out_dir=root,
             epochs=1,
             batch_size=2,
-            train_samples=4,
-            validation_samples=2,
-            sequence_codons=3,
             device_name="cpu",
         )
         assert result.status == "complete"
@@ -94,22 +146,41 @@ def test_encoder_training_is_collision_safe(tmp_path):
     assert (
         root / "shape-encoder-r002" / "checkpoints" / "biophysics_encoder.pt"
     ).is_file()
+    metrics = json.loads(
+        (root / "shape-encoder" / "scores" / "test_metrics.json").read_text()
+    )
+    assert metrics["test_samples"] == 2
+    resolved = json.loads((root / "shape-encoder" / "config.resolved.json").read_text())
+    assert resolved["split_counts"] == {"train": 3, "validation": 1, "test": 2}
 
 
 def test_encoder_interrupted_resume_matches_uninterrupted(tmp_path):
     common = {
-        "epochs": 1,
-        "batch_size": 2,
-        "train_samples": 6,
-        "validation_samples": 2,
-        "sequence_codons": 3,
         "device_name": "cpu",
-        "seed": 23,
     }
+    config_path = tmp_path / "resume_biophysics.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "shape-encoder",
+                "seed": 23,
+                "sequence_codons": 3,
+                "total_samples": 8,
+                "split_fractions": {"train": 0.5, "validation": 0.25, "test": 0.25},
+                "epochs": 1,
+                "batch_size": 2,
+                "learning_rate": 0.001,
+                "d_shape": 3,
+            }
+        )
+    )
     reference_root = tmp_path / "reference"
     resumed_root = tmp_path / "resumed"
-    train_encoder(out_dir=reference_root, run_id="reference", **common)
+    train_encoder(
+        config_path=config_path, out_dir=reference_root, run_id="reference", **common
+    )
     interrupted = train_encoder(
+        config_path=config_path,
         out_dir=resumed_root,
         run_id="interrupted",
         max_time_minutes=0,
@@ -118,6 +189,7 @@ def test_encoder_interrupted_resume_matches_uninterrupted(tmp_path):
     assert interrupted.status == "interrupted"
     last = resumed_root / "interrupted" / "checkpoints" / "last.pt"
     resumed = train_encoder(
+        config_path=config_path,
         out_dir=resumed_root,
         run_id="interrupted",
         resume=last,

@@ -35,11 +35,11 @@ class BiophysicsEncoderTask:
         self.best_validation_loss = float("inf")
         self.best_model_state: Mapping[str, Any] | None = None
         self._phase_loss = 0.0
-        self._phase_batches = 0
+        self._phase_weight = 0
 
     def begin_phase(self, phase: TrainingPhase, epoch: int) -> None:
         self._phase_loss = 0.0
-        self._phase_batches = 0
+        self._phase_weight = 0
         if phase == TrainingPhase.TRAIN:
             self.train_generator.manual_seed(self.seed + epoch)
             self.model.train()
@@ -47,9 +47,9 @@ class BiophysicsEncoderTask:
             self.model.eval()
 
     def end_phase(self, phase: TrainingPhase, epoch: int):
-        if self._phase_batches == 0:
+        if self._phase_weight == 0:
             return {}
-        loss = self._phase_loss / self._phase_batches
+        loss = self._phase_loss / self._phase_weight
         if phase == TrainingPhase.VALIDATION and loss < self.best_validation_loss:
             self.best_validation_loss = loss
             self.best_model_state = copy.deepcopy(self.model.state_dict())
@@ -71,8 +71,9 @@ class BiophysicsEncoderTask:
         one_hot, targets = (tensor.to(self.device) for tensor in batch)
         loss = self.criterion(self.model(one_hot), targets)
         detached_loss = float(loss.detach())
-        self._phase_loss += detached_loss
-        self._phase_batches += 1
+        batch_weight = int(one_hot.size(0))
+        self._phase_loss += detached_loss * batch_weight
+        self._phase_weight += batch_weight
         return StepOutput(
             loss=loss,
             metrics={"loss": MetricValue(detached_loss)},
