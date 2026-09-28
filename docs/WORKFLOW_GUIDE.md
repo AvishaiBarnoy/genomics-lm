@@ -134,7 +134,9 @@ than its completed epoch count. Use a new run ID to fork from an older or best
 checkpoint; best checkpoints are evaluation artifacts, not in-place resume points.
 Forks are explicit: pass `--fork-from <checkpoint>` together with a new `--run-id`.
 The new run restores model, optimizer, scheduler, progress, and RNG state from the
-selected checkpoint, starts with empty run-local logs and curves, and writes
+selected checkpoint, so its immutable configuration fingerprint must match the
+source. Use the trainer's weights-only transfer option when changing model or
+optimization settings. A fork starts with empty run-local logs and curves and writes
 `run_lineage.json` containing the source run, checkpoint hash, fingerprints, and
 source progress. `--resume` and `--fork-from` are mutually exclusive.
 

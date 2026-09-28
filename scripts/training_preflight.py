@@ -25,6 +25,107 @@ from src.codonlm.dataset_manifest import (
     finalize_manifest,
     load_dataset_manifest,
 )
+from src.training.contracts import MetricValue, StepOutput, TrainingPhase
+from src.training.engine import EngineConfig, TrainingEngine
+from src.training.run_lifecycle import TrainingRun, configuration_fingerprint
+from src.training.strategies import AccumulatedBackpropStrategy
+
+
+class _SharedEnginePreflightTask:
+    def __init__(self, device: torch.device) -> None:
+        self.device = device
+        self.model = torch.nn.Linear(1, 1, bias=False).to(device)
+
+    def begin_phase(self, phase, epoch) -> None:
+        self.model.train(phase == TrainingPhase.TRAIN)
+
+    def end_phase(self, phase, epoch):
+        return {}
+
+    def train_batches(self, epoch):
+        return [torch.tensor([[value]]) for value in (1.0, 2.0, 3.0, 4.0)]
+
+    def validation_batches(self, epoch):
+        return [torch.tensor([[1.0]])]
+
+    def training_step(self, batch, context):
+        loss = self.model(batch.to(self.device)).square().mean()
+        return StepOutput(
+            loss,
+            {"loss": MetricValue(float(loss.detach().cpu()), 1.0)},
+        )
+
+    def validation_step(self, batch, context):
+        loss = self.model(batch.to(self.device)).square().mean()
+        return StepOutput(
+            loss,
+            {"loss": MetricValue(float(loss.detach().cpu()), 1.0)},
+        )
+
+    def state_dict(self):
+        return {"model": self.model.state_dict()}
+
+    def load_state_dict(self, state) -> None:
+        self.model.load_state_dict(state["model"])
+
+
+def _shared_engine(run: TrainingRun, device: torch.device, epochs: int):
+    task = _SharedEnginePreflightTask(device)
+    optimizer = torch.optim.SGD(task.model.parameters(), lr=0.05)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda _: 1.0)
+    fingerprint = configuration_fingerprint(
+        {"task": "shared-engine-preflight", "optimizer": "sgd", "lr": 0.05}
+    )
+    engine = TrainingEngine(
+        task=task,
+        strategy=AccumulatedBackpropStrategy(
+            optimizer,
+            scheduler=scheduler,
+            parameters=task.model.parameters(),
+        ),
+        run=run,
+        config=EngineConfig(epochs=epochs, grad_accum_steps=2),
+        device=device,
+        run_fingerprint=fingerprint,
+    )
+    return engine, fingerprint
+
+
+def _run_shared_engine_fork_preflight(root: Path, device_name: str) -> dict:
+    device = torch.device(device_name)
+    run_root = root / "shared-engine-runs"
+    torch.manual_seed(1337)
+    source = TrainingRun.open(run_root, "source")
+    source_engine, fingerprint = _shared_engine(source, device, epochs=1)
+    source_result = source_engine.fit()
+    source_checkpoint = source.checkpoints / "best.pt"
+    source.close()
+
+    fork = TrainingRun.open(
+        run_root,
+        "fork",
+        fork_from=source_checkpoint,
+        target_epochs=2,
+        config_fingerprint=fingerprint,
+    )
+    fork_engine, _ = _shared_engine(fork, device, epochs=2)
+    fork_result = fork_engine.fit()
+    lineage = json.loads((fork.run_dir / "run_lineage.json").read_text())
+    fork.close()
+
+    if source_result.state.optimizer_step != 2:
+        raise RuntimeError("shared-engine source did not complete two optimizer steps")
+    if fork_result.state.optimizer_step != 4:
+        raise RuntimeError("shared-engine fork did not advance to four optimizer steps")
+    if lineage["source_run_id"] != "source" or lineage["fork_run_id"] != "fork":
+        raise RuntimeError(f"unexpected shared-engine fork lineage: {lineage}")
+    return {
+        "status": "passed",
+        "device": device_name,
+        "source_optimizer_steps": source_result.state.optimizer_step,
+        "fork_optimizer_steps": fork_result.state.optimizer_step,
+        "lineage": lineage,
+    }
 
 
 def _write_fixture(root: Path) -> tuple[Path, dict]:
@@ -204,11 +305,15 @@ def main():
         raise RuntimeError(f"unexpected accumulation health: {resumed['accumulation_health']}")
     if args.device == "mps":
         torch.mps.synchronize()
+    shared_engine_fork = _run_shared_engine_fork_preflight(root, args.device)
+    if args.device == "mps":
+        torch.mps.synchronize()
     report = {
         "status": "passed", "requested_device": args.device,
         "actual_device": resumed["device"], "dataset_id": manifest["dataset"]["id"],
         "dataset_schema": manifest["schema"], "initial": initial, "resumed": resumed,
         "commands": {"initial": initial_command, "resume": resume_command},
+        "shared_engine_fork": shared_engine_fork,
         "wall_seconds": time.perf_counter() - started,
         "memory": {
             "mps_before": memory_before, "mps_after": _mps_memory(),

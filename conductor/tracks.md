@@ -11,7 +11,7 @@ mixture of uniform, BLOSUM-conservative, Grantham-radical, and ProteinLM-context
 decoys; select on validation and externally test what EBM energy represents before
 using it as a biological quality score.*
 
-- [x] **Track: Shared Training Run Lifecycle**
+- [ ] **Track: Shared Training Run Lifecycle**
 *Link: [./tracks/shared_training_run_lifecycle_20260805/](./tracks/shared_training_run_lifecycle_20260805/)*
 *Summary: Centralize collision-safe run allocation, locking, resume lineage and
 epoch validation, completion markers, and logging across all model trainers.*

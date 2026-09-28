@@ -28,10 +28,12 @@ Shared-engine trainers use `TrainingRun.start_logging()` and `close()` to ensure
 run log records an exception before the run lock is released.
 Every registered production trainer exposes `--fork-from` separately from
 `--resume`. A fork allocates a collision-safe new run directory, restores the
-selected checkpoint, and records immutable source lineage in `run_lineage.json`.
-CI also rejects direct `torch.save` and `save_checkpoint_atomic` calls in registered
-engine trainers. Canonical `last` and `best` checkpoints are owned by
-`TrainingEngine`; separately selected compatibility artifacts use
+selected checkpoint only when immutable configuration fingerprints match, and
+records source lineage in `run_lineage.json`. Changed configurations require the
+trainer's weights-only transfer path.
+CI rejects direct calls spelled as `torch.save` or `save_checkpoint_atomic` in
+registered engine entrypoints. This is a scoped static guard, not a general Python
+capability boundary. Separately selected compatibility artifacts use
 `save_artifact_atomic`, which rejects canonical checkpoint filenames at runtime.
 
 ## Diagnostic And Library Code

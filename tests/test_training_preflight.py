@@ -42,3 +42,9 @@ def test_cpu_train_checkpoint_resume_preflight(tmp_path):
     }
     assert report["initial"]["dataset_manifest"]["dataset_id"] == report["dataset_id"]
     assert report["resumed"]["runtime_memory"]["process_max_rss_raw"] > 0
+    assert report["shared_engine_fork"]["status"] == "passed"
+    assert report["shared_engine_fork"]["device"] == "cpu"
+    assert report["shared_engine_fork"]["source_optimizer_steps"] == 2
+    assert report["shared_engine_fork"]["fork_optimizer_steps"] == 4
+    assert report["shared_engine_fork"]["lineage"]["source_run_id"] == "source"
+    assert report["shared_engine_fork"]["lineage"]["fork_run_id"] == "fork"

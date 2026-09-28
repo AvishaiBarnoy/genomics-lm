@@ -43,4 +43,15 @@ passed on MPS with optimizer steps advancing from 2 to 4, committed tokens from 
 to 80, and scheduler steps from 2 to 4. All non-finite and aborted-group counters
 remained zero. Peak live MPS tensor allocation was 96,768 bytes, peak MPS driver
 allocation was 21,266,432 bytes, and total preflight wall time was 8.73 seconds on
-PyTorch 2.12.0. This completed the shared training lifecycle acceptance gate.
+PyTorch 2.12.0. This validates the legacy CodonLM lifecycle path. It does not by
+itself validate the shared `TrainingEngine` fork path or complete that track's
+acceptance gate.
+
+The 2026-09-28 corrective preflight extended the same command to exercise a
+shared-engine full-state fork on Apple MPS. The source run completed one epoch and
+two optimizer steps; the fork restored that state, completed a second epoch, and
+reached four optimizer steps. Its `run_lineage.json` identified distinct `source`
+and `fork` run IDs and matching immutable configuration fingerprints. The combined
+preflight passed in 4.89 seconds on PyTorch 2.12.0. The lifecycle track remains open
+because the primary CodonLM trainer is still listed as deferred rather than migrated
+to `TrainingEngine`.

@@ -19,10 +19,20 @@ This document captures the end-to-end journey of Genomics-LM. It details how we 
 * Enforced engine ownership of canonical `last` and `best` checkpoints. CI rejects
   direct checkpoint writes in every registered engine trainer, while a guarded
   artifact writer preserves descriptive compatibility artifacts.
-* Repeated the bounded train-save-resume preflight on Apple MPS after enforcement.
+* Repeated the bounded legacy CodonLM train-save-resume preflight on Apple MPS.
   The requested and actual devices were both MPS; optimizer steps advanced from 2
   to 4, committed tokens from 40 to 80, and all invalid accumulation counters stayed
-  at zero. This closed the shared training lifecycle track.
+  at zero.
+* Retrospective review reopened the lifecycle track: the primary CodonLM trainer
+  remains deferred in the machine-readable registry, and the MPS result above did
+  not exercise shared-engine checkpoint forks. Full-state forks now require matching
+  immutable fingerprints so restored optimizer state cannot silently override a
+  changed experiment configuration.
+* Added a shared-engine fork case to the bounded preflight and ran it on Apple MPS.
+  The source completed two optimizer steps and the fork restored and advanced to
+  four, with distinct source/fork run IDs and matching fingerprints recorded in
+  lineage. This closes the missing accelerator check, but not the still-deferred
+  CodonLM migration.
 
 ## 2026-07-21: Generation Protocol Separation
 
