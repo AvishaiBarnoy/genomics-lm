@@ -197,6 +197,9 @@ def run_training(cfg: dict, args) -> None:
     resume_path = args.resume or cfg.pop("resume", None)
     if resume_path is not None:
         resume_path = str(resume_path)
+    fork_from = getattr(args, "fork_from", None) or cfg.pop("fork_from", None)
+    if fork_from is not None:
+        fork_from = str(fork_from)
 
     default_train = f"data/processed/train_bs{cfg['block_size']}.npz"
     default_val = f"data/processed/val_bs{cfg['block_size']}.npz"
@@ -416,6 +419,7 @@ def run_training(cfg: dict, args) -> None:
         "runs",
         run_id,
         resume=resume_path,
+        fork_from=fork_from,
         last_checkpoint_name="last.pt",
         target_epochs=target_epochs,
         config_fingerprint=run_fingerprint,

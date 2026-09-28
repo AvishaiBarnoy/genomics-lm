@@ -14,7 +14,14 @@ from src.training.run_lifecycle import (
 )
 
 
-def _checkpoint(path, *, completed_epochs, current_epoch=0, microbatch=0):
+def _checkpoint(
+    path,
+    *,
+    completed_epochs,
+    current_epoch=0,
+    microbatch=0,
+    run_fingerprint=None,
+):
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
         {
@@ -23,7 +30,8 @@ def _checkpoint(path, *, completed_epochs, current_epoch=0, microbatch=0):
                 "current_epoch": current_epoch,
                 "microbatch": microbatch,
                 "optimizer_step": 17,
-            }
+            },
+            "run_fingerprint": run_fingerprint,
         },
         path,
     )
@@ -75,6 +83,83 @@ def test_resume_requires_newest_last_checkpoint(tmp_path):
     run.close()
     with pytest.raises(RunLifecycleError, match="newest last.pt"):
         TrainingRun.open(tmp_path, "experiment", resume=best, target_epochs=4)
+
+
+def test_fork_accepts_best_checkpoint_and_records_lineage(tmp_path):
+    source = TrainingRun.open(tmp_path, "source")
+    best = source.checkpoints / "best.pt"
+    _checkpoint(
+        best,
+        completed_epochs=2,
+        current_epoch=2,
+        run_fingerprint="source-fingerprint",
+    )
+    source.close()
+
+    fork = TrainingRun.open(
+        tmp_path,
+        "forked",
+        fork_from=best,
+        target_epochs=4,
+        config_fingerprint="fork-fingerprint",
+    )
+
+    assert fork.run_dir == tmp_path / "forked"
+    assert fork.resume_checkpoint == best.resolve()
+    assert fork.launch_mode == "fork"
+    lineage = json.loads((fork.run_dir / "run_lineage.json").read_text())
+    assert lineage["launch_mode"] == "fork"
+    assert lineage["fork_run_id"] == "forked"
+    assert lineage["source_checkpoint"] == str(best.resolve())
+    assert lineage["source_run_id"] == "source"
+    assert lineage["source_run_fingerprint"] == "source-fingerprint"
+    assert lineage["fork_run_fingerprint"] == "fork-fingerprint"
+    assert lineage["source_progress"]["completed_epochs"] == 2
+    assert len(lineage["source_checkpoint_sha256"]) == 64
+    fork.close()
+
+
+def test_fork_requires_distinct_run_id(tmp_path):
+    source = TrainingRun.open(tmp_path, "source")
+    checkpoint = source.checkpoints / "best.pt"
+    _checkpoint(checkpoint, completed_epochs=1)
+    source.close()
+
+    with pytest.raises(RunLifecycleError, match="requires a new run ID"):
+        TrainingRun.open(
+            tmp_path,
+            "source",
+            fork_from=checkpoint,
+            target_epochs=2,
+        )
+
+
+def test_fork_and_resume_are_mutually_exclusive(tmp_path):
+    checkpoint = tmp_path / "checkpoint.pt"
+    _checkpoint(checkpoint, completed_epochs=1)
+    with pytest.raises(RunLifecycleError, match="mutually exclusive"):
+        TrainingRun.open(
+            tmp_path,
+            "forked",
+            resume=checkpoint,
+            fork_from=checkpoint,
+            target_epochs=2,
+        )
+
+
+def test_fork_rejects_non_increasing_epoch_target(tmp_path):
+    source = TrainingRun.open(tmp_path, "source")
+    checkpoint = source.checkpoints / "best.pt"
+    _checkpoint(checkpoint, completed_epochs=3)
+    source.close()
+
+    with pytest.raises(RunLifecycleError, match="3 completed epochs"):
+        TrainingRun.open(
+            tmp_path,
+            "forked",
+            fork_from=checkpoint,
+            target_epochs=3,
+        )
 
 
 def test_resume_rejects_non_increasing_epoch_target(tmp_path):

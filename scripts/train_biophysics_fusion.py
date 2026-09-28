@@ -126,6 +126,7 @@ def train_encoder(
     out_dir="runs/biophysics_encoder",
     run_id=None,
     resume=None,
+    fork_from=None,
     epochs=None,
     batch_size=None,
     learning_rate=None,
@@ -200,6 +201,7 @@ def train_encoder(
         out_dir,
         run_id,
         resume=resume,
+        fork_from=fork_from,
         target_epochs=epochs,
         config_fingerprint=fingerprint,
     )
@@ -297,6 +299,7 @@ def main():
     parser.add_argument("--out-dir", default="runs/biophysics_encoder")
     parser.add_argument("--run-id")
     parser.add_argument("--resume")
+    parser.add_argument("--fork-from")
     parser.add_argument("--epochs", type=int)
     parser.add_argument("--batch-size", type=int)
     parser.add_argument("--learning-rate", type=float)
@@ -313,6 +316,7 @@ def main():
         out_dir=args.out_dir,
         run_id=args.run_id,
         resume=args.resume,
+        fork_from=args.fork_from,
         epochs=args.epochs,
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,

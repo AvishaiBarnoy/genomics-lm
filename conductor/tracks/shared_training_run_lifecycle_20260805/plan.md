@@ -5,8 +5,7 @@
 - [x] Add atomic serial-directory allocation and active-run locking.
 - [x] Add standard checkpoint, score, log, metadata, and completion paths.
 - [x] Add generic progress and newest-`last` resume validation.
-- [ ] Add immutable-setting fingerprints and explicit fork semantics. Immutable
-  fingerprints are implemented; explicit checkpoint forks remain open.
+- [x] Add immutable-setting fingerprints and explicit fork semantics.
 - [x] Test duplicate, concurrent, completed, stale-best, epoch-target, and valid
   resume cases.
 

@@ -234,6 +234,7 @@ def train_multi_task(
     run_id=None,
     transfer_from=None,
     max_time_minutes=None,
+    fork_from=None,
 ):
     with open(config_path, "r") as f:
         cfg = yaml.safe_load(f)
@@ -302,8 +303,10 @@ def train_multi_task(
 
     transfer_checkpoint = transfer_from or cfg.get("transfer_from")
     if transfer_checkpoint:
-        if resume_path:
-            raise ValueError("--transfer_from and --resume are mutually exclusive")
+        if resume_path or fork_from:
+            raise ValueError(
+                "--transfer_from cannot be combined with --resume or --fork-from"
+            )
         transfer_checkpoint = Path(transfer_checkpoint)
         if not transfer_checkpoint.exists():
             raise FileNotFoundError(
@@ -448,6 +451,7 @@ def train_multi_task(
         "runs",
         run_id,
         resume=resume_path,
+        fork_from=fork_from,
         last_checkpoint_name="last_critic.pt",
         target_epochs=epochs,
         config_fingerprint=run_fingerprint,
@@ -605,6 +609,11 @@ if __name__ == "__main__":
         "--resume", default=None, help="Path to checkpoint file to resume from"
     )
     parser.add_argument(
+        "--fork-from",
+        default=None,
+        help="Checkpoint to continue in a new run with recorded lineage",
+    )
+    parser.add_argument(
         "--transfer_from",
         default=None,
         help="Checkpoint to partially initialize compatible weights from",
@@ -618,4 +627,5 @@ if __name__ == "__main__":
         args.run_id,
         args.transfer_from,
         args.max_time_minutes,
+        args.fork_from,
     )

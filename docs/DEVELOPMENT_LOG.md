@@ -10,6 +10,13 @@ This document captures the end-to-end journey of Genomics-LM. It details how we 
 > evidence. Corrected revalidation is tracked in
 > [issue #92](https://github.com/AvishaiBarnoy/genomics-lm/issues/92).
 
+## 2026-09-28: Explicit Checkpoint Forks
+
+* Added explicit checkpoint forks to the shared training lifecycle. Registered
+  trainers now accept `--fork-from`, allocate a new collision-safe run, restore
+  checkpoint state without relaxing in-place resume rules, and write hashed source
+  lineage to `run_lineage.json`.
+
 ## 2026-07-21: Generation Protocol Separation
 
 * Began issue #85 by separating prefix evaluation into `raw_model`,

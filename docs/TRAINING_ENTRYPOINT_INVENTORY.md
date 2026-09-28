@@ -26,6 +26,9 @@ unclassified `train_*.py` files fail CI and preserves the shared fresh-run,
 collision, resume, interruption, and completion contract coverage.
 Shared-engine trainers use `TrainingRun.start_logging()` and `close()` to ensure the
 run log records an exception before the run lock is released.
+Every registered production trainer exposes `--fork-from` separately from
+`--resume`. A fork allocates a collision-safe new run directory, restores the
+selected checkpoint, and records immutable source lineage in `run_lineage.json`.
 
 ## Diagnostic And Library Code
 

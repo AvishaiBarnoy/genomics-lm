@@ -60,6 +60,11 @@ def parse_args():
     )
     parser.add_argument("--run_id", default=None, help="Run identifier")
     parser.add_argument("--resume", default=None, help="Checkpoint to resume")
+    parser.add_argument(
+        "--fork-from",
+        default=None,
+        help="Checkpoint to continue in a new run with recorded lineage",
+    )
     parser.add_argument("--seed", type=int, default=1337, help="RNG seed")
     return parser.parse_args()
 
@@ -222,6 +227,7 @@ def train_ebm(args):
         requested_dir.parent,
         run_id,
         resume=args.resume,
+        fork_from=args.fork_from,
         last_checkpoint_name="last_ebm.pt",
         target_epochs=args.epochs,
         config_fingerprint=fingerprint,
