@@ -1,8 +1,10 @@
 # Training Entrypoint Inventory
 
 This inventory defines the migration surface for the model-agnostic training
-engine. A registered trainer produces durable model parameters for scientific use.
-Diagnostic harnesses may execute optimizer steps but are not production trainers.
+engine. `docs/training_entrypoints.toml` is the machine-readable CI source of truth:
+every runnable `train_*.py` entrypoint must be registered. A production trainer
+produces durable model parameters for scientific use. Diagnostic harnesses may
+execute optimizer steps but do not own durable run semantics.
 
 | Entrypoint | Task | Update topology | Resume | Migration |
 | --- | --- | --- | --- | --- |
@@ -14,6 +16,14 @@ Diagnostic harnesses may execute optimizer steps but are not production trainers
 | `src/codonlm/train_noprop.py` | layer-local NoProp codon model | shared engine: embedding, per-block, and head optimizers committed by `NoPropUpdateStrategy` | optimizer boundary | Phase 5 migrated |
 | `src/protein_lm/train_mlp_heads.py` | Pfam/EC/stability classifiers over frozen feature arrays | shared engine: one AdamW optimizer with independent head parameters | optimizer boundary | ancillary migrated |
 | `scripts/train_biophysics_fusion.py` | synthetic DNA-shape encoder pretraining plus optional fusion smoke test | shared engine: AdamW encoder regression | optimizer boundary | ancillary migrated |
+
+`scripts/train_classifier.py` is a registered exemption: it evaluates downstream
+embedding and k-mer baselines. Its optional MLP probe uses a small fit helper and
+does not expose production run lifecycle or resume semantics. The CodonLM trainer
+is the only deferred production trainer; the registry requires an explicit reason
+for both statuses. `tests/test_training_entrypoint_registry.py` makes new or
+unclassified `train_*.py` files fail CI and preserves the shared fresh-run,
+collision, resume, interruption, and completion contract coverage.
 
 ## Diagnostic And Library Code
 
