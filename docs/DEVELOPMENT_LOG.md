@@ -19,6 +19,10 @@ This document captures the end-to-end journey of Genomics-LM. It details how we 
 * Enforced engine ownership of canonical `last` and `best` checkpoints. CI rejects
   direct checkpoint writes in every registered engine trainer, while a guarded
   artifact writer preserves descriptive compatibility artifacts.
+* Repeated the bounded train-save-resume preflight on Apple MPS after enforcement.
+  The requested and actual devices were both MPS; optimizer steps advanced from 2
+  to 4, committed tokens from 40 to 80, and all invalid accumulation counters stayed
+  at zero. This closed the shared training lifecycle track.
 
 ## 2026-07-21: Generation Protocol Separation
 
