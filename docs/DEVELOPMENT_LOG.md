@@ -1178,6 +1178,14 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     validation, and held-out test examples; resolved settings and counts are saved
     with each run, and test MSE is written after model selection. The fusion smoke
     test now derives its nucleotide tensor dimensions from batch and context lengths.
+*   **Training Engine Phase 6 Registry Guard (2026-09-28):** Added a machine-readable
+    trainer registry and CI tests that reject unregistered `train_*.py` entrypoints,
+    require engine-backed trainers to use `TrainingEngine` and `TrainingRun`, and
+    preserve lifecycle coverage for fresh runs, collisions, resume, interruption,
+    and completion. CodonLM remains an explicit Phase 4 deferral; the downstream
+    embedding/k-mer classifier is separately exempted because it is an evaluation
+    workflow without production run/resume semantics. Cleanup and overhead
+    benchmarking remain open.
 
 ---
 *End of Log*

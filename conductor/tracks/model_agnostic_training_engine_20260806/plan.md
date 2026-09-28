@@ -80,10 +80,10 @@ update algorithm without model-specific branches.
 
 ## Phase 6: Enforcement And Cleanup
 
-- [ ] Register every trainer and add CI contract coverage for fresh, collision,
+- [x] Register every trainer and add CI contract coverage for fresh, collision,
   resume, interruption, and completion behavior.
-- [ ] Reject new standalone training loops unless an explicit exemption documents
-  why the engine contract is insufficient.
+- [x] Require every runnable `train_*.py` entrypoint to be registered in CI;
+  non-engine entries must carry an explicit deferral or exemption rationale.
 - [ ] Remove duplicated orchestration helpers and obsolete checkpoint writers.
 - [ ] Update workflow, architecture, development-log, and extension documentation.
 - [ ] Benchmark engine overhead and confirm it is negligible relative to model work.
