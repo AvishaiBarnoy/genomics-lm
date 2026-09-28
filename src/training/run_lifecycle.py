@@ -7,6 +7,7 @@ import fcntl
 import json
 import os
 import random
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -136,6 +137,7 @@ class TrainingRun:
         self.completion_path = run_dir / "run_complete.json"
         self.lock_path = run_dir / ".run.lock"
         self._lock_fd: int | None = None
+        self._logger = None
         for path in (self.checkpoints, self.scores, self.logs):
             path.mkdir(parents=True, exist_ok=True)
         self._acquire_lock()
@@ -271,12 +273,27 @@ class TrainingRun:
 
         return RunLogger(self.logs / filename)
 
+    def start_logging(self, filename: str = "train.log") -> None:
+        """Start the run log; close() stops it before releasing the run lock."""
+        if self._logger is not None:
+            raise RunLifecycleError("Run logging is already active")
+        self._logger = self.logger(filename)
+        try:
+            self._logger.__enter__()
+        except BaseException:
+            self.close()
+            raise
+
     def close(self) -> None:
-        if self._lock_fd is None:
-            return
-        fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
-        os.close(self._lock_fd)
-        self._lock_fd = None
+        logger, self._logger = self._logger, None
+        try:
+            if logger is not None:
+                logger.__exit__(*sys.exc_info())
+        finally:
+            if self._lock_fd is not None:
+                fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
+                os.close(self._lock_fd)
+                self._lock_fd = None
 
     def __del__(self) -> None:
         self.close()

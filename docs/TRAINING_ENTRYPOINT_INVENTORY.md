@@ -24,6 +24,8 @@ is the only deferred production trainer; the registry requires an explicit reaso
 for both statuses. `tests/test_training_entrypoint_registry.py` makes new or
 unclassified `train_*.py` files fail CI and preserves the shared fresh-run,
 collision, resume, interruption, and completion contract coverage.
+Shared-engine trainers use `TrainingRun.start_logging()` and `close()` to ensure the
+run log records an exception before the run lock is released.
 
 ## Diagnostic And Library Code
 

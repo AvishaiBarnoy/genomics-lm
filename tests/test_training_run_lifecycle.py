@@ -49,6 +49,23 @@ def test_active_run_lock_rejects_second_writer(tmp_path):
     run.close()
 
 
+def test_run_close_records_exception_before_releasing_lock(tmp_path):
+    run = TrainingRun.open(tmp_path, "logged")
+
+    with pytest.raises(RuntimeError, match="expected failure"):
+        try:
+            run.start_logging()
+            raise RuntimeError("expected failure")
+        finally:
+            run.close()
+
+    log_text = (run.logs / "train.log").read_text()
+    assert "unhandled exception" in log_text
+    assert "expected failure" in log_text
+    reopened = TrainingRun(run.run_dir, None)
+    reopened.close()
+
+
 def test_resume_requires_newest_last_checkpoint(tmp_path):
     run = TrainingRun.open(tmp_path, "experiment")
     last = run.checkpoints / "last.pt"

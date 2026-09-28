@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import sys
 import torch
 import yaml
 from torch.utils.data import DataLoader
@@ -80,8 +79,7 @@ def train(config_path: str, *, run_id=None, device_name=None, noise_sigma=0.1, r
         target_epochs=epochs,
         config_fingerprint=fingerprint,
     )
-    logger = training_run.logger()
-    logger.__enter__()
+    training_run.start_logging()
     try:
         print(f"[noprop] using device: {device}")
         print(f"[noprop] run_id: {training_run.run_dir.name}")
@@ -169,7 +167,6 @@ def train(config_path: str, *, run_id=None, device_name=None, noise_sigma=0.1, r
         return engine.fit()
     finally:
         training_run.close()
-        logger.__exit__(*sys.exc_info())
 
 
 def main():

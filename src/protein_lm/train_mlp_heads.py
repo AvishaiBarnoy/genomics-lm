@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -203,8 +202,7 @@ def train_mlp_heads(
         target_epochs=epochs,
         config_fingerprint=fingerprint,
     )
-    logger = training_run.logger()
-    logger.__enter__()
+    training_run.start_logging()
     try:
         device = torch.device(device_name) if device_name else default_device()
         torch.manual_seed(seed)
@@ -258,7 +256,6 @@ def train_mlp_heads(
         return result
     finally:
         training_run.close()
-        logger.__exit__(*sys.exc_info())
 
 
 if __name__ == "__main__":

@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import random
 import shutil
-import sys
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -227,12 +226,11 @@ def train_ebm(args):
         target_epochs=args.epochs,
         config_fingerprint=fingerprint,
     )
-    logger = training_run.logger()
-    logger.__enter__()
-    curves_path = training_run.scores / "curves.csv"
-    if not curves_path.exists():
-        curves_path.write_text("epoch,train_loss,val_loss\n")
+    training_run.start_logging()
     try:
+        curves_path = training_run.scores / "curves.csv"
+        if not curves_path.exists():
+            curves_path.write_text("epoch,train_loss,val_loss\n")
         try:
             shutil.copy(args.config, training_run.checkpoints / "config.yaml")
         except OSError as exc:
@@ -287,7 +285,6 @@ def train_ebm(args):
         return result
     finally:
         training_run.close()
-        logger.__exit__(*sys.exc_info())
 
 
 def main():
