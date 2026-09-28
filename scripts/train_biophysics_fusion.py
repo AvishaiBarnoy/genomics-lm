@@ -21,7 +21,7 @@ from src.training.runtime import (
     PeriodicCheckpointPolicy,
     WallTimer,
     default_device,
-    save_checkpoint_atomic,
+    save_artifact_atomic,
 )
 from src.training.strategies import AccumulatedBackpropStrategy
 
@@ -61,7 +61,7 @@ class _BiophysicsArtifacts:
         )
         if epoch == self.epochs:
             self.task.restore_best_model()
-            save_checkpoint_atomic(
+            save_artifact_atomic(
                 dict(self.task.model.state_dict()), self.encoder_path
             )
             print(f"[success] Saved selected encoder to {self.encoder_path}")

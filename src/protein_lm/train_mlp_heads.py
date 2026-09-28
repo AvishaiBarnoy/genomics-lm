@@ -20,7 +20,7 @@ from src.training.runtime import (
     PeriodicCheckpointPolicy,
     WallTimer,
     default_device,
-    save_checkpoint_atomic,
+    save_artifact_atomic,
 )
 from src.training.strategies import AccumulatedBackpropStrategy
 
@@ -95,7 +95,7 @@ class _MLPHeadArtifacts:
         print(f"Epoch {epoch:03d}/{self.epochs:03d} | {summary}", flush=True)
         if epoch == self.epochs:
             self.task.restore_best_heads()
-            save_checkpoint_atomic(dict(self.task.model.state_dict()), self.path)
+            save_artifact_atomic(dict(self.task.model.state_dict()), self.path)
             print(f"[success] Saved selected MLP heads to {self.path}", flush=True)
 
 

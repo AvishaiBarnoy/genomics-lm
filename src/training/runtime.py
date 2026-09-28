@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import atexit
 import faulthandler
+import re
 import signal
 import sys
 import threading
@@ -81,13 +82,28 @@ class PeriodicCheckpointPolicy:
         self.last_saved_at = time.perf_counter()
 
 
-def save_checkpoint_atomic(payload: dict[str, Any], path: str | Path) -> None:
-    """Write a torch checkpoint through a temporary file, then atomically replace."""
+def _atomic_torch_save(payload: Any, path: str | Path) -> None:
     final_path = Path(path)
     final_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = final_path.with_name(f".{final_path.name}.tmp")
     torch.save(payload, tmp_path)
     os.replace(tmp_path, final_path)
+
+
+def save_checkpoint_atomic(payload: dict[str, Any], path: str | Path) -> None:
+    """Write an engine-owned checkpoint atomically."""
+    _atomic_torch_save(payload, path)
+
+
+def save_artifact_atomic(payload: Any, path: str | Path) -> None:
+    """Write a selected model artifact without impersonating an engine checkpoint."""
+    final_path = Path(path)
+    if re.fullmatch(r"(?:last|best)(?:[_.-].*)?\.pt", final_path.name.lower()):
+        raise ValueError(
+            f"Canonical checkpoint path {final_path.name!r} is owned by "
+            "TrainingEngine; choose a descriptive artifact filename"
+        )
+    _atomic_torch_save(payload, final_path)
 
 
 class _Tee:

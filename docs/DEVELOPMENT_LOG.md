@@ -16,6 +16,9 @@ This document captures the end-to-end journey of Genomics-LM. It details how we 
   trainers now accept `--fork-from`, allocate a new collision-safe run, restore
   checkpoint state without relaxing in-place resume rules, and write hashed source
   lineage to `run_lineage.json`.
+* Enforced engine ownership of canonical `last` and `best` checkpoints. CI rejects
+  direct checkpoint writes in every registered engine trainer, while a guarded
+  artifact writer preserves descriptive compatibility artifacts.
 
 ## 2026-07-21: Generation Protocol Separation
 

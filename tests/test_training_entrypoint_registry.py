@@ -146,3 +146,29 @@ def test_engine_trainers_expose_explicit_checkpoint_forks():
         ]
         assert "--fork-from" in string_literals, f"{path} has no --fork-from CLI"
         assert fork_keywords, f"{path} does not pass fork_from to TrainingRun.open"
+
+
+def test_engine_trainers_do_not_write_canonical_checkpoints_directly():
+    registry = _registry()
+    for path, entry in registry.items():
+        if entry["status"] != "engine":
+            continue
+        tree = ast.parse((ROOT / path).read_text(), filename=path)
+        forbidden_calls = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if isinstance(node.func, ast.Name) and node.func.id == "save_checkpoint_atomic":
+                forbidden_calls.append(node.lineno)
+            elif (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr == "save"
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "torch"
+            ):
+                forbidden_calls.append(node.lineno)
+        assert not forbidden_calls, (
+            f"{path} writes checkpoints directly at lines {forbidden_calls}; "
+            "canonical last/best files belong to TrainingEngine and selected "
+            "artifacts must use save_artifact_atomic"
+        )

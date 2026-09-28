@@ -29,6 +29,10 @@ run log records an exception before the run lock is released.
 Every registered production trainer exposes `--fork-from` separately from
 `--resume`. A fork allocates a collision-safe new run directory, restores the
 selected checkpoint, and records immutable source lineage in `run_lineage.json`.
+CI also rejects direct `torch.save` and `save_checkpoint_atomic` calls in registered
+engine trainers. Canonical `last` and `best` checkpoints are owned by
+`TrainingEngine`; separately selected compatibility artifacts use
+`save_artifact_atomic`, which rejects canonical checkpoint filenames at runtime.
 
 ## Diagnostic And Library Code
 
