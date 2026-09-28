@@ -12,7 +12,7 @@ Diagnostic harnesses may execute optimizer steps but are not production trainers
 | `src/protein_lm/train_multi_task.py` | bidirectional multitask ProteinCritic | AdamW, accumulated backprop, mixed classification/regression loss | optimizer boundary | Phase 3 |
 | `src/protein_lm/train_ebm.py` | latent real-versus-corrupted ranking | shared engine: AdamW on EBM head; frozen critic | optimizer boundary | Phase 3 migrated |
 | `src/codonlm/train_noprop.py` | layer-local NoProp codon model | shared engine: embedding, per-block, and head optimizers committed by `NoPropUpdateStrategy` | optimizer boundary | Phase 5 migrated |
-| `src/protein_lm/train_mlp_heads.py` | standalone heads over frozen features | one AdamW optimizer per head | none | ancillary; migrate or explicitly guard |
+| `src/protein_lm/train_mlp_heads.py` | Pfam/EC/stability classifiers over frozen feature arrays | shared engine: one AdamW optimizer with independent head parameters | optimizer boundary | ancillary migrated |
 | `scripts/train_biophysics_fusion.py` | nucleotide biophysics encoder pretraining/fusion assembly | AdamW encoder pretraining | none | ancillary; migrate or explicitly guard |
 
 ## Diagnostic And Library Code
@@ -49,6 +49,12 @@ for algorithms that change update timing or gradient flow. NoProp is the referen
 its strategy owns the embedding, per-block, and head optimizers, while its task owns
 the layer-local denoising objectives and explicit detach boundaries. The generic
 engine requires no model-name branch.
+
+The feature-head trainer treats `--out_dir` as a collision-safe run root. Each run
+stores versioned `last.pt`/`best.pt` checkpoints, the selected legacy-format
+`checkpoints/mlp_heads.pt`, per-head loss curves, and a run log. Use `--resume` with
+the newest `last.pt` and the allocated `--run_id`; periodic and wall-time controls
+are available through `--checkpoint_every_steps` and `--max_time_minutes`.
 
 ## Checkpoint Compatibility Rules
 
