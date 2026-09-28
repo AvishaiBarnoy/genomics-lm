@@ -128,9 +128,16 @@ def restore_rng_state(state: dict[str, Any] | None) -> None:
 class TrainingRun:
     """Own a collision-safe training directory for one process."""
 
-    def __init__(self, run_dir: Path, resume_checkpoint: Path | None) -> None:
+    def __init__(
+        self,
+        run_dir: Path,
+        resume_checkpoint: Path | None,
+        *,
+        launch_mode: str = "fresh",
+    ) -> None:
         self.run_dir = run_dir
         self.resume_checkpoint = resume_checkpoint
+        self.launch_mode = launch_mode
         self.checkpoints = run_dir / "checkpoints"
         self.scores = run_dir / "scores"
         self.logs = run_dir / "logs"
@@ -150,20 +157,50 @@ class TrainingRun:
         run_id: str,
         *,
         resume: str | Path | None = None,
+        fork_from: str | Path | None = None,
         last_checkpoint_name: str = "last.pt",
         target_epochs: int | None = None,
         curve_filename: str = "curves.csv",
         config_fingerprint: str | None = None,
     ) -> "TrainingRun":
         root = Path(root)
+        if resume is not None and fork_from is not None:
+            raise RunLifecycleError("--resume and --fork-from are mutually exclusive")
+        if fork_from is not None:
+            checkpoint = cls._resolve_checkpoint(fork_from, "Fork")
+            source_run_dir = cls._checkpoint_run_dir(checkpoint)
+            if source_run_dir.name == run_id:
+                raise RunLifecycleError(
+                    "A checkpoint fork requires a new run ID distinct from the source run"
+                )
+            payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+            progress = checkpoint_progress(payload)
+            if target_epochs is not None and int(target_epochs) <= progress.completed_epochs:
+                raise RunLifecycleError(
+                    f"Fork source has {progress.completed_epochs} completed epochs, but "
+                    f"target epochs is {target_epochs}. Set epochs greater than "
+                    f"{progress.completed_epochs}."
+                )
+            run_dir = cls._allocate_serial(root, run_id)
+            run = cls(run_dir, checkpoint, launch_mode="fork")
+            try:
+                run._write_lineage(
+                    checkpoint=checkpoint,
+                    source_run_dir=source_run_dir,
+                    progress=progress,
+                    source_fingerprint=payload.get("run_fingerprint"),
+                    config_fingerprint=config_fingerprint,
+                )
+            except BaseException:
+                run.close()
+                raise
+            return run
         if resume is None:
             run_dir = cls._allocate_serial(root, run_id)
             return cls(run_dir, None)
 
-        checkpoint = Path(resume).expanduser().resolve()
-        if not checkpoint.is_file():
-            raise FileNotFoundError(f"Resume checkpoint not found: {checkpoint}")
-        run_dir = checkpoint.parent.parent if checkpoint.parent.name == "checkpoints" else checkpoint.parent
+        checkpoint = cls._resolve_checkpoint(resume, "Resume")
+        run_dir = cls._checkpoint_run_dir(checkpoint)
         if run_dir.name != run_id:
             raise RunLifecycleError(
                 f"Resume checkpoint belongs to run '{run_dir.name}', but run ID "
@@ -203,11 +240,59 @@ class TrainingRun:
                 f"Run '{run_id}' is complete. Specify a greater total epoch target "
                 "or use a new run ID."
             )
-        run = cls(run_dir, checkpoint)
+        run = cls(run_dir, checkpoint, launch_mode="resume")
         if completion_path.exists():
             archived = run_dir / f"run_complete_epoch_{progress.completed_epochs:03d}.json"
             os.replace(completion_path, archived)
         return run
+
+    @staticmethod
+    def _resolve_checkpoint(path: str | Path, action: str) -> Path:
+        checkpoint = Path(path).expanduser().resolve()
+        if not checkpoint.is_file():
+            raise FileNotFoundError(f"{action} checkpoint not found: {checkpoint}")
+        return checkpoint
+
+    @staticmethod
+    def _checkpoint_run_dir(checkpoint: Path) -> Path:
+        return (
+            checkpoint.parent.parent
+            if checkpoint.parent.name == "checkpoints"
+            else checkpoint.parent
+        )
+
+    def _write_lineage(
+        self,
+        *,
+        checkpoint: Path,
+        source_run_dir: Path,
+        progress: RunProgress,
+        source_fingerprint: Any,
+        config_fingerprint: str | None,
+    ) -> None:
+        digest = hashlib.sha256()
+        with checkpoint.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        lineage = {
+            "launch_mode": "fork",
+            "fork_run_id": self.run_dir.name,
+            "source_checkpoint": str(checkpoint),
+            "source_checkpoint_sha256": digest.hexdigest(),
+            "source_run_dir": str(source_run_dir.resolve()),
+            "source_run_id": source_run_dir.name,
+            "source_run_fingerprint": source_fingerprint,
+            "fork_run_fingerprint": config_fingerprint,
+            "source_progress": {
+                "completed_epochs": progress.completed_epochs,
+                "current_epoch": progress.current_epoch,
+                "microbatch": progress.microbatch,
+                "optimizer_step": progress.optimizer_step,
+            },
+        }
+        temporary = self.run_dir / "run_lineage.json.tmp"
+        temporary.write_text(json.dumps(lineage, indent=2, sort_keys=True) + "\n")
+        os.replace(temporary, self.run_dir / "run_lineage.json")
 
     @staticmethod
     def _validate_curve_history(path: Path, completed_epochs: int) -> None:

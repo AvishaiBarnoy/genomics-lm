@@ -38,6 +38,11 @@ def main():
     ap.add_argument("--config", required=True)
     ap.add_argument("--run_id", default=None, help=f"Unique run id; falls back to $RUN_ID or config.run_id")
     ap.add_argument("--resume", default=None, help="Path to checkpoint to resume training from")
+    ap.add_argument(
+        "--fork-from",
+        default=None,
+        help="Checkpoint to continue in a new run with recorded lineage",
+    )
     ap.add_argument("--transfer_from", default=None, help="Path to pre-trained weights to initialize model from (ignores optimizer/step state)")
     ap.add_argument("--train_npz", action="append", default=None, help="Training NPZ file (repeatable)")
     ap.add_argument("--val_npz", action="append", default=None, help="Validation NPZ file (repeatable)")

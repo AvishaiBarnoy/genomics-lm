@@ -32,7 +32,12 @@ class _ProteinLMConsole:
             print(f"Validation Loss: {event.metrics['loss'].total:.4f}")
 
 
-def train(config_path: str, resume: str | None = None, run_id: str | None = None):
+def train(
+    config_path: str,
+    resume: str | None = None,
+    run_id: str | None = None,
+    fork_from: str | None = None,
+):
     with open(config_path) as handle:
         config_data = yaml.safe_load(handle)
     if not isinstance(config_data, Mapping):
@@ -112,6 +117,7 @@ def train(config_path: str, resume: str | None = None, run_id: str | None = None
         Path("runs") / "protein_lm",
         requested_run_id,
         resume=resume,
+        fork_from=fork_from,
         target_epochs=epochs,
         config_fingerprint=fingerprint,
     )
@@ -149,6 +155,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a protein language model.")
     parser.add_argument("--config", required=True)
     parser.add_argument("--resume")
+    parser.add_argument("--fork-from")
     parser.add_argument("--run-id")
     args = parser.parse_args()
-    train(args.config, resume=args.resume, run_id=args.run_id)
+    train(
+        args.config,
+        resume=args.resume,
+        run_id=args.run_id,
+        fork_from=args.fork_from,
+    )

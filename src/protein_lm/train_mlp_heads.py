@@ -166,6 +166,7 @@ def train_mlp_heads(
     *,
     run_id=None,
     resume=None,
+    fork_from=None,
     seed=1337,
     device_name=None,
     max_time_minutes=None,
@@ -199,6 +200,7 @@ def train_mlp_heads(
         out_dir,
         run_id or "mlp-heads",
         resume=resume,
+        fork_from=fork_from,
         target_epochs=epochs,
         config_fingerprint=fingerprint,
     )
@@ -273,6 +275,7 @@ if __name__ == "__main__":
     parser.add_argument("--out_dir", default="runs/protein_critic")
     parser.add_argument("--run_id")
     parser.add_argument("--resume")
+    parser.add_argument("--fork-from")
     parser.add_argument("--seed", type=int, default=1337)
     parser.add_argument("--device")
     parser.add_argument("--max_time_minutes", type=float)
@@ -288,6 +291,7 @@ if __name__ == "__main__":
         out_dir=args.out_dir,
         run_id=args.run_id,
         resume=args.resume,
+        fork_from=args.fork_from,
         seed=args.seed,
         device_name=args.device,
         max_time_minutes=args.max_time_minutes,

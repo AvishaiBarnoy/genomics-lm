@@ -61,7 +61,15 @@ def _format_blocks(metrics) -> str:
     )
 
 
-def train(config_path: str, *, run_id=None, device_name=None, noise_sigma=0.1, resume=None):
+def train(
+    config_path: str,
+    *,
+    run_id=None,
+    device_name=None,
+    noise_sigma=0.1,
+    resume=None,
+    fork_from=None,
+):
     with open(config_path) as handle:
         cfg = yaml.safe_load(handle)
     epochs = int(cfg.get("epochs", 5))
@@ -76,6 +84,7 @@ def train(config_path: str, *, run_id=None, device_name=None, noise_sigma=0.1, r
         "runs",
         requested_run_id,
         resume=resume,
+        fork_from=fork_from,
         target_epochs=epochs,
         config_fingerprint=fingerprint,
     )
@@ -176,6 +185,7 @@ def main():
     parser.add_argument("--device", default=None)
     parser.add_argument("--noise_sigma", type=float, default=0.1)
     parser.add_argument("--resume", default=None)
+    parser.add_argument("--fork-from", default=None)
     args = parser.parse_args()
     train(
         args.config,
@@ -183,6 +193,7 @@ def main():
         device_name=args.device,
         noise_sigma=args.noise_sigma,
         resume=args.resume,
+        fork_from=args.fork_from,
     )
 
 

@@ -44,7 +44,10 @@ class _ClassifierConsole:
 
 
 def train_classifier(
-    config_path: str, resume: str | None = None, run_id: str | None = None
+    config_path: str,
+    resume: str | None = None,
+    run_id: str | None = None,
+    fork_from: str | None = None,
 ):
     with open(config_path) as handle:
         config_data = yaml.safe_load(handle)
@@ -126,6 +129,7 @@ def train_classifier(
         Path("runs") / "protein_classifier",
         requested_run_id,
         resume=resume,
+        fork_from=fork_from,
         target_epochs=epochs,
         config_fingerprint=fingerprint,
     )
@@ -173,9 +177,19 @@ if __name__ == "__main__":
         help="Path to a classifier checkpoint to resume.",
     )
     parser.add_argument(
+        "--fork-from",
+        type=str,
+        help="Checkpoint to continue in a new run with recorded lineage.",
+    )
+    parser.add_argument(
         "--run-id",
         type=str,
         help="Run identifier; fresh collisions receive a serial suffix.",
     )
     args = parser.parse_args()
-    train_classifier(args.config, resume=args.resume, run_id=args.run_id)
+    train_classifier(
+        args.config,
+        resume=args.resume,
+        run_id=args.run_id,
+        fork_from=args.fork_from,
+    )

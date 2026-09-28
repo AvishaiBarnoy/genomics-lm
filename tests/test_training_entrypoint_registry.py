@@ -120,3 +120,29 @@ def test_shared_run_lifecycle_contract_tests_remain_registered():
             f"missing lifecycle coverage in {path}: "
             f"{sorted(required_names - found)}"
         )
+
+
+def test_engine_trainers_expose_explicit_checkpoint_forks():
+    registry = _registry()
+    for path, entry in registry.items():
+        if entry["status"] != "engine":
+            continue
+        tree = ast.parse((ROOT / path).read_text(), filename=path)
+        string_literals = {
+            node.value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        }
+        fork_keywords = [
+            keyword
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "open"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "TrainingRun"
+            for keyword in node.keywords
+            if keyword.arg == "fork_from"
+        ]
+        assert "--fork-from" in string_literals, f"{path} has no --fork-from CLI"
+        assert fork_keywords, f"{path} does not pass fork_from to TrainingRun.open"

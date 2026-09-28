@@ -132,6 +132,18 @@ written to the next `-rNNN` directory. In-place continuation requires `--resume`
 with that run's newest `last` checkpoint and a configured total epoch target greater
 than its completed epoch count. Use a new run ID to fork from an older or best
 checkpoint; best checkpoints are evaluation artifacts, not in-place resume points.
+Forks are explicit: pass `--fork-from <checkpoint>` together with a new `--run-id`.
+The new run restores model, optimizer, scheduler, progress, and RNG state from the
+selected checkpoint, starts with empty run-local logs and curves, and writes
+`run_lineage.json` containing the source run, checkpoint hash, fingerprints, and
+source progress. `--resume` and `--fork-from` are mutually exclusive.
+
+```bash
+python -m src.protein_lm.train_lm \
+  --config configs/protein_lm.yaml \
+  --run-id protein-lm-fork \
+  --fork-from runs/protein_lm/source/checkpoints/best.pt
+```
 
 This lifecycle also applies to ProteinLM, the single-task protein classifier,
 Protein EBM, and NoProp. ProteinLM/classifier checkpoints can resume at recorded
