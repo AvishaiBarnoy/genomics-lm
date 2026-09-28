@@ -84,7 +84,10 @@ update algorithm without model-specific branches.
   resume, interruption, and completion behavior.
 - [x] Require every runnable `train_*.py` entrypoint to be registered in CI;
   non-engine entries must carry an explicit deferral or exemption rationale.
-- [ ] Remove duplicated orchestration helpers and obsolete checkpoint writers.
+- [x] Centralize run logger shutdown and run-lock cleanup in `TrainingRun.close()`
+  for shared-engine trainers; keep the deferred CodonLM loop unchanged.
+- [ ] Remove obsolete checkpoint writers after verifying they have no compatibility
+  consumers.
 - [ ] Update workflow, architecture, development-log, and extension documentation.
 - [ ] Benchmark engine overhead and confirm it is negligible relative to model work.
 

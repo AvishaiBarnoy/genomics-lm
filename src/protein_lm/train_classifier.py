@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 from pathlib import Path
 from typing import Mapping
 
@@ -130,8 +129,7 @@ def train_classifier(
         target_epochs=epochs,
         config_fingerprint=fingerprint,
     )
-    logger = training_run.logger()
-    logger.__enter__()
+    training_run.start_logging()
     try:
         print(f"Using device: {device}")
         engine = TrainingEngine(
@@ -159,7 +157,6 @@ def train_classifier(
         return engine.fit()
     finally:
         training_run.close()
-        logger.__exit__(*sys.exc_info())
 
 
 if __name__ == "__main__":

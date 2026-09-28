@@ -1,6 +1,5 @@
 import argparse
 import os
-import sys
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -116,8 +115,7 @@ def train(config_path: str, resume: str | None = None, run_id: str | None = None
         target_epochs=epochs,
         config_fingerprint=fingerprint,
     )
-    logger = training_run.logger()
-    logger.__enter__()
+    training_run.start_logging()
     try:
         print(f"Using device: {device}")
         engine = TrainingEngine(
@@ -145,7 +143,6 @@ def train(config_path: str, resume: str | None = None, run_id: str | None = None
         return engine.fit()
     finally:
         training_run.close()
-        logger.__exit__(*sys.exc_info())
 
 
 if __name__ == "__main__":

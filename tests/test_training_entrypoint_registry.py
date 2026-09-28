@@ -61,9 +61,39 @@ def test_engine_trainers_use_shared_engine_and_run_lifecycle():
             and node.func.value.id == "TrainingRun"
             for node in ast.walk(tree)
         )
+        run_variables = {
+            target.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Attribute)
+            and node.value.func.attr == "open"
+            and isinstance(node.value.func.value, ast.Name)
+            and node.value.func.value.id == "TrainingRun"
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+        starts_run_logging = any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "start_logging"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id in run_variables
+            for node in ast.walk(tree)
+        )
+        closes_run = any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "close"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id in run_variables
+            for node in ast.walk(tree)
+        )
         assert "TrainingEngine" in names, f"{path} does not assemble TrainingEngine"
         assert "TrainingRun" in names, f"{path} does not use TrainingRun"
         assert opens_training_run, f"{path} does not open a managed run"
+        assert starts_run_logging, f"{path} does not start run logging"
+        assert closes_run, f"{path} does not close the managed run"
 
 
 def test_shared_run_lifecycle_contract_tests_remain_registered():

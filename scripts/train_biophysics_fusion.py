@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 import torch
@@ -204,8 +203,7 @@ def train_encoder(
         target_epochs=epochs,
         config_fingerprint=fingerprint,
     )
-    logger = run.logger()
-    logger.__enter__()
+    run.start_logging()
     try:
         device = torch.device(device_name) if device_name else default_device()
         torch.manual_seed(seed)
@@ -289,7 +287,6 @@ def train_encoder(
         return result
     finally:
         run.close()
-        logger.__exit__(*sys.exc_info())
 
 
 def main():

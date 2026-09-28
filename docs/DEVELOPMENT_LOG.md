@@ -1186,6 +1186,12 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     embedding/k-mer classifier is separately exempted because it is an evaluation
     workflow without production run/resume semantics. Cleanup and overhead
     benchmarking remain open.
+*   **Training Engine Run-Logger Lifecycle (2026-09-28):** Replaced repeated manual
+    logger entry/exit calls in shared-engine trainers with `TrainingRun.start_logging()`
+    and centralized logger shutdown before lock release in `TrainingRun.close()`. A
+    regression test verifies exception details are recorded and the lock is reusable.
+    The deferred CodonLM loop is unchanged; compatibility checkpoint exports remain
+    pending consumer audit.
 
 ---
 *End of Log*

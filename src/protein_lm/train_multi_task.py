@@ -8,7 +8,6 @@ import yaml
 import hashlib
 import random
 import csv
-import sys
 from pathlib import Path
 from src.protein_lm.tokenizer import ProteinTokenizer
 from src.protein_lm.models_multi import MultiTaskProteinClassifier
@@ -471,8 +470,7 @@ def train_multi_task(
     if max_time_minutes:
         print(f"[*] Wall-time limit configured: {max_time_minutes} minutes", flush=True)
 
-    run_logger = training_run.logger()
-    run_logger.__enter__()
+    training_run.start_logging()
     log_csv = training_run.scores / "curves.csv"
     if not log_csv.exists():
         with open(log_csv, "w", newline="") as f:
@@ -598,7 +596,6 @@ def train_multi_task(
         return engine.fit()
     finally:
         training_run.close()
-        run_logger.__exit__(*sys.exc_info())
 
 
 if __name__ == "__main__":
