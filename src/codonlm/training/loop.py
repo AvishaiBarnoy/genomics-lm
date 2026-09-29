@@ -32,6 +32,12 @@ from src.training.runtime import (
     save_checkpoint_atomic,
     default_device,
 )
+from src.training.engine import EngineConfig, TrainingEngine
+from src.training.strategies import (
+    AccumulatedBackpropStrategy,
+    NonFiniteGroupLimitError,
+    PrecisionPolicy,
+)
 from src.training.run_lifecycle import (
     TrainingRun,
     capture_rng_state,
@@ -58,13 +64,18 @@ from src.codonlm.training.vocabulary import (
     validate_resume_checkpoint,
     write_vocabulary_manifest,
 )
+from src.codonlm.training.task import (
+    CodonLMConsole,
+    CodonLMTask,
+    decode_codon_lm_checkpoint,
+    make_codon_lm_checkpoint_adapter,
+)
 
 RUN_ID_ENV = "RUN_ID"
 PAD_ID = 0
 
 
-class NonfiniteGroupLimitError(RuntimeError):
-    """Raised when aborted accumulation groups exceed the configured tolerance."""
+NonfiniteGroupLimitError = NonFiniteGroupLimitError
 
 
 def resolve_warmup_steps(cfg: dict, total_steps: int) -> int:
@@ -265,8 +276,16 @@ def run_training(cfg: dict, args) -> None:
         validate_resume_checkpoint(
             resume_path, vocabulary_contract, dataset_id=current_dataset_id
         )
+    if fork_from:
+        validate_resume_checkpoint(
+            fork_from, vocabulary_contract, dataset_id=current_dataset_id
+        )
 
-    transfer_path = None if resume_path else (args.transfer_from or cfg.pop("transfer_from", None))
+    transfer_path = (
+        None
+        if resume_path or fork_from
+        else (args.transfer_from or cfg.pop("transfer_from", None))
+    )
     if transfer_path and not os.path.isfile(transfer_path):
         raise FileNotFoundError(f"Transfer weights not found: {transfer_path}")
 
@@ -440,8 +459,7 @@ def run_training(cfg: dict, args) -> None:
     )
 
     shutil.copy2(args.config, ckpt_dir / "config.yaml")
-    run_logger = training_run.logger()
-    run_logger.__enter__()
+    training_run.start_logging()
 
     def write_failure_meta(exc: Exception) -> None:
         meta = {
@@ -794,6 +812,147 @@ def run_training(cfg: dict, args) -> None:
             patience=cfg.get("plateau_patience", 2),
             min_lr=min_lr,
         )
+
+    if transfer_path:
+        print(f"[transfer] initializing model from {transfer_path}")
+        ckpt_transfer = torch.load(transfer_path, map_location=device)
+        sd = (
+            ckpt_transfer["model"]
+            if isinstance(ckpt_transfer, dict) and "model" in ckpt_transfer
+            else ckpt_transfer
+        )
+        transfer_cfg = ckpt_transfer.get("cfg", {}) if isinstance(ckpt_transfer, dict) else {}
+        source_itos = _read_itos(transfer_cfg.get("itos_path"), Path.cwd())
+        if source_itos is None:
+            transfer_checkpoint_path = Path(transfer_path).resolve()
+            for candidate in (
+                transfer_checkpoint_path.parent / "itos.txt",
+                transfer_checkpoint_path.parent.parent / "itos.txt",
+            ):
+                source_itos = _read_itos(str(candidate))
+                if source_itos is not None:
+                    break
+        transfer_report = _load_transfer_state_dict(
+            model,
+            sd,
+            source_itos=source_itos,
+            target_itos=list(vocabulary_contract.tokens),
+        )
+        source_embedding_rows = (
+            int(sd["tok_emb.weight"].shape[0]) if "tok_emb.weight" in sd else None
+        )
+        vocabulary_provenance["legacy_adaptation"] = bool(
+            source_embedding_rows != vocabulary_contract.size
+            or transfer_report["loaded_rows"]
+        )
+        vocabulary_provenance["transfer"] = {
+            "checkpoint": str(transfer_path),
+            "source_embedding_rows": source_embedding_rows,
+            "source_tokenizer_entries": (
+                len(source_itos) if source_itos is not None else None
+            ),
+            "target_vocab_size": vocabulary_contract.size,
+            "loaded_rows": transfer_report["loaded_rows"],
+            "skipped": transfer_report["skipped"],
+        }
+        cfg["vocabulary"] = vocabulary_provenance
+        write_vocabulary_manifest(vocabulary_provenance, ckpt_dir.parent / "vocabulary.json")
+        print(
+            "[transfer] loaded_exact="
+            f"{len(transfer_report['loaded_exact'])} row_loaded="
+            f"{transfer_report['loaded_rows']}"
+        )
+
+    def train_loader_for_epoch(epoch: int):
+        loader, _, _, _ = build_codon_lm_dataloaders(
+            train_ds, val_ds, _loader_cfg_for_epoch(epoch + 1)
+        )
+        return loader
+
+    task = CodonLMTask(
+        model=model,
+        train_loader_factory=train_loader_for_epoch,
+        validation_loader=val_loader,
+        device=device,
+        config=cfg,
+        encoder=encoder,
+        lookup_table=lookup_table,
+        replay_loader=replay_loader,
+        termination_class_weights=termination_class_weights,
+        replay_class_weights=replay_class_weights,
+        multi_offset_weights=multi_offset_weights,
+    )
+    strategy = AccumulatedBackpropStrategy(
+        optim,
+        scheduler=scheduler,
+        parameters=trainable_params,
+        precision=PrecisionPolicy(
+            device_type=device.type,
+            dtype=torch.float16,
+            enabled=amp,
+            scale_gradients=False,
+        ),
+        scheduler_interval="update" if use_cosine else "epoch",
+        scheduler_metric="loss",
+        warmup_steps=(warmup_steps if not use_cosine else 0),
+        warmup_lrs=([base_lr] * len(optim.param_groups) if not use_cosine else None),
+    )
+    engine = TrainingEngine(
+        task=task,
+        strategy=strategy,
+        run=training_run,
+        config=EngineConfig(
+            epochs=max_epochs,
+            grad_accum_steps=int(gacc),
+            monitor="loss",
+            epoch_checkpoint_pattern=("epoch_{epoch}.pt" if cfg.get("save_epochs") else None),
+            best_checkpoint_pattern="best_epoch_{epoch:03d}.pt",
+            max_aborted_groups=max_nonfinite_groups,
+            early_stop_patience=int(cfg.get("early_stop_patience", 5)),
+        ),
+        device=device,
+        callbacks=[
+            CodonLMConsole(
+                log_csv,
+                multi_offset_weights=multi_offset_weights,
+                termination_enabled=termination_loss_enabled,
+                replay_enabled=replay_loss_enabled,
+                optimizer=optim,
+            )
+        ],
+        wall_timer=WallTimer(cfg.get("max_time_minutes")),
+        checkpoint_policy=PeriodicCheckpointPolicy(
+            every_steps=int(cfg.get("checkpoint_every_steps", 0) or 0),
+            every_minutes=float(cfg.get("checkpoint_every_minutes", 0.0) or 0.0),
+        ),
+        run_fingerprint=run_fingerprint,
+        checkpoint_decoder=decode_codon_lm_checkpoint,
+        checkpoint_payload_adapter=make_codon_lm_checkpoint_adapter(
+            cfg,
+            batch_size=int(cfg["batch_size"]),
+            grad_accum_steps=int(gacc),
+            train_examples=len(train_ds),
+            train_batches=len(train_loader),
+            max_nonfinite_groups=max_nonfinite_groups,
+        ),
+    )
+    try:
+        result = engine.fit()
+        meta = {
+            "run_id": run_id,
+            "status": "completed" if result.status == "complete" else "stopped",
+            "best_epoch": engine.best_epoch,
+            "best_val_loss": engine.best_metric,
+            "accumulation_health": strategy.state_dict()["accumulation_health"],
+            "model_spec": model.to_dict() if hasattr(model, "to_dict") else {},
+        }
+        write_meta(ckpt_dir, meta)
+        return result
+    except Exception as exc:
+        write_failure_meta(exc)
+        raise
+    finally:
+        training_run.close()
 
     start_epoch = 0
     best = float("inf")

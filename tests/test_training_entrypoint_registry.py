@@ -51,7 +51,8 @@ def test_engine_trainers_use_shared_engine_and_run_lifecycle():
     for path, entry in registry.items():
         if entry["status"] != "engine":
             continue
-        tree = ast.parse((ROOT / path).read_text(), filename=path)
+        implementation = entry.get("engine_module", path)
+        tree = ast.parse((ROOT / implementation).read_text(), filename=implementation)
         names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
         opens_training_run = any(
             isinstance(node, ast.Call)
@@ -89,11 +90,11 @@ def test_engine_trainers_use_shared_engine_and_run_lifecycle():
             and node.func.value.id in run_variables
             for node in ast.walk(tree)
         )
-        assert "TrainingEngine" in names, f"{path} does not assemble TrainingEngine"
-        assert "TrainingRun" in names, f"{path} does not use TrainingRun"
-        assert opens_training_run, f"{path} does not open a managed run"
-        assert starts_run_logging, f"{path} does not start run logging"
-        assert closes_run, f"{path} does not close the managed run"
+        assert "TrainingEngine" in names, f"{implementation} does not assemble TrainingEngine"
+        assert "TrainingRun" in names, f"{implementation} does not use TrainingRun"
+        assert opens_training_run, f"{implementation} does not open a managed run"
+        assert starts_run_logging, f"{implementation} does not start run logging"
+        assert closes_run, f"{implementation} does not close the managed run"
 
 
 def test_shared_run_lifecycle_contract_tests_remain_registered():
@@ -128,6 +129,10 @@ def test_engine_trainers_expose_explicit_checkpoint_forks():
         if entry["status"] != "engine":
             continue
         tree = ast.parse((ROOT / path).read_text(), filename=path)
+        implementation = entry.get("engine_module", path)
+        implementation_tree = ast.parse(
+            (ROOT / implementation).read_text(), filename=implementation
+        )
         string_literals = {
             node.value
             for node in ast.walk(tree)
@@ -135,7 +140,7 @@ def test_engine_trainers_expose_explicit_checkpoint_forks():
         }
         fork_keywords = [
             keyword
-            for node in ast.walk(tree)
+            for node in ast.walk(implementation_tree)
             if isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
             and node.func.attr == "open"

@@ -33,6 +33,13 @@ This document captures the end-to-end journey of Genomics-LM. It details how we 
   four, with distinct source/fork run IDs and matching fingerprints recorded in
   lineage. This closes the missing accelerator check, but not the still-deferred
   CodonLM migration.
+* Migrated the primary CodonLM execution path to `TrainingEngine` on 2026-09-29.
+  The adapter preserves packed and dynamic loaders, multi-offset, termination,
+  replay, and shape-guided objectives, MPS telemetry, non-finite-group accounting,
+  exact mid-epoch progress, and legacy checkpoint aliases. CPU parity tests passed,
+  and the MPS preflight verified both in-place resume and a CodonLM full-state fork
+  from optimizer step 2 to 4 using contract-version-1 checkpoints. The shared
+  lifecycle track is closed again on evidence rather than registry status alone.
 
 ## 2026-07-21: Generation Protocol Separation
 

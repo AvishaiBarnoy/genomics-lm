@@ -55,3 +55,11 @@ and `fork` run IDs and matching immutable configuration fingerprints. The combin
 preflight passed in 4.89 seconds on PyTorch 2.12.0. The lifecycle track remains open
 because the primary CodonLM trainer is still listed as deferred rather than migrated
 to `TrainingEngine`.
+
+On 2026-09-29, the CodonLM trainer itself was migrated to `TrainingEngine` while
+retaining its legacy checkpoint aliases. The bounded MPS preflight verified contract
+version 1 for the initial checkpoint, in-place resume from optimizer step 2 to 4 and
+40 to 80 committed tokens, and an explicit CodonLM full-state fork that independently
+advanced from step 2 to 4. Requested and actual devices were both MPS; the combined
+preflight completed in 6.36 seconds on PyTorch 2.12.0. This completed the shared
+training lifecycle acceptance gate.
