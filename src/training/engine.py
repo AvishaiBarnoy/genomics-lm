@@ -27,7 +27,7 @@ from src.training.runtime import (
     WallTimer,
     save_checkpoint_atomic,
 )
-from src.training.strategies import NonFiniteGroupLimitError, NonFiniteStepError
+from src.training.errors import NonFiniteGroupLimitError, NonFiniteStepError
 
 
 @dataclass(frozen=True)
@@ -122,6 +122,8 @@ class TrainingEngine(Generic[BatchT]):
         self.no_improve = 0
         self.active_training_metric_totals: dict[str, float] = {}
         self.active_training_metric_weights: dict[str, float] = {}
+        self.active_training_initial_metrics: dict[str, float] = {}
+        self.last_training_initial_metrics: dict[str, float] = {}
 
     def fit(self) -> EngineResult:
         if self.run.resume_checkpoint is not None:
@@ -155,6 +157,7 @@ class TrainingEngine(Generic[BatchT]):
                 )
                 self.strategy.begin_group(group_size)
                 group_metrics = _MetricAccumulator()
+                group_initial_metrics: dict[str, float] = {}
                 group_units: dict[str, int] = {}
                 group_failed = False
                 for offset in range(group_size):
@@ -195,6 +198,11 @@ class TrainingEngine(Generic[BatchT]):
                             )
                         break
                     group_metrics.add(output.metrics)
+                    if not group_initial_metrics:
+                        group_initial_metrics = {
+                            name: float(value.total) / max(float(value.weight), 1.0)
+                            for name, value in output.metrics.items()
+                        }
                     for name, count in output.committed_units.items():
                         group_units[name] = group_units.get(name, 0) + int(count)
 
@@ -224,6 +232,10 @@ class TrainingEngine(Generic[BatchT]):
                                 f"{self.config.max_aborted_groups}: {self.aborted_groups}"
                             )
                     else:
+                        if not self.active_training_initial_metrics:
+                            self.active_training_initial_metrics = dict(
+                                group_initial_metrics
+                            )
                         for name, value in group_metrics.averages().items():
                             epoch_metrics.add(
                                 {name: MetricValue(value.total * group_size, group_size)}
@@ -274,8 +286,12 @@ class TrainingEngine(Generic[BatchT]):
             }
             self.last_training_metrics = training_metrics
             self.last_training_metric_weights = dict(epoch_metrics.weights)
+            self.last_training_initial_metrics = dict(
+                self.active_training_initial_metrics
+            )
             self.active_training_metric_totals = {}
             self.active_training_metric_weights = {}
+            self.active_training_initial_metrics = {}
             self._emit("training_completed", None, training_metrics)
             validation_metrics = {}
             if (epoch + 1) % self.config.validate_every_epochs == 0:
@@ -395,6 +411,12 @@ class TrainingEngine(Generic[BatchT]):
                 "active_training_metric_weights": dict(
                     self.active_training_metric_weights
                 ),
+                "active_training_initial_metrics": dict(
+                    self.active_training_initial_metrics
+                ),
+                "training_initial_metrics": dict(
+                    self.last_training_initial_metrics
+                ),
             },
         )
         payload = checkpoint.to_payload()
@@ -439,6 +461,13 @@ class TrainingEngine(Generic[BatchT]):
             for name, value in checkpoint.metadata.get(
                 "active_training_metric_weights", {}
             ).items()
+        }
+        self.active_training_initial_metrics = {
+            str(name): float(value)
+            for name, value in checkpoint.metadata.get(
+                "active_training_initial_metrics", {}
+            ).items()
+            if value is not None
         }
 
     def _emit(self, name, context=None, metrics=None, metadata=None) -> None:

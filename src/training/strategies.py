@@ -16,14 +16,7 @@ from src.training.contracts import (
     TrainingTask,
     UpdateResult,
 )
-
-
-class NonFiniteStepError(RuntimeError):
-    """Raised when a loss or accumulated gradient is not finite."""
-
-
-class NonFiniteGroupLimitError(RuntimeError):
-    """Raised when aborted accumulation groups exceed a configured limit."""
+from src.training.errors import NonFiniteStepError
 
 
 class PrecisionPolicy:

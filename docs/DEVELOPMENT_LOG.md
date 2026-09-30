@@ -1223,6 +1223,16 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     regression test verifies exception details are recorded and the lock is reusable.
     The deferred CodonLM loop is unchanged; compatibility checkpoint exports remain
     pending consumer audit.
+*   **CodonLM Engine Production Hardening (2026-09-30):** Removed the unreachable
+    legacy training loop after CodonLM's shared-engine migration, separated console
+    and CSV callbacks from the task adapter, and centralized training-engine errors.
+    Replay checkpoints now preserve the generator state at the start of a sampling
+    cycle plus the exact consumed position; replay-enabled legacy checkpoints without
+    this state fail closed instead of claiming exact resume. First-microbatch legacy
+    loss aliases, optional replay metrics, non-finite accumulated gradients, AdamW
+    optimizer and scheduler resume parity, multi-offset and termination objectives,
+    shape-encoder phase modes, and warmup/plateau restoration have focused regression
+    coverage. The bounded Apple MPS lifecycle gate passed in 6.13 seconds.
 
 ---
 *End of Log*

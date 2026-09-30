@@ -158,7 +158,8 @@ def test_engine_trainers_do_not_write_canonical_checkpoints_directly():
     for path, entry in registry.items():
         if entry["status"] != "engine":
             continue
-        tree = ast.parse((ROOT / path).read_text(), filename=path)
+        implementation = entry.get("engine_module", path)
+        tree = ast.parse((ROOT / implementation).read_text(), filename=implementation)
         forbidden_calls = []
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
@@ -173,7 +174,7 @@ def test_engine_trainers_do_not_write_canonical_checkpoints_directly():
             ):
                 forbidden_calls.append(node.lineno)
         assert not forbidden_calls, (
-            f"{path} writes checkpoints directly at lines {forbidden_calls}; "
+            f"{implementation} writes checkpoints directly at lines {forbidden_calls}; "
             "canonical last/best files belong to TrainingEngine and selected "
             "artifacts must use save_artifact_atomic"
         )

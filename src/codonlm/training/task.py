@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 import resource
-import csv
 from collections.abc import Callable, Mapping
 from functools import partial
 from typing import Any
@@ -17,7 +16,6 @@ from src.codonlm.training.objectives import (
     termination_distance_bucket_labels,
 )
 from src.training.contracts import (
-    EngineEvent,
     EngineState,
     MetricValue,
     StepContext,
@@ -28,66 +26,6 @@ from src.training.contracts import (
 
 
 PAD_ID = 0
-
-
-class CodonLMConsole:
-    """Write the historical curves schema and concise epoch telemetry."""
-
-    def __init__(
-        self,
-        curves_path,
-        *,
-        multi_offset_weights,
-        termination_enabled: bool,
-        replay_enabled: bool,
-        optimizer,
-    ) -> None:
-        self.curves_path = curves_path
-        self.multi_offset_weights = dict(multi_offset_weights)
-        self.termination_enabled = termination_enabled
-        self.replay_enabled = replay_enabled
-        self.optimizer = optimizer
-
-    def on_event(self, event: EngineEvent) -> None:
-        if event.name != "epoch_completed":
-            return
-        epoch = int(event.metadata["epoch"])
-        train = event.metadata["training_metrics"]
-        validation = event.metrics
-        val_next = validation.get("next_loss", validation["loss"]).total
-        perplexity = math.exp(min(20.0, val_next))
-        row = [
-            epoch,
-            f"{train['loss'].total:.4f}",
-            f"{validation['loss'].total:.4f}",
-            f"{train.get('next_loss', train['loss']).total:.4f}",
-            f"{val_next:.4f}",
-            f"{perplexity:.3f}",
-            f"{self.optimizer.param_groups[0]['lr']:.3e}",
-        ]
-        for offset in sorted(self.multi_offset_weights):
-            row.extend(
-                [
-                    f"{train[f'offset_{offset}'].total:.4f}",
-                    f"{validation[f'offset_{offset}'].total:.4f}",
-                ]
-            )
-        if self.termination_enabled:
-            row.extend(
-                [
-                    f"{train['term_loss'].total:.4f}",
-                    f"{validation['term_loss'].total:.4f}",
-                ]
-            )
-        if self.replay_enabled:
-            row.append(f"{train['replay_term_loss'].total:.4f}")
-        with self.curves_path.open("a", newline="") as handle:
-            csv.writer(handle).writerow(row)
-        print(
-            f"[epoch {epoch}] train {train['loss'].total:.3f} | "
-            f"val {validation['loss'].total:.3f} | next_val {val_next:.3f} | "
-            f"ppl {perplexity:.2f}"
-        )
 
 
 class CodonLMTask:
@@ -104,6 +42,7 @@ class CodonLMTask:
         encoder=None,
         lookup_table=None,
         replay_loader=None,
+        replay_generator: torch.Generator | None = None,
         termination_class_weights=None,
         replay_class_weights=None,
         multi_offset_weights=None,
@@ -116,7 +55,10 @@ class CodonLMTask:
         self.encoder = encoder
         self.lookup_table = lookup_table
         self.replay_loader = replay_loader
+        self.replay_generator = replay_generator
         self.replay_iter = None
+        self.replay_cycle_generator_state = None
+        self.replay_cycle_position = 0
         self.termination_class_weights = termination_class_weights
         self.replay_class_weights = replay_class_weights
         self.multi_offset_weights = dict(multi_offset_weights or {})
@@ -216,13 +158,7 @@ class CodonLMTask:
             % int(self.config.get("replay_every_microbatches", 1))
             == 0
         ):
-            if self.replay_iter is None:
-                self.replay_iter = iter(self.replay_loader)
-            try:
-                replay_x, replay_labels = next(self.replay_iter)
-            except StopIteration:
-                self.replay_iter = iter(self.replay_loader)
-                replay_x, replay_labels = next(self.replay_iter)
+            replay_x, replay_labels = self._next_replay_batch()
             replay_x = replay_x.to(self.device)
             replay_labels = replay_labels.to(self.device)
             _, _, replay_aux = self.model(
@@ -253,6 +189,24 @@ class CodonLMTask:
             committed_units={"tokens": int(yb.ne(PAD_ID).sum().item())},
         )
 
+    def _start_replay_cycle(self) -> None:
+        if self.replay_generator is None:
+            raise RuntimeError("replay loader requires a checkpointable generator")
+        self.replay_cycle_generator_state = self.replay_generator.get_state().clone()
+        self.replay_cycle_position = 0
+        self.replay_iter = iter(self.replay_loader)
+
+    def _next_replay_batch(self):
+        if self.replay_iter is None:
+            self._start_replay_cycle()
+        try:
+            batch = next(self.replay_iter)
+        except StopIteration:
+            self._start_replay_cycle()
+            batch = next(self.replay_iter)
+        self.replay_cycle_position += 1
+        return batch
+
     def _sample_runtime_memory(self) -> None:
         self.runtime_memory["process_max_rss_raw"] = max(
             self.runtime_memory["process_max_rss_raw"],
@@ -276,12 +230,33 @@ class CodonLMTask:
         }
         if self.encoder is not None:
             state["encoder"] = self.encoder.state_dict()
+        if self.replay_loader is not None:
+            state["replay"] = {
+                "cycle_generator_state": (
+                    None
+                    if self.replay_cycle_generator_state is None
+                    else self.replay_cycle_generator_state.clone()
+                ),
+                "cycle_position": self.replay_cycle_position,
+            }
         return state
 
     def load_state_dict(self, state) -> None:
         self.model.load_state_dict(state["model"])
         if self.encoder is not None and "encoder" in state:
             self.encoder.load_state_dict(state["encoder"])
+        replay_state = state.get("replay")
+        if replay_state and replay_state.get("cycle_generator_state") is not None:
+            if self.replay_generator is None:
+                raise ValueError("checkpoint contains replay state but no replay generator")
+            cycle_state = replay_state["cycle_generator_state"].cpu()
+            cycle_position = int(replay_state.get("cycle_position", 0))
+            self.replay_generator.set_state(cycle_state)
+            self.replay_cycle_generator_state = cycle_state.clone()
+            self.replay_iter = iter(self.replay_loader)
+            for _ in range(cycle_position):
+                next(self.replay_iter)
+            self.replay_cycle_position = cycle_position
         previous = state.get("runtime_memory", {})
         for key in self.runtime_memory:
             self.runtime_memory[key] = max(
@@ -294,6 +269,8 @@ def decode_codon_lm_checkpoint(payload: Mapping[str, Any]) -> TrainingCheckpoint
     if "training_contract_version" in payload:
         return TrainingCheckpoint.from_payload(payload)
     progress = payload.get("run_progress", {})
+    epoch_metrics = payload.get("epoch_train_metrics", {})
+    metric_count = int(epoch_metrics.get("microbatches", 0) or 0)
     completed = int(progress.get("completed_epochs", payload.get("epoch", 0)))
     current = int(progress.get("current_epoch", completed))
     strategy = {
@@ -329,6 +306,17 @@ def decode_codon_lm_checkpoint(payload: Mapping[str, Any]) -> TrainingCheckpoint
                 payload.get("accumulation_health", {}).get("aborted_groups", 0)
             ),
             "no_improve": int(payload.get("no_improve", 0)),
+            "active_training_metric_totals": {
+                "loss": float(epoch_metrics.get("total_loss_sum", 0.0)),
+                "next_loss": float(epoch_metrics.get("next_loss_sum", 0.0)),
+            },
+            "active_training_metric_weights": {
+                "loss": metric_count,
+                "next_loss": metric_count,
+            },
+            "active_training_initial_metrics": {
+                "loss": epoch_metrics.get("initial_loss")
+            },
             "legacy": True,
         },
     )
@@ -354,12 +342,14 @@ def adapt_codon_lm_checkpoint(
     training_weights = metadata.get("training_metric_weights", {})
     active_totals = metadata.get("active_training_metric_totals", {})
     active_weights = metadata.get("active_training_metric_weights", {})
+    initial_metrics = metadata.get("training_initial_metrics", {})
     if not training and active_weights:
         training = {
             name: float(total) / max(float(active_weights.get(name, 0)), 1.0)
             for name, total in active_totals.items()
         }
         training_weights = active_weights
+        initial_metrics = metadata.get("active_training_initial_metrics", {})
     health = payload["strategy"].get("accumulation_health", {})
     val_loss = float(validation.get("loss", math.inf))
     payload.update(
@@ -403,7 +393,7 @@ def adapt_codon_lm_checkpoint(
                 "next_loss_sum": float(training.get("next_loss", 0.0))
                 * int(training_weights.get("next_loss", 0)),
                 "microbatches": int(training_weights.get("loss", 0)),
-                "initial_loss": training.get("loss"),
+                "initial_loss": initial_metrics.get("loss"),
             },
             "rng_state": payload["rng"],
             "checkpoint_reason": reason,

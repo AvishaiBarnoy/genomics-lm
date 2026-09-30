@@ -63,3 +63,14 @@ version 1 for the initial checkpoint, in-place resume from optimizer step 2 to 4
 advanced from step 2 to 4. Requested and actual devices were both MPS; the combined
 preflight completed in 6.36 seconds on PyTorch 2.12.0. This completed the shared
 training lifecycle acceptance gate.
+
+The production-hardening pass on 2026-09-30 repeated the bounded MPS lifecycle
+gate after removing the unreachable legacy loop and completed in 6.13 seconds.
+Focused CPU integration tests separately verify exact interrupted/resumed parity
+for model parameters, AdamW optimizer state, scheduler state, and replay sampler
+position. Additional adapter tests cover multi-offset and termination objectives,
+frozen and trainable shape-encoder phase behavior, optional replay metrics, legacy
+checkpoint translation, warmup/plateau scheduler restoration, and non-finite
+gradient limits. The preflight remains a lifecycle/device gate; these focused tests
+provide the optional-objective and exact-state evidence rather than overloading the
+small preflight dataset with every training mode.
