@@ -5,6 +5,7 @@ import torch
 
 from src.training.contracts import MetricValue, StepContext, StepOutput, TrainingPhase
 from src.training.engine import EngineConfig, TrainingEngine
+from src.training.errors import NonFiniteGroupLimitError
 from src.training.run_lifecycle import TrainingRun
 from src.training.strategies import AccumulatedBackpropStrategy, PrecisionPolicy
 
@@ -172,6 +173,39 @@ def test_nonfinite_microbatch_aborts_the_entire_group(tmp_path):
     run.close()
 
 
+def test_nonfinite_gradient_obeys_group_limit_and_checkpoints(tmp_path):
+    task = LinearTask([1.0])
+    task.model.weight.data.fill_(1.0)
+    task.model.weight.register_hook(
+        lambda gradient: torch.full_like(gradient, float("nan"))
+    )
+    run = TrainingRun.open(tmp_path, "nonfinite-gradient")
+    optimizer = torch.optim.SGD(task.model.parameters(), lr=0.1)
+    engine = TrainingEngine(
+        task=task,
+        strategy=AccumulatedBackpropStrategy(optimizer),
+        run=run,
+        config=EngineConfig(epochs=1, max_aborted_groups=0),
+        device=torch.device("cpu"),
+    )
+
+    with pytest.raises(NonFiniteGroupLimitError):
+        engine.fit()
+
+    checkpoint = torch.load(
+        run.checkpoints / "last.pt", map_location="cpu", weights_only=False
+    )
+    assert checkpoint["run_progress"]["microbatch"] == 1
+    assert checkpoint["metadata"]["aborted_groups"] == 1
+    assert checkpoint["strategy"]["accumulation_health"] == {
+        "active_microbatches": 0,
+        "nonfinite_microbatches": 1,
+        "aborted_groups": 1,
+        "discarded_finite_microbatches": 1,
+    }
+    run.close()
+
+
 def test_interrupted_resume_matches_uninterrupted_parameters(tmp_path):
     reference_task = LinearTask([1.0, 2.0, 3.0, 4.0])
     reference_task.model.weight.data.fill_(1.0)
@@ -295,3 +329,57 @@ def test_strategy_checkpoint_rejects_different_optimizer_class():
 
     with pytest.raises(ValueError, match="checkpoint optimizer"):
         sgd.load_state_dict(state)
+
+
+def test_strategy_restores_warmup_and_plateau_scheduler_state():
+    source_model = torch.nn.Linear(1, 1)
+    source_optimizer = torch.optim.SGD(source_model.parameters(), lr=0.2)
+    source_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        source_optimizer, factor=0.5, patience=0
+    )
+    source = AccumulatedBackpropStrategy(
+        source_optimizer,
+        scheduler=source_scheduler,
+        scheduler_interval="epoch",
+        scheduler_metric="validation_loss",
+        warmup_steps=2,
+        warmup_lrs=[0.2],
+    )
+
+    context = StepContext(TrainingPhase.TRAIN, 0, 0, 0, torch.device("cpu"))
+    task = LinearTask([1.0])
+    task.model = source_model
+    source.begin_group(1)
+    source.process_microbatch(task, torch.tensor([[1.0]]), context)
+    source.commit_group()
+    source.end_epoch({"validation_loss": MetricValue(1.0)})
+    source.end_epoch({"validation_loss": MetricValue(2.0)})
+    state = source.state_dict()
+
+    restored_model = torch.nn.Linear(1, 1)
+    restored_optimizer = torch.optim.SGD(restored_model.parameters(), lr=0.2)
+    restored_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        restored_optimizer, factor=0.5, patience=0
+    )
+    restored = AccumulatedBackpropStrategy(
+        restored_optimizer,
+        scheduler=restored_scheduler,
+        scheduler_interval="epoch",
+        scheduler_metric="validation_loss",
+        warmup_steps=2,
+        warmup_lrs=[0.2],
+    )
+    restored.load_state_dict(state)
+
+    assert restored._committed_steps == 1
+    assert restored_optimizer.state_dict() == source_optimizer.state_dict()
+    assert restored_scheduler.state_dict() == source_scheduler.state_dict()
+
+    restored_task = LinearTask([1.0])
+    restored_task.model = restored_model
+    restored.begin_group(1)
+    restored.process_microbatch(restored_task, torch.tensor([[1.0]]), context)
+    restored.commit_group()
+
+    assert restored._committed_steps == 2
+    assert restored_optimizer.param_groups[0]["lr"] == pytest.approx(0.2)

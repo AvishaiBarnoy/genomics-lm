@@ -33,6 +33,13 @@ This document captures the end-to-end journey of Genomics-LM. It details how we 
   four, with distinct source/fork run IDs and matching fingerprints recorded in
   lineage. This closes the missing accelerator check, but not the still-deferred
   CodonLM migration.
+* Migrated the primary CodonLM execution path to `TrainingEngine` on 2026-09-29.
+  The adapter preserves packed and dynamic loaders, multi-offset, termination,
+  replay, and shape-guided objectives, MPS telemetry, non-finite-group accounting,
+  exact mid-epoch progress, and legacy checkpoint aliases. CPU parity tests passed,
+  and the MPS preflight verified both in-place resume and a CodonLM full-state fork
+  from optimizer step 2 to 4 using contract-version-1 checkpoints. The shared
+  lifecycle track is closed again on evidence rather than registry status alone.
 
 ## 2026-07-21: Generation Protocol Separation
 
@@ -1216,6 +1223,16 @@ Stage 2.6 review before freezing new datasets or rerunning scientific benchmarks
     regression test verifies exception details are recorded and the lock is reusable.
     The deferred CodonLM loop is unchanged; compatibility checkpoint exports remain
     pending consumer audit.
+*   **CodonLM Engine Production Hardening (2026-09-30):** Removed the unreachable
+    legacy training loop after CodonLM's shared-engine migration, separated console
+    and CSV callbacks from the task adapter, and centralized training-engine errors.
+    Replay checkpoints now preserve the generator state at the start of a sampling
+    cycle plus the exact consumed position; replay-enabled legacy checkpoints without
+    this state fail closed instead of claiming exact resume. First-microbatch legacy
+    loss aliases, optional replay metrics, non-finite accumulated gradients, AdamW
+    optimizer and scheduler resume parity, multi-offset and termination objectives,
+    shape-encoder phase modes, and warmup/plateau restoration have focused regression
+    coverage. The bounded Apple MPS lifecycle gate passed in 6.13 seconds.
 
 ---
 *End of Log*

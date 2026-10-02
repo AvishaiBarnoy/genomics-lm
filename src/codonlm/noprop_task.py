@@ -17,7 +17,7 @@ from src.training.contracts import (
     TrainingPhase,
     UpdateResult,
 )
-from src.training.strategies import NonFiniteStepError
+from src.training.errors import NonFiniteStepError
 
 
 class NoPropTask:

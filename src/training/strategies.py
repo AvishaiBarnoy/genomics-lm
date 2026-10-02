@@ -16,10 +16,7 @@ from src.training.contracts import (
     TrainingTask,
     UpdateResult,
 )
-
-
-class NonFiniteStepError(RuntimeError):
-    """Raised when a loss or accumulated gradient is not finite."""
+from src.training.errors import NonFiniteStepError
 
 
 class PrecisionPolicy:
@@ -77,6 +74,8 @@ class AccumulatedBackpropStrategy(Generic[BatchT]):
         precision: PrecisionPolicy | None = None,
         scheduler_interval: str = "update",
         scheduler_metric: str = "loss",
+        warmup_steps: int = 0,
+        warmup_lrs: list[float] | None = None,
     ) -> None:
         self.optimizer = optimizer
         self.scheduler = scheduler
@@ -91,8 +90,18 @@ class AccumulatedBackpropStrategy(Generic[BatchT]):
             raise ValueError("scheduler_interval must be 'update' or 'epoch'")
         self.scheduler_interval = scheduler_interval
         self.scheduler_metric = scheduler_metric
+        self.warmup_steps = int(warmup_steps)
+        if self.warmup_steps < 0:
+            raise ValueError("warmup_steps must be non-negative")
+        self.warmup_lrs = list(warmup_lrs or [])
+        if self.warmup_lrs and len(self.warmup_lrs) != len(optimizer.param_groups):
+            raise ValueError("warmup_lrs must match optimizer parameter groups")
+        self._committed_steps = 0
         self._expected_group_size = 0
         self._processed = 0
+        self.nonfinite_microbatches = 0
+        self.aborted_groups = 0
+        self.discarded_finite_microbatches = 0
 
     def begin_group(self, group_size: int) -> None:
         if group_size < 1:
@@ -141,7 +150,13 @@ class AccumulatedBackpropStrategy(Generic[BatchT]):
             norm = torch.nn.utils.clip_grad_norm_(self.parameters, self.grad_clip_norm)
             if not math.isfinite(float(norm)):
                 return self.abort_group("nonfinite clipped gradient norm")
+        if self.warmup_steps and self._committed_steps < self.warmup_steps:
+            scale = float(self._committed_steps + 1) / self.warmup_steps
+            targets = self.warmup_lrs or [group["lr"] for group in self.optimizer.param_groups]
+            for group, target in zip(self.optimizer.param_groups, targets):
+                group["lr"] = float(target) * scale
         self.precision.step(self.optimizer)
+        self._committed_steps += 1
         if self.scheduler is not None and self.scheduler_interval == "update":
             self.scheduler.step()
         self.optimizer.zero_grad(set_to_none=True)
@@ -149,6 +164,9 @@ class AccumulatedBackpropStrategy(Generic[BatchT]):
         return UpdateResult(committed=True, optimizer_steps=1)
 
     def abort_group(self, reason: str) -> UpdateResult:
+        self.nonfinite_microbatches += 1
+        self.aborted_groups += 1
+        self.discarded_finite_microbatches += self._processed
         self.optimizer.zero_grad(set_to_none=True)
         self._reset_group()
         return UpdateResult(committed=False, optimizer_steps=0, reason=reason)
@@ -180,6 +198,13 @@ class AccumulatedBackpropStrategy(Generic[BatchT]):
         }
         state["precision"] = dict(self.precision.state_dict())
         state["scheduler_interval"] = self.scheduler_interval
+        state["committed_steps"] = self._committed_steps
+        state["accumulation_health"] = {
+            "active_microbatches": 0,
+            "nonfinite_microbatches": self.nonfinite_microbatches,
+            "aborted_groups": self.aborted_groups,
+            "discarded_finite_microbatches": self.discarded_finite_microbatches,
+        }
         if self.scheduler is not None:
             state["scheduler"] = self.scheduler.state_dict()
         return state
@@ -205,6 +230,13 @@ class AccumulatedBackpropStrategy(Generic[BatchT]):
                 f"configured interval {self.scheduler_interval!r}"
             )
         self.precision.load_state_dict(state.get("precision", {}))
+        self._committed_steps = int(state.get("committed_steps", 0))
+        health = state.get("accumulation_health", {})
+        self.nonfinite_microbatches = int(health.get("nonfinite_microbatches", 0))
+        self.aborted_groups = int(health.get("aborted_groups", 0))
+        self.discarded_finite_microbatches = int(
+            health.get("discarded_finite_microbatches", 0)
+        )
         if self.scheduler is not None:
             if "scheduler" not in state:
                 raise ValueError("checkpoint has no scheduler state")

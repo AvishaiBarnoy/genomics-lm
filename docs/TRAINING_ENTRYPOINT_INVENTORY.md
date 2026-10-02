@@ -8,7 +8,7 @@ execute optimizer steps but do not own durable run semantics.
 
 | Entrypoint | Task | Update topology | Resume | Migration |
 | --- | --- | --- | --- | --- |
-| `src/codonlm/train_codon_lm.py` / `src/codonlm/training/loop.py` | causal codon LM with optional auxiliary objectives | AdamW, accumulated backprop, scheduler per committed group | exact optimizer boundary | Phase 4 |
+| `src/codonlm/train_codon_lm.py` / `src/codonlm/training/loop.py` | causal codon LM with optional auxiliary objectives | shared engine: AdamW, accumulated backprop, update/epoch scheduler | exact optimizer boundary | Phase 4 migrated |
 | `src/protein_lm/train_lm.py` | causal amino-acid LM | AdamW, accumulated backprop, cosine scheduler | optimizer boundary | Phase 2 reference |
 | `src/protein_lm/train_classifier.py` | protein sequence classifier | shared engine: configurable optimizer, accumulated backprop, cosine scheduler | optimizer boundary | Phase 3 migrated |
 | `src/protein_lm/train_multi_task.py` | bidirectional multitask ProteinCritic | AdamW, accumulated backprop, mixed classification/regression loss | optimizer boundary | Phase 3 |
@@ -19,9 +19,10 @@ execute optimizer steps but do not own durable run semantics.
 
 `scripts/train_classifier.py` is a registered exemption: it evaluates downstream
 embedding and k-mer baselines. Its optional MLP probe uses a small fit helper and
-does not expose production run lifecycle or resume semantics. The CodonLM trainer
-is the only deferred production trainer; the registry requires an explicit reason
-for both statuses. `tests/test_training_entrypoint_registry.py` makes new or
+does not expose production run lifecycle or resume semantics. All production model
+trainers, including the delegated CodonLM implementation in
+`src/codonlm/training/loop.py`, now use the shared engine. The registry requires an
+explicit reason for every non-engine status. `tests/test_training_entrypoint_registry.py` makes new or
 unclassified `train_*.py` files fail CI and preserves the shared fresh-run,
 collision, resume, interruption, and completion contract coverage.
 Shared-engine trainers use `TrainingRun.start_logging()` and `close()` to ensure the

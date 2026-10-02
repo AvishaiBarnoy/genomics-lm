@@ -4,8 +4,8 @@ schema_version = 1
 # Non-engine statuses require a concrete reason for the exception.
 [[entrypoints]]
 path = "src/codonlm/train_codon_lm.py"
-status = "deferred"
-reason = "CodonLM migration is explicitly deferred to Phase 4 until its packed-data, auxiliary-objective, MPS-telemetry, and exact-resume parity gates are completed."
+status = "engine"
+engine_module = "src/codonlm/training/loop.py"
 
 [[entrypoints]]
 path = "src/codonlm/train_noprop.py"

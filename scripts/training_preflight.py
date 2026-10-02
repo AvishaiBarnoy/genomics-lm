@@ -226,17 +226,27 @@ def _config(root: Path, manifest_path: Path, device: str, epochs: int) -> Path:
     return config_path
 
 
-def _run_training(repo: Path, root: Path, config: Path, resume: Path | None = None):
+def _run_training(
+    repo: Path,
+    root: Path,
+    config: Path,
+    resume: Path | None = None,
+    *,
+    fork_from: Path | None = None,
+    run_id: str = "corrected-preflight",
+):
     command = [
         sys.executable, "-m", "src.codonlm.train_codon_lm", "--config", str(config),
-        "--run_id", "corrected-preflight",
+        "--run_id", run_id,
     ]
     if resume is not None:
         command.extend(["--resume", str(resume)])
+    if fork_from is not None:
+        command.extend(["--fork-from", str(fork_from)])
     env = dict(os.environ)
     env["PYTHONPATH"] = str(repo) + os.pathsep + env.get("PYTHONPATH", "")
     result = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True)
-    log_name = "resume.log" if resume else "initial.log"
+    log_name = "fork.log" if fork_from else ("resume.log" if resume else "initial.log")
     (root / log_name).write_text(result.stdout + result.stderr)
     if result.returncode:
         raise RuntimeError(f"training command failed; see {root / log_name}")
@@ -247,6 +257,7 @@ def _checkpoint_summary(path: Path):
     checkpoint = torch.load(path, map_location="cpu", weights_only=False)
     return {
         "path": str(path.resolve()),
+        "training_contract_version": checkpoint.get("training_contract_version"),
         "step": int(checkpoint["step"]),
         "epoch": int(checkpoint["epoch"]),
         "scheduler_last_epoch": int(checkpoint["scheduler"]["last_epoch"]),
@@ -256,6 +267,7 @@ def _checkpoint_summary(path: Path):
         "dataset_manifest": checkpoint["cfg"]["dataset_manifest"],
         "vocabulary_sha256": checkpoint["cfg"]["vocabulary"]["sha256"],
         "device": checkpoint["cfg"]["device"],
+        "engine": checkpoint.get("engine"),
     }
 
 
@@ -287,10 +299,26 @@ def main():
     checkpoint = root / "runs" / "corrected-preflight" / "checkpoints" / "last.pt"
     initial = _checkpoint_summary(checkpoint)
     config = _config(root, manifest_path, args.device, epochs=2)
+    source_best = root / "runs" / "corrected-preflight" / "checkpoints" / "best.pt"
+    _run_training(
+        repo,
+        root,
+        config,
+        fork_from=source_best,
+        run_id="corrected-preflight-fork",
+    )
+    codon_fork_checkpoint = (
+        root / "runs" / "corrected-preflight-fork" / "checkpoints" / "last.pt"
+    )
+    codon_fork = _checkpoint_summary(codon_fork_checkpoint)
     resume_command = _run_training(repo, root, config, checkpoint)
     resumed = _checkpoint_summary(checkpoint)
     if resumed["step"] <= initial["step"]:
         raise RuntimeError("optimizer step did not advance after resume")
+    if initial["training_contract_version"] != 1 or resumed["training_contract_version"] != 1:
+        raise RuntimeError("CodonLM did not write shared-engine checkpoint contracts")
+    if codon_fork["step"] != 4 or codon_fork["training_contract_version"] != 1:
+        raise RuntimeError("CodonLM shared-engine fork did not restore and advance state")
     if resumed["scheduler_last_epoch"] <= initial["scheduler_last_epoch"]:
         raise RuntimeError("scheduler did not advance after resume")
     if resumed["consumed_train_tokens"] <= initial["consumed_train_tokens"]:
@@ -313,6 +341,7 @@ def main():
         "actual_device": resumed["device"], "dataset_id": manifest["dataset"]["id"],
         "dataset_schema": manifest["schema"], "initial": initial, "resumed": resumed,
         "commands": {"initial": initial_command, "resume": resume_command},
+        "codon_engine_fork": codon_fork,
         "shared_engine_fork": shared_engine_fork,
         "wall_seconds": time.perf_counter() - started,
         "memory": {

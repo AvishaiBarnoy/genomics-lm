@@ -27,7 +27,7 @@ from src.training.runtime import (
     WallTimer,
     save_checkpoint_atomic,
 )
-from src.training.strategies import NonFiniteStepError
+from src.training.errors import NonFiniteGroupLimitError, NonFiniteStepError
 
 
 @dataclass(frozen=True)
@@ -41,6 +41,8 @@ class EngineConfig:
     best_checkpoint_name: str = "best.pt"
     best_checkpoint_pattern: str | None = None
     epoch_checkpoint_pattern: str | None = None
+    max_aborted_groups: int = -1
+    early_stop_patience: int = 0
 
     def __post_init__(self) -> None:
         for name in ("epochs", "grad_accum_steps", "validate_every_epochs"):
@@ -49,6 +51,10 @@ class EngineConfig:
                 raise TypeError(f"{name} must be an integer")
             if value < 1:
                 raise ValueError(f"{name} must be positive")
+        if self.max_aborted_groups < -1:
+            raise ValueError("max_aborted_groups must be -1 or greater")
+        if self.early_stop_patience < 0:
+            raise ValueError("early_stop_patience must be non-negative")
 
 
 @dataclass(frozen=True)
@@ -110,6 +116,14 @@ class TrainingEngine(Generic[BatchT]):
         self.best_metric: float | None = None
         self.best_epoch: int | None = None
         self.aborted_groups = 0
+        self.committed_units: dict[str, int] = {}
+        self.last_training_metrics: dict[str, MetricValue] = {}
+        self.last_training_metric_weights: dict[str, float] = {}
+        self.no_improve = 0
+        self.active_training_metric_totals: dict[str, float] = {}
+        self.active_training_metric_weights: dict[str, float] = {}
+        self.active_training_initial_metrics: dict[str, float] = {}
+        self.last_training_initial_metrics: dict[str, float] = {}
 
     def fit(self) -> EngineResult:
         if self.run.resume_checkpoint is not None:
@@ -125,12 +139,25 @@ class TrainingEngine(Generic[BatchT]):
                 next(batch_iterator)
 
             microbatch = resume_microbatch
+            epoch_metrics = _MetricAccumulator(
+                totals=(
+                    dict(self.active_training_metric_totals)
+                    if resume_microbatch
+                    else {}
+                ),
+                weights=(
+                    dict(self.active_training_metric_weights)
+                    if resume_microbatch
+                    else {}
+                ),
+            )
             while microbatch < total_batches:
                 group_size = min(
                     self.config.grad_accum_steps, total_batches - microbatch
                 )
                 self.strategy.begin_group(group_size)
                 group_metrics = _MetricAccumulator()
+                group_initial_metrics: dict[str, float] = {}
                 group_units: dict[str, int] = {}
                 group_failed = False
                 for offset in range(group_size):
@@ -153,17 +180,68 @@ class TrainingEngine(Generic[BatchT]):
                         group_failed = True
                         for _ in range(offset + 1, group_size):
                             next(batch_iterator)
+                        microbatch += group_size
+                        self.state = EngineState(
+                            completed_epochs=epoch,
+                            current_epoch=epoch,
+                            microbatch=microbatch,
+                            optimizer_step=self.state.optimizer_step,
+                        )
+                        if (
+                            self.config.max_aborted_groups >= 0
+                            and self.aborted_groups > self.config.max_aborted_groups
+                        ):
+                            self._save(self.config.last_checkpoint_name, "nonfinite_group_limit")
+                            raise NonFiniteGroupLimitError(
+                                "nonfinite accumulation groups exceeded configured maximum "
+                                f"{self.config.max_aborted_groups}: {self.aborted_groups}"
+                            )
                         break
                     group_metrics.add(output.metrics)
+                    if not group_initial_metrics:
+                        group_initial_metrics = {
+                            name: float(value.total) / max(float(value.weight), 1.0)
+                            for name, value in output.metrics.items()
+                        }
                     for name, count in output.committed_units.items():
                         group_units[name] = group_units.get(name, 0) + int(count)
 
+                if group_failed:
+                    continue
                 microbatch += group_size
                 if not group_failed:
                     update = self.strategy.commit_group()
                     if not update.committed:
                         self.aborted_groups += 1
+                        self.state = EngineState(
+                            completed_epochs=epoch,
+                            current_epoch=epoch,
+                            microbatch=microbatch,
+                            optimizer_step=self.state.optimizer_step,
+                        )
+                        if (
+                            self.config.max_aborted_groups >= 0
+                            and self.aborted_groups > self.config.max_aborted_groups
+                        ):
+                            self._save(
+                                self.config.last_checkpoint_name,
+                                "nonfinite_group_limit",
+                            )
+                            raise NonFiniteGroupLimitError(
+                                "nonfinite accumulation groups exceeded configured maximum "
+                                f"{self.config.max_aborted_groups}: {self.aborted_groups}"
+                            )
                     else:
+                        if not self.active_training_initial_metrics:
+                            self.active_training_initial_metrics = dict(
+                                group_initial_metrics
+                            )
+                        for name, value in group_metrics.averages().items():
+                            epoch_metrics.add(
+                                {name: MetricValue(value.total * group_size, group_size)}
+                            )
+                        self.active_training_metric_totals = dict(epoch_metrics.totals)
+                        self.active_training_metric_weights = dict(epoch_metrics.weights)
                         self.state = EngineState(
                             completed_epochs=epoch,
                             current_epoch=epoch,
@@ -178,6 +256,10 @@ class TrainingEngine(Generic[BatchT]):
                             group_metrics.averages(),
                             {"committed_units": group_units},
                         )
+                        for name, count in group_units.items():
+                            self.committed_units[name] = (
+                                self.committed_units.get(name, 0) + int(count)
+                            )
                         if self.checkpoint_policy.should_save(
                             self.state.optimizer_step
                         ):
@@ -198,6 +280,18 @@ class TrainingEngine(Generic[BatchT]):
                     )
 
             training_metrics = dict(self.task.end_phase(TrainingPhase.TRAIN, epoch))
+            training_metrics = {
+                **epoch_metrics.averages(),
+                **training_metrics,
+            }
+            self.last_training_metrics = training_metrics
+            self.last_training_metric_weights = dict(epoch_metrics.weights)
+            self.last_training_initial_metrics = dict(
+                self.active_training_initial_metrics
+            )
+            self.active_training_metric_totals = {}
+            self.active_training_metric_weights = {}
+            self.active_training_initial_metrics = {}
             self._emit("training_completed", None, training_metrics)
             validation_metrics = {}
             if (epoch + 1) % self.config.validate_every_epochs == 0:
@@ -214,6 +308,9 @@ class TrainingEngine(Generic[BatchT]):
             if improved:
                 self.best_metric = monitored.total
                 self.best_epoch = epoch + 1
+                self.no_improve = 0
+            elif monitored is not None:
+                self.no_improve += 1
             self._save(self.config.last_checkpoint_name, "epoch", validation_metrics)
             if self.config.epoch_checkpoint_pattern is not None:
                 self._save(
@@ -239,6 +336,11 @@ class TrainingEngine(Generic[BatchT]):
                     "improved": improved,
                 },
             )
+            if (
+                self.config.early_stop_patience > 0
+                and self.no_improve >= self.config.early_stop_patience
+            ):
+                break
 
         self.run.mark_complete(
             {
@@ -293,6 +395,28 @@ class TrainingEngine(Generic[BatchT]):
                 "metrics": {
                     name: value.total for name, value in (metrics or {}).items()
                 },
+                "training_metrics": {
+                    name: value.total for name, value in self.last_training_metrics.items()
+                },
+                "training_metric_weights": {
+                    name: self.last_training_metric_weights.get(name, value.weight)
+                    for name, value in self.last_training_metrics.items()
+                },
+                "committed_units": dict(self.committed_units),
+                "aborted_groups": self.aborted_groups,
+                "no_improve": self.no_improve,
+                "active_training_metric_totals": dict(
+                    self.active_training_metric_totals
+                ),
+                "active_training_metric_weights": dict(
+                    self.active_training_metric_weights
+                ),
+                "active_training_initial_metrics": dict(
+                    self.active_training_initial_metrics
+                ),
+                "training_initial_metrics": dict(
+                    self.last_training_initial_metrics
+                ),
             },
         )
         payload = checkpoint.to_payload()
@@ -320,6 +444,31 @@ class TrainingEngine(Generic[BatchT]):
         self.best_metric = None if best is None else float(best)
         best_epoch = checkpoint.metadata.get("best_epoch")
         self.best_epoch = None if best_epoch is None else int(best_epoch)
+        self.committed_units = {
+            str(name): int(value)
+            for name, value in checkpoint.metadata.get("committed_units", {}).items()
+        }
+        self.aborted_groups = int(checkpoint.metadata.get("aborted_groups", 0))
+        self.no_improve = int(checkpoint.metadata.get("no_improve", 0))
+        self.active_training_metric_totals = {
+            str(name): float(value)
+            for name, value in checkpoint.metadata.get(
+                "active_training_metric_totals", {}
+            ).items()
+        }
+        self.active_training_metric_weights = {
+            str(name): float(value)
+            for name, value in checkpoint.metadata.get(
+                "active_training_metric_weights", {}
+            ).items()
+        }
+        self.active_training_initial_metrics = {
+            str(name): float(value)
+            for name, value in checkpoint.metadata.get(
+                "active_training_initial_metrics", {}
+            ).items()
+            if value is not None
+        }
 
     def _emit(self, name, context=None, metrics=None, metadata=None) -> None:
         event = EngineEvent(name, context, metrics or {}, metadata or {})

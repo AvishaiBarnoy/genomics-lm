@@ -31,6 +31,17 @@ def test_cpu_train_checkpoint_resume_preflight(tmp_path):
     assert report["requested_device"] == report["actual_device"] == "cpu"
     assert report["initial"]["step"] == 2
     assert report["resumed"]["step"] == 4
+    assert report["initial"]["training_contract_version"] == 1
+    assert report["resumed"]["training_contract_version"] == 1
+    assert report["resumed"]["engine"] == {
+        "completed_epochs": 2,
+        "current_epoch": 2,
+        "microbatch": 0,
+        "optimizer_step": 4,
+    }
+    assert report["codon_engine_fork"]["training_contract_version"] == 1
+    assert report["codon_engine_fork"]["step"] == 4
+    assert report["codon_engine_fork"]["engine"]["completed_epochs"] == 2
     assert report["initial"]["consumed_train_tokens"] == 40
     assert report["resumed"]["consumed_train_tokens"] == 80
     assert report["resumed"]["scheduler_last_epoch"] == 4
