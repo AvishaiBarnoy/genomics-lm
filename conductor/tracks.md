@@ -4,6 +4,10 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
+- [x] **Track: Deterministic Check-up Scripts**
+*Link: [./tracks/deterministic_checkups_20261001/](./tracks/deterministic_checkups_20261001/)*
+*Summary: CI status, historical run analysis with explicit benchmarks, and read-only live training checks with shared Markdown/JSON reports.*
+
 - [ ] **Track: Directed ProteinEBM Corruption And Validation**
 *Link: [./tracks/ebm_directed_corruption_20260809/](./tracks/ebm_directed_corruption_20260809/)*
 *Summary: Replace uniform-only substitutions with a controlled, provenance-rich

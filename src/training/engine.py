@@ -126,10 +126,32 @@ class TrainingEngine(Generic[BatchT]):
         self.last_training_initial_metrics: dict[str, float] = {}
 
     def fit(self) -> EngineResult:
+        from src.training.status import TrainingStatus
+
+        self.status_reporter = TrainingStatus(self)
+        self.status_reporter.write("session_started")
+        try:
+            result = self._fit()
+        except BaseException as exc:
+            self.status_reporter.write(
+                "session_failed",
+                status=(
+                    "interrupted"
+                    if isinstance(exc, (KeyboardInterrupt, SystemExit))
+                    else "failed"
+                ),
+                error=exc,
+            )
+            raise
+        self.status_reporter.write("session_finished", status=result.status)
+        return result
+
+    def _fit(self) -> EngineResult:
         if self.run.resume_checkpoint is not None:
             self._restore(self.run.resume_checkpoint)
 
         for epoch in range(self.state.current_epoch, self.config.epochs):
+            self.status_reporter.write("training_started")
             self.task.begin_phase(TrainingPhase.TRAIN, epoch)
             batches = self.task.train_batches(epoch)
             total_batches = len(batches)
@@ -250,16 +272,16 @@ class TrainingEngine(Generic[BatchT]):
                                 self.state.optimizer_step + update.optimizer_steps
                             ),
                         )
+                        for name, count in group_units.items():
+                            self.committed_units[name] = (
+                                self.committed_units.get(name, 0) + int(count)
+                            )
                         self._emit(
                             "group_committed",
                             context,
                             group_metrics.averages(),
                             {"committed_units": group_units},
                         )
-                        for name, count in group_units.items():
-                            self.committed_units[name] = (
-                                self.committed_units.get(name, 0) + int(count)
-                            )
                         if self.checkpoint_policy.should_save(
                             self.state.optimizer_step
                         ):
@@ -353,6 +375,7 @@ class TrainingEngine(Generic[BatchT]):
         return EngineResult(self.state, "complete", self.best_metric, self.aborted_groups)
 
     def _validate(self, epoch: int) -> dict[str, MetricValue]:
+        self.status_reporter.write("validation_started")
         self.task.begin_phase(TrainingPhase.VALIDATION, epoch)
         accumulator = _MetricAccumulator()
         for microbatch, batch in enumerate(self.task.validation_batches(epoch)):
@@ -471,6 +494,12 @@ class TrainingEngine(Generic[BatchT]):
         }
 
     def _emit(self, name, context=None, metrics=None, metadata=None) -> None:
+        # Only JSON-compatible event details belong in the status sidecar.
+        details = {
+            key: value for key, value in (metadata or {}).items()
+            if isinstance(value, (str, int, float, bool)) or value is None
+        }
+        self.status_reporter.write(name, metrics=metrics, metadata=details)
         event = EngineEvent(name, context, metrics or {}, metadata or {})
         for callback in self.callbacks:
             callback.on_event(event)
