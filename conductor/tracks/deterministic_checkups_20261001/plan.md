@@ -30,3 +30,11 @@
 - [x] Recover legacy CodonLM epoch/step progress from completed checkpoints and test target-reached reporting.
 
 Follow-up validation: 495 core tests passed, one skipped, one xpassed with the codonlm environment first on `PATH`. Focused inspection/engine tests: 45 passed before the additional legacy CodonLM test; 92% coverage of inspection/status modules and 98% of the status logger at that point. Updated example: /tmp/genomics-run-analysis-updated.md.
+
+## PR review fixes (2026-10-02)
+
+- [x] Require a clean completion marker when a session snapshot says `complete`; a stale pre-resume snapshot alone cannot close the run.
+- [x] Warn and continue when saved `model_spec` metadata is not a mapping.
+- [x] Select CodonLM test tokens from the explicit manifest and hash the selected artifact in the benchmark receipt.
+
+Validation after these fixes: 498 core tests passed, one skipped, one xpassed; focused inspection tests: 33 passed. Ruff fatal-error rules and diff whitespace check passed.

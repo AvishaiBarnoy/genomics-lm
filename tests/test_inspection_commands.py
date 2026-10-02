@@ -73,6 +73,24 @@ def test_corrupt_evidence_reported(tmp_path):
     assert result["warnings"]
 
 
+def test_stale_complete_session_without_marker_is_not_complete(tmp_path):
+    (tmp_path / "run_status.json").write_text(
+        json.dumps({"status": "complete", "run_type": "codonlm"})
+    )
+    assert inspect_run(tmp_path)["status"] == "unknown"
+    (tmp_path / ".run.lock").write_text("old lock\n")
+    assert inspect_run(tmp_path)["status"] == "incomplete"
+
+
+def test_malformed_model_spec_does_not_abort_inspection(tmp_path):
+    (tmp_path / "meta.json").write_text(
+        json.dumps({"model_spec": "malformed", "cfg": {"trainer": "codon_lm"}})
+    )
+    report = inspect_run(tmp_path)
+    assert report["run_type"] == "codonlm"
+    assert any("model_spec is not a mapping" in warning for warning in report["warnings"])
+
+
 def test_markdown_preserves_evidence():
     rendered = render_markdown(
         {"kind": "test", "status": "unknown", "warnings": ["missing data"]}
@@ -153,7 +171,8 @@ def test_benchmark_requires_explicit_inputs_and_matching_type(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "outcome", ["pass", "fail", "timeout", "missing_result", "changed_input"]
+    "outcome",
+    ["pass", "fail", "timeout", "missing_result", "changed_input", "changed_test_npz"],
 )
 def test_benchmark_execution_receipt_and_isolation(tmp_path, monkeypatch, outcome):
     import subprocess
@@ -163,6 +182,15 @@ def test_benchmark_execution_receipt_and_isolation(tmp_path, monkeypatch, outcom
     checkpoint.write_bytes(b"checkpoint")
     manifest = tmp_path / "manifest.json"
     manifest.write_text("{}")
+    test_npz = tmp_path / "selected-test.npz"
+    test_npz.write_bytes(b"frozen test fixture")
+    monkeypatch.setattr(
+        benchmarks,
+        "load_dataset_manifest",
+        lambda *args, **kwargs: {
+            "artifacts": {"test_tokens": {"path": test_npz.name}}
+        },
+    )
     original_scores = tmp_path / "scores"
     original_scores.mkdir()
     (original_scores / "metrics.json").write_text('{"original":1}')
@@ -171,13 +199,16 @@ def test_benchmark_execution_receipt_and_isolation(tmp_path, monkeypatch, outcom
         directory = Path(command[command.index("--run_dir") + 1])
         assert directory != tmp_path
         assert kwargs["env"]["FORCE_CPU"] == "1"
+        assert command[command.index("--test_npz") + 1] == str(test_npz)
         if outcome == "timeout":
             raise subprocess.TimeoutExpired(command, 5)
-        if outcome in ("pass", "changed_input"):
+        if outcome in ("pass", "changed_input", "changed_test_npz"):
             (directory / "scores").mkdir()
             (directory / "scores/metrics.json").write_text('{"test_ppl":2}')
         if outcome == "changed_input":
             checkpoint.write_bytes(b"replaced checkpoint")
+        if outcome == "changed_test_npz":
+            test_npz.write_bytes(b"replaced test data")
         return subprocess.CompletedProcess(command, 1 if outcome == "fail" else 0)
 
     monkeypatch.setattr(benchmarks.subprocess, "run", fake_run)
@@ -192,9 +223,11 @@ def test_benchmark_execution_receipt_and_isolation(tmp_path, monkeypatch, outcom
             "timeout": "timeout",
             "missing_result": "failed",
             "changed_input": "failed",
+            "changed_test_npz": "failed",
         }[outcome]
     )
     assert result["inputs"]["checkpoint"]["sha256"]
+    assert result["inputs"]["test_npz"]["sha256"]
     assert (original_scores / "metrics.json").read_text() == '{"original":1}'
     report = inspect_run(tmp_path, historical=True)
     assert any("execution.json" in r["path"] for r in report["evaluations"])

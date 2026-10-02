@@ -45,7 +45,7 @@ Statuses:
 | --- | --- |
 | `active` | The run's advisory lock is held. This does not prove forward progress. |
 | `active_quiet` | Lock held and no inspected log/curve/checkpoint file modified within the explicit quiet threshold. |
-| `complete` | Valid completion marker and no observed active lock. |
+| `complete` | Valid completion marker and no observed active lock; a stale session snapshot alone cannot establish completion. |
 | `failed` | Latest structured session records a catchable failure, with no held lock. |
 | `interrupted` or `wall_time` | Latest structured session records an interrupted or configured wall-time stop, with no held lock. |
 | `incomplete` | Released lock file, with no valid completion marker. |
@@ -110,7 +110,8 @@ python -m scripts.analyze_run --run-dir runs/YOUR_CRITIC_RUN \
 Each invocation writes a fresh directory under `reports/benchmarks/`, containing
 `execution.json`, `benchmark.log`, and successful `result.json`. The receipt records
 commands, Python version, CPU selection, timestamps, input SHA-256 hashes, timeout and exit status. Inputs are hashed again after execution; changed inputs invalidate a successful result.
-CodonLM evaluation uses an isolated run layout; original score files are preserved.
+CodonLM evaluation selects `test_tokens` from the supplied manifest and records
+its hash in the receipt. It uses an isolated run layout; original score files are preserved.
 Existing evaluators enforce their own dataset provenance rules. An active run lock
 blocks benchmark execution. `--benchmark-timeout SECONDS` defaults to 3600.
 

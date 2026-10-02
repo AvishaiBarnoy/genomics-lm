@@ -297,7 +297,11 @@ def inspect_run(
                 candidate = data.get("cfg", data.get("config", data))
                 if isinstance(candidate, dict):
                     config.update(candidate)
-                spec.update(data.get("model_spec") or {})
+                model_spec = data.get("model_spec")
+                if isinstance(model_spec, dict):
+                    spec.update(model_spec)
+                elif model_spec is not None:
+                    warnings.append(f"{path}: model_spec is not a mapping")
                 report.setdefault("saved_training_state", {}).update(
                     {
                         k: data[k]
@@ -432,8 +436,14 @@ def inspect_run(
             or status_path.stat().st_mtime >= complete_path.stat().st_mtime
         ):
             terminal = session.get("status")
-            if terminal in ("failed", "interrupted", "wall_time", "complete"):
+            if terminal in ("failed", "interrupted", "wall_time"):
                 report["status"] = terminal
+            elif (
+                terminal == "complete"
+                and isinstance(completion, dict)
+                and completion.get("status") == "complete"
+            ):
+                report["status"] = "complete"
     if report["status"] in ("unknown", "incomplete"):
         warnings.append(
             "No verified completion or active lock. Logs may describe a previous session; interruption versus failure is not established."

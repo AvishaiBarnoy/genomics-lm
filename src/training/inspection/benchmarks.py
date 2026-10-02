@@ -11,6 +11,8 @@ import subprocess
 import sys
 import tempfile
 
+from src.codonlm.dataset_manifest import load_dataset_manifest, manifest_artifact_path
+
 from .reporting import observed_at
 from .runs import lock_state, read_json
 
@@ -58,6 +60,14 @@ def run_benchmark(
     for name, value in [("manifest", manifest), ("config", config), ("data", data)]:
         if value is not None:
             inputs[name] = value.resolve()
+    if suite == "codon-test":
+        # Select the artifact here; the evaluator performs full manifest validation.
+        selected_manifest = load_dataset_manifest(
+            inputs["manifest"], verify_artifacts=False
+        )
+        inputs["test_npz"] = manifest_artifact_path(
+            selected_manifest, inputs["manifest"], "test_tokens"
+        ).resolve()
     for path in inputs.values():
         if not path.is_file():
             raise ValueError(f"Benchmark input does not exist: {path}")
@@ -79,6 +89,8 @@ def run_benchmark(
             str(directory),
             "--manifest",
             str(inputs["manifest"]),
+            "--test_npz",
+            str(inputs["test_npz"]),
             "--checkpoint-name",
             "best.pt",
         ]
