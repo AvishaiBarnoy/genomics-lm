@@ -383,3 +383,65 @@ def test_strategy_restores_warmup_and_plateau_scheduler_state():
 
     assert restored._committed_steps == 2
     assert restored_optimizer.param_groups[0]["lr"] == pytest.approx(0.2)
+
+
+def test_structured_status_records_completion_and_progress(tmp_path):
+    import json
+    run = TrainingRun.open(tmp_path, 'status-complete')
+    engine, _, _ = _build_engine(tmp_path, run, LinearTask([1, 2]))
+    engine.fit()
+    status = json.loads((run.run_dir / 'run_status.json').read_text())
+    assert status['status'] == 'complete'
+    assert status['progress']['completed_epochs'] == 1
+    assert status['progress']['optimizer_step'] > 0
+    assert status['session_id']
+    assert status['last_event'] == 'session_finished'
+    run.close()
+
+
+def test_structured_status_records_failure(tmp_path):
+    import json
+    run = TrainingRun.open(tmp_path, 'status-failed')
+    task = LinearTask([1])
+    def fail(*args):
+        raise RuntimeError('fixture failure')
+    task.train_batches = fail
+    engine, _, _ = _build_engine(tmp_path, run, task)
+    with pytest.raises(RuntimeError, match='fixture failure'):
+        engine.fit()
+    status = json.loads((run.run_dir / 'run_status.json').read_text())
+    assert status['status'] == 'failed'
+    assert status['error']['type'] == 'RuntimeError'
+    run.close()
+
+
+def test_structured_status_records_wall_time_stop_and_is_readable(tmp_path):
+    import json
+    from src.training.inspection.runs import inspect_run
+    run = TrainingRun.open(tmp_path, 'status-interrupted')
+    engine, _, _ = _build_engine(tmp_path, run, LinearTask([1, 2, 3]))
+    engine.wall_timer = ExpireAfterFirstGroup()
+    result = engine.fit()
+    run.close()
+    status = json.loads((run.run_dir / 'run_status.json').read_text())
+    assert result.status == status['status'] == 'interrupted'
+    assert status['last_checkpoint']['reason'] == 'wall_time'
+    assert inspect_run(run.run_dir)['status'] == 'interrupted'
+
+
+def test_status_progress_is_throttled_and_failure_retains_original_exception(tmp_path, monkeypatch):
+    from src.training.status import TrainingStatus
+    run = TrainingRun.open(tmp_path, 'status-throttle')
+    engine, _, _ = _build_engine(tmp_path, run, LinearTask([1]))
+    reporter = TrainingStatus(engine)
+    reporter.write('session_started')
+    path = run.run_dir / 'run_status.json'
+    before = path.read_bytes()
+    reporter.write('group_committed')
+    assert path.read_bytes() == before
+    def reject(*args, **kwargs):
+        raise OSError('disk unavailable')
+    monkeypatch.setattr(type(path), 'write_text', reject)
+    with pytest.warns(RuntimeWarning, match='disk unavailable'):
+        reporter.write('session_failed', status='failed', error=RuntimeError('original'))
+    run.close()

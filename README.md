@@ -83,3 +83,7 @@ Outputs land in `conference/figures/`. All assets and the SOTA table are in [`co
 - [docs/DEVELOPMENT_LOG.md](docs/DEVELOPMENT_LOG.md) — narrative project history
 - [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) — high-level changelog
 - [conference/sota_benchmark_table.md](conference/sota_benchmark_table.md) — historical benchmark table with protocol-status labels
+
+### Run and CI check-ups
+
+See [Check-up scripts](docs/CHECKUP_SCRIPTS.md) for Markdown/JSON PR status, historical run analysis, explicit benchmarks, and live training inspection.

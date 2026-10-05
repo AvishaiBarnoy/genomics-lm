@@ -113,6 +113,10 @@ an architectural intervention.
   identical frozen-test tokens; report loss, perplexity, bits/codon, and improvement
   over the best baseline. Seed-1337 and seed-2027 PPL are `39.133` and `39.492`,
   both below trigram `42.037`.
+- [ ] If a later claim needs tighter uncertainty across training runs, predeclare
+  one additional seed of the locked batch-64, LR `1.5e-4` basic configuration.
+  The existing 1337/2027 replication passes the trigram gate; this is deferred,
+  not a prerequisite for the current evaluation and inference work.
 - [x] Extract causal AMR embeddings for both corrected seeds with
   dataset/checkpoint/vocabulary/code provenance. Other downstream datasets remain
   pending.
