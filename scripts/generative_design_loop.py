@@ -299,6 +299,24 @@ def load_critic(ckpt_path: str, cfg_path: str, device: torch.device):
     )
     model = MultiTaskProteinClassifier(model_cfg, task_dims).to(device)
     model.load_state_dict(state_dict, strict=False)
+    # Regression-vs-classification semantics are not recoverable from head width
+    # alone (a one-class classifier and a regressor both have width 1). Prefer
+    # checkpoint metadata, and require the YAML to agree when it declares tasks.
+    checkpoint_spec = state.get("model_spec", {}) if isinstance(state, dict) else {}
+    checkpoint_cfg = state.get("cfg", {}) if isinstance(state, dict) else {}
+    regression_tasks = checkpoint_spec.get("regression_tasks")
+    if regression_tasks is None:
+        regression_tasks = checkpoint_cfg.get("regression_tasks")
+    config_regression_tasks = cfg.get("regression_tasks")
+    if regression_tasks is not None and config_regression_tasks is not None:
+        if set(regression_tasks) != set(config_regression_tasks):
+            raise ValueError(
+                "ProteinCritic regression_tasks differ between checkpoint metadata "
+                f"({sorted(regression_tasks)}) and config ({sorted(config_regression_tasks)})."
+            )
+    elif regression_tasks is None:
+        regression_tasks = config_regression_tasks or []
+    model.regression_tasks = frozenset(regression_tasks)
     model.eval()
     return model, tokenizer, task_dims
 
@@ -326,9 +344,15 @@ def score_with_critic(
 
     if "stability" in task_dims:
         stab_logits = logits_dict["stability"][0]
-        stab_probs = torch.softmax(stab_logits, dim=-1)
-        scores["stability_prob"] = stab_probs[-1].item()  # prob of stable class
-        scores["stability_pred"] = stab_logits.argmax().item()
+        if "stability" in getattr(critic_model, "regression_tasks", ()):
+            if stab_logits.numel() != 1:
+                raise ValueError("Regression stability head must emit exactly one ΔG value.")
+            scores["stability_megascale_delta_g_pred_kcal_mol"] = stab_logits.squeeze().item()
+            scores["stability_target"] = "MegaScale deltaG assay label (predicted)"
+        else:
+            stab_probs = torch.softmax(stab_logits, dim=-1)
+            scores["stability_prob"] = stab_probs[-1].item()  # prob of stable class
+            scores["stability_pred"] = stab_logits.argmax().item()
 
     if "family" in task_dims:
         fam_logits = logits_dict["family"][0]
@@ -450,7 +474,8 @@ def run_design_loop(
 
     print("[design] Loading ProteinCritic...")
     critic_model, tokenizer, task_dims = load_critic(critic_ckpt, critic_cfg, device)
-    print(f"[design] Critic loaded: tasks={list(task_dims.keys())}")
+    print(f"[design] Critic loaded: tasks={list(task_dims.keys())}; "
+          f"regression={sorted(critic_model.regression_tasks)}")
 
     # Load EBM
     ebm_model = None
@@ -470,6 +495,12 @@ def run_design_loop(
     out_path.mkdir(parents=True, exist_ok=True)
 
     use_stability_filter = min_stability > 0.0
+    stability_is_regression = "stability" in critic_model.regression_tasks
+    if stability_is_regression and use_stability_filter:
+        raise ValueError(
+            "--min_stability is a classifier probability threshold and cannot be "
+            "used with a regression stability head."
+        )
     use_family_filter = target_family_idx >= 0
     filter_desc = []
     if use_stability_filter:
@@ -532,12 +563,23 @@ def run_design_loop(
                 rec.update(crit)
 
             # Keep best-so-far as fallback (highest stability)
-            if best_rec is None or rec.get("stability_prob", 0) > best_rec.get("stability_prob", 0):
+            stability_key = (
+                "stability_megascale_delta_g_pred_kcal_mol"
+                if stability_is_regression else "stability_prob"
+            )
+            if best_rec is None or rec.get(stability_key, float("-inf")) > best_rec.get(stability_key, float("-inf")):
                 best_rec = rec
 
             # T1a: stability filter
-            if use_stability_filter and rec.get("stability_prob", 0) < min_stability:
-                continue  # discard, retry
+            if use_stability_filter:
+                stability_prob = rec.get("stability_prob")
+                if stability_prob is None:
+                    raise RuntimeError(
+                        "The classifier stability filter is active, but no "
+                        "stability probability was produced."
+                    )
+                if stability_prob < min_stability:
+                    continue  # discard, retry
 
             # T1b: family targeting
             if use_family_filter:
@@ -583,10 +625,19 @@ def run_design_loop(
 
         if (seq_idx + 1) % 10 == 0:
             elapsed = time.time() - t_start
-            stab_mean = np.mean([r.get("stability_prob", 0) for r in records if "stability_prob" in r])
+            stability_key = (
+                "stability_megascale_delta_g_pred_kcal_mol"
+                if stability_is_regression else "stability_prob"
+            )
+            stab_vals = [r[stability_key] for r in records if stability_key in r]
+            stab_mean = float(np.mean(stab_vals)) if stab_vals else float("nan")
+            stability_label = (
+                "predicted MegaScale assay ΔG target (kcal/mol)"
+                if stability_is_regression else "stability probability"
+            )
             print(f"  {seq_idx+1}/{n_sequences} done  |  "
                   f"terminated={terminated_count}/{seq_idx+1}  |  "
-                  f"stability_mean={stab_mean:.3f}  |  "
+                  f"{stability_label} mean={stab_mean:.3f}  |  "
                   f"{elapsed:.1f}s elapsed")
 
     elapsed_total = time.time() - t_start
@@ -604,23 +655,29 @@ def run_design_loop(
     lengths = [r["n_aa"] for r in records]
 
     # Stability stats
-    stab_probs = [r.get("stability_prob", 0.0) for r in records if "stability_prob" in r]
+    stability_key = (
+        "stability_megascale_delta_g_pred_kcal_mol"
+        if stability_is_regression else "stability_prob"
+    )
+    stability_values = [r[stability_key] for r in records if stability_key in r]
     fam_confs = [r.get("family_top1_conf", 0.0) for r in records if "family_top1_conf" in r]
     fn_confs = [r.get("function_top1_conf", 0.0) for r in records if "function_top1_conf" in r]
 
-    # ESMFold for top sequences (by stability_prob)
+    # ESMFold for top sequences by critic stability score.
     esm_results = []
     if esm_fold_top > 0:
         top_by_stability = sorted(
-            [r for r in records if "stability_prob" in r and r["aa_seq"]],
-            key=lambda x: x["stability_prob"], reverse=True
+            [r for r in records if stability_key in r and r["aa_seq"]],
+            key=lambda x: x[stability_key], reverse=True
         )[:esm_fold_top]
         print(f"\n[design] Submitting top {len(top_by_stability)} sequences to ESMFold API...")
         for rank, rec in enumerate(top_by_stability, 1):
-            print(f"  Seq {rec['seq_id']} (stability={rec.get('stability_prob', 0):.3f}, "
+            print(f"  Seq {rec['seq_id']} ({'predicted MegaScale assay ΔG target' if stability_is_regression else 'stability probability'}="
+                  f"{rec.get(stability_key, 0):.3f}{' kcal/mol' if stability_is_regression else ''}, "
                   f"len={rec['n_aa']})...")
             fold = esm_fold(rec["aa_seq"])
-            esm_result = {"seq_id": rec["seq_id"], "rank": rank}
+            esm_result = {"seq_id": rec["seq_id"], "rank": rank,
+                          stability_key: rec[stability_key]}
             if fold:
                 esm_result.update({
                     "plddt_mean": fold["plddt_mean"],
@@ -673,7 +730,8 @@ def run_design_loop(
         gc_mean=gc_mean,
         gc_std=gc_std,
         lengths=lengths,
-        stab_probs=stab_probs,
+        stability_values=stability_values,
+        stability_is_regression=stability_is_regression,
         fam_confs=fam_confs,
         fn_confs=fn_confs,
         esm_results=esm_results,
@@ -692,7 +750,10 @@ def run_design_loop(
         "pairwise_identity": pairwise_id,
         "kmer_diversity": kmer_div,
         "gc_mean": gc_mean,
-        "stability_mean": float(np.mean(stab_probs)) if stab_probs else None,
+        **({"stability_delta_g_mean": float(np.mean(stability_values))}
+           if stability_is_regression and stability_values else {}),
+        **({"stability_mean": float(np.mean(stability_values))}
+           if not stability_is_regression and stability_values else {}),
         "csv_path": str(csv_path),
         "report_path": str(report_path),
     }
@@ -701,7 +762,8 @@ def run_design_loop(
 def _build_report(
     records, n_sequences, termination_rate, total_attempts, elapsed_total,
     task_dims, pairwise_id, kmer_div, gc_mean, gc_std, lengths,
-    stab_probs, fam_confs, fn_confs, esm_results, max_attempts, temperature, top_k
+    stability_values, stability_is_regression, fam_confs, fn_confs, esm_results,
+    max_attempts, temperature, top_k
 ) -> str:
     lines = [
         "# Generative Design Loop — Report",
@@ -743,17 +805,27 @@ def _build_report(
         "",
     ]
 
-    if stab_probs:
-        high_stab = sum(1 for p in stab_probs if p > 0.7)
+    if stability_values and stability_is_regression:
+        lines += [
+            "### Stability ΔG regression",
+            "These are predictions of the MegaScale assay's continuous ΔG target (kcal/mol), "
+            "not measurements for generated sequences and not probabilities. Using them to "
+            "guide generation is exploratory; held-out scaffold validation is limited.",
+            "",
+            f"Mean predicted ΔG: {np.mean(stability_values):.3f} kcal/mol",
+            "",
+        ]
+    elif stability_values:
+        high_stab = sum(1 for p in stability_values if p > 0.7)
         lines += [
             f"### Stability",
             f"| Metric | Value |",
             f"|---|---|",
-            f"| Mean stability probability | {np.mean(stab_probs):.3f} |",
-            f"| Sequences with P(stable) > 0.7 | {high_stab} / {len(stab_probs)} "
-            f"({high_stab/len(stab_probs)*100:.1f}%) |",
+            f"| Mean stability probability | {np.mean(stability_values):.3f} |",
+            f"| Sequences with P(stable) > 0.7 | {high_stab} / {len(stability_values)} "
+            f"({high_stab/len(stability_values)*100:.1f}%) |",
             f"| Sequences with P(stable) > 0.9 | "
-            f"{sum(1 for p in stab_probs if p > 0.9)} / {len(stab_probs)} |",
+            f"{sum(1 for p in stability_values if p > 0.9)} / {len(stability_values)} |",
             "",
         ]
 
@@ -817,10 +889,13 @@ def _build_report(
 
     if esm_results:
         lines += [
-            "### ESMFold Calibration",
-            "Calibration of predicted thermodynamic stability probability against ESMFold structure pLDDT scores:",
+            "### ESMFold Comparison",
+            ("Predicted MegaScale assay ΔG target is shown alongside ESMFold structure pLDDT; "
+             "this is not a measured stability value or probability calibration."
+             if stability_is_regression else
+             "Stability-classifier scores are shown alongside ESMFold structure pLDDT; this is not a calibrated thermodynamic measurement."),
             "",
-            "| Sequence ID | Stability Prob | ESMFold mean pLDDT | Fold Quality |",
+            f"| Sequence ID | {'Predicted MegaScale assay ΔG target (kcal/mol)' if stability_is_regression else 'Stability Prob'} | ESMFold mean pLDDT | Fold Quality |",
             "|---|---|---|---|",
         ]
         for fold in esm_results:
@@ -834,7 +909,7 @@ def _build_report(
             else:
                 quality = "Very Low (Unstructured)"
             lines.append(
-                f"| `{fold['seq_id']}` | {fold.get('stability_prob', 0.0):.3f} | {plddt:.1f} | {quality} |"
+                f"| `{fold['seq_id']}` | {fold.get('stability_megascale_delta_g_pred_kcal_mol' if stability_is_regression else 'stability_prob', 0.0):.3f} | {plddt:.1f} | {quality} |"
             )
         lines.append("")
 
@@ -885,20 +960,20 @@ def _build_report(
 
     # Top 5 sequences by stability
     top_seqs = sorted(
-        [r for r in records if "stability_prob" in r and r["aa_seq"]],
-        key=lambda x: x["stability_prob"], reverse=True
+        [r for r in records if ("stability_megascale_delta_g_pred_kcal_mol" if stability_is_regression else "stability_prob") in r and r["aa_seq"]],
+        key=lambda x: x["stability_megascale_delta_g_pred_kcal_mol" if stability_is_regression else "stability_prob"], reverse=True
     )[:5]
     if top_seqs:
         lines += [
             "## Top 5 Sequences by Stability",
             "",
-            "| Seq ID | AA Length | Stability | Family Conf | Function Conf | AA sequence (first 60) |",
+            f"| Seq ID | AA Length | {'Predicted MegaScale assay ΔG target (kcal/mol)' if stability_is_regression else 'Stability probability'} | Family Conf | Function Conf | AA sequence (first 60) |",
             "|---|---|---|---|---|---|",
         ]
         for r in top_seqs:
             aa_preview = r["aa_seq"][:60] + ("..." if len(r["aa_seq"]) > 60 else "")
             lines.append(
-                f"| {r['seq_id']} | {r['n_aa']} | {r.get('stability_prob', 0):.3f} | "
+            f"| {r['seq_id']} | {r['n_aa']} | {r.get('stability_megascale_delta_g_pred_kcal_mol' if stability_is_regression else 'stability_prob', 0):.3f} | "
                 f"{r.get('family_top1_conf', 0):.4f} | {r.get('function_top1_conf', 0):.4f} | "
                 f"`{aa_preview}` |"
             )
@@ -942,7 +1017,7 @@ def main():
                     help="T1c: linearly anneal temperature to 0.7x after first 50 codons")
     # T1a: critic-guided stability filter
     ap.add_argument("--min_stability", type=float, default=0.0,
-                    help="T1a: reject sequences with stability_prob < this (0 = disabled)")
+                    help="Classifier-only P(stable) rejection threshold (0 = disabled; unsupported for ΔG regression)")
     ap.add_argument("--max_stability_attempts", type=int, default=10,
                     help="T1a: max outer retries for the stability/family filter")
     # T1b: family targeting

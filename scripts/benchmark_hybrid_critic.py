@@ -38,6 +38,11 @@ def run_benchmark():
     critic_cfg = "configs/protein_critic.yaml"
     print(f"[*] Loading critic model from {critic_ckpt}...")
     critic, c_tokenizer, task_dims = load_critic(critic_ckpt, critic_cfg, device)
+    stability_is_regression = "stability" in critic.regression_tasks
+    stability_metric_key = (
+        "Predicted MegaScale assay ΔG target (kcal/mol) ↑"
+        if stability_is_regression else "Stable Prob (Critic) ↑"
+    )
 
     # 3. Load EBM model
     ebm_ckpt = "runs/protein_ebm_1024/checkpoints/best_ebm.pt"
@@ -106,10 +111,15 @@ def run_benchmark():
             raw_seq = "".join(codon_list)
             aa_seq = translate_codons_to_aa(codon_list)
 
-            # Evaluate stability prob & EBM energy
+            # Evaluate the matching stability head output & EBM energy.
             crit_scores = score_with_critic(critic, c_tokenizer, task_dims, aa_seq, device)
-            stability_prob = crit_scores.get("stability_prob", 1.0)
-            stable_prob = 1.0 - stability_prob
+            if stability_is_regression:
+                stability_score = crit_scores.get("stability_megascale_delta_g_pred_kcal_mol")
+            else:
+                stability_prob = crit_scores.get("stability_prob")
+                if stability_prob is None:
+                    raise RuntimeError("Classifier critic did not return a stability probability.")
+                stability_score = 1.0 - stability_prob
 
             # Extract EBM Energy
             with torch.no_grad():
@@ -139,7 +149,7 @@ def run_benchmark():
                 has_stop_only_at_end = (stops[-1] == len(codon_list) - 1) and (len(stops) == 1)
             
             cfg_results.append({
-                "stable_prob": stable_prob,
+                "stability_score": stability_score,
                 "energy": energy,
                 "valid_orf": 1.0 if has_stop_only_at_end else 0.0,
                 "tokens": len(gen_ids)
@@ -149,7 +159,7 @@ def run_benchmark():
         total_tokens = sum(r["tokens"] for r in cfg_results)
         tok_per_sec = total_tokens / t_elapsed if t_elapsed > 0 else 0.0
 
-        mean_stable = np.mean([r["stable_prob"] for r in cfg_results])
+        mean_stability_score = np.mean([r["stability_score"] for r in cfg_results])
         mean_energy = np.mean([r["energy"] for r in cfg_results])
         orf_rate = np.mean([r["valid_orf"] for r in cfg_results])
 
@@ -157,7 +167,7 @@ def run_benchmark():
             "Configuration": cfg["name"],
             "Alpha Weight": cfg["alpha"],
             "Target Task": cfg["task"],
-            "Stable Prob (Critic) ↑": mean_stable,
+            stability_metric_key: mean_stability_score,
             "EBM Energy ↓": mean_energy,
             "Valid ORF Rate": orf_rate,
             "Speed (tokens/sec)": tok_per_sec
@@ -176,6 +186,11 @@ def run_benchmark():
     with open(report_path, "w") as f:
         f.write("# 🧪 Hybrid DNA-Protein Critic Benchmark Report\n\n")
         f.write("Closed-loop bidirectional guided codon generation vs. standard sampling.\n\n")
+        if stability_is_regression:
+            f.write(
+                "The critic metric is a prediction of the MegaScale assay ΔG target, "
+                "not an experimental measurement for the generated sequences.\n\n"
+            )
         f.write(df_res.to_markdown(index=False))
         f.write("\n\n*Benchmark completed successfully.*")
     print(f"\n[+] Saved report to: {report_path}")

@@ -59,6 +59,15 @@ batches. See `GENERATION_TERMINATION_DIAGNOSTICS.md` for results.
 
 ## Decision
 
+The corrected ProteinCritic checkpoint regresses against MegaScale's continuous
+ΔG assay label (kcal/mol), not a stable-class probability. Inference reports a
+`stability_megascale_delta_g_pred_kcal_mol`: a model prediction of that assay
+target, not an experimental measurement for generated candidates. Guided sampling
+uses the raw scalar as an exploratory ranking bias. Do not interpret it as
+`P(stable)` or apply the classifier-only `--min_stability` threshold.
+Scaffold-held-out validation is currently limited, so this is not yet a validated
+design policy.
+
 Do not promote the top-k 5 decoder for unguided gene generation. A subsequent
 pilot found that unrestricted temperature `1.0` sampling restores natural stopping
 in 9/10 samples for both seeds. That decoder requires a larger controlled

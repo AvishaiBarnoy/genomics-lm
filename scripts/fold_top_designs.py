@@ -37,21 +37,39 @@ def esm_fold(aa_seq: str, timeout: int = 45) -> dict:
         print(f"  [ESMFold] API error: {exc}")
         return None
 
-def get_top_sequence(csv_path: Path) -> dict:
+def get_top_sequence(csv_path: Path) -> tuple[dict | None, str | None]:
     if not csv_path.exists():
-        return None
+        return None, None
     records = []
     with open(csv_path) as f:
         reader = csv.DictReader(f)
         for row in reader:
             records.append(row)
     if not records:
-        return None
-    # Sort by stability score (index 0 corresponds to stable)
-    # Since scores["stability_prob"] = stab_probs[-1] (index 1 = unstable)
-    # the most stable sequence is the one with the MINIMUM scores["stability_prob"]!
-    sorted_recs = sorted(records, key=lambda x: float(x.get("stability_prob", 1.0)))
-    return sorted_recs[0]
+        return None, None
+    stability_key = next(
+        (key for key in (
+            "stability_megascale_delta_g_pred_kcal_mol",
+            "stability_prob",
+        ) if key in records[0]),
+        None,
+    )
+    if stability_key is None:
+        return None, None
+    # Legacy classifier CSVs use the old convention that lower is better;
+    # larger MegaScale ΔG target predictions rank higher.
+    scored_records = []
+    for row in records:
+        try:
+            row_score = float(row.get(stability_key, ""))
+        except ValueError:
+            continue
+        scored_records.append((row_score, row))
+    if not scored_records:
+        return None, None
+    reverse = stability_key != "stability_prob"
+    sorted_recs = sorted(scored_records, key=lambda item: item[0], reverse=reverse)
+    return sorted_recs[0][1], stability_key
 
 def main():
     configs = ["baseline", "entropy", "ebm", "dual"]
@@ -62,13 +80,19 @@ def main():
     results = {}
     for name in configs:
         csv_path = Path(f"outputs/ablation_{name}/design_library.csv")
-        rec = get_top_sequence(csv_path)
+        rec, stability_key = get_top_sequence(csv_path)
         if not rec:
             print(f"[-] No sequence found for {name}")
             continue
             
         aa_seq = rec["aa_seq"]
-        print(f"[*] Folding {name} sequence (length={len(aa_seq)}, stability_prob={rec.get('stability_prob')})...")
+        score_label = (
+            "predicted MegaScale assay ΔG target (kcal/mol)"
+            if stability_key == "stability_megascale_delta_g_pred_kcal_mol"
+            else "legacy stability probability"
+        )
+        print(f"[*] Folding {name} sequence (length={len(aa_seq)}, "
+              f"{score_label}={rec.get(stability_key)})...")
         print(f"    Seq: {aa_seq[:40]}...")
         
         fold_res = esm_fold(aa_seq)
@@ -76,7 +100,8 @@ def main():
             results[name] = {
                 "seq_id": rec["seq_id"],
                 "aa_seq": aa_seq,
-                "stability_prob": float(rec["stability_prob"]),
+                "critic_stability_score": float(rec[stability_key]),
+                "critic_stability_score_label": score_label,
                 "plddt_mean": fold_res["plddt_mean"],
                 "plddt_min": fold_res["plddt_min"],
                 "plddt_max": fold_res["plddt_max"],
@@ -89,11 +114,11 @@ def main():
             print(f"    [-] ESMFold failed for {name}")
             
     # Print comparison table
-    print("\n=== PHYSICAL STABILITY VALUES (ESMFold pLDDT) ===")
-    print(f"{'Configuration':<15} | {'Sequence ID':<11} | {'Stability Prob (Unstable)':<25} | {'Mean pLDDT':<10} | {'Min pLDDT':<10} | {'Max pLDDT':<10}")
-    print("-" * 92)
+    print("\n=== ESMFold STRUCTURE-CONFIDENCE RESULTS ===")
+    print(f"{'Configuration':<15} | {'Sequence ID':<11} | {'Critic Score':<15} | {'Score Type':<45} | {'Mean pLDDT':<10} | {'Min pLDDT':<10} | {'Max pLDDT':<10}")
+    print("-" * 150)
     for name, res in results.items():
-        print(f"{name:<15} | {res['seq_id']:<11} | {res['stability_prob']:<25.4f} | {res['plddt_mean']:<10.2f} | {res['plddt_min']:<10.2f} | {res['plddt_max']:<10.2f}")
+        print(f"{name:<15} | {res['seq_id']:<11} | {res['critic_stability_score']:<15.4f} | {res['critic_stability_score_label']:<45} | {res['plddt_mean']:<10.2f} | {res['plddt_min']:<10.2f} | {res['plddt_max']:<10.2f}")
 
 if __name__ == "__main__":
     main()

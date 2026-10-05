@@ -532,7 +532,8 @@ class SampleResult:
     target_codons: int
     termination_bias_steps: int
     last_termination_class: object
-    critic_stability: float = 0.0
+    critic_stability: float | None = None
+    critic_stability_megascale_delta_g_pred_kcal_mol: float | None = None
     critic_family_prob: float = 0.0
     critic_function_prob: float | None = None
     # raw unguided metrics
@@ -1268,7 +1269,8 @@ def main() -> None:
                 frame = selected_metrics["frame_integrity"]
                 score = selected_metrics["gqs"]
 
-                critic_stability = 0.0
+                critic_stability = None
+                critic_stability_megascale_delta_g_pred_kcal_mol = None
                 critic_family_prob = 0.0
                 critic_function_prob = 0.0
                 if critic_model is not None:
@@ -1281,7 +1283,10 @@ def main() -> None:
                     aa_seq = "".join(aa_list)
                     crit_scores = score_with_critic(critic_model, critic_tokenizer, critic_task_dims, aa_seq, device)
                     if "stability" in critic_task_dims:
-                        critic_stability = crit_scores.get("stability_prob", 0.0)
+                        critic_stability = crit_scores.get("stability_prob")
+                        critic_stability_megascale_delta_g_pred_kcal_mol = crit_scores.get(
+                            "stability_megascale_delta_g_pred_kcal_mol"
+                        )
                     if "family" in critic_task_dims:
                         critic_family_prob = crit_scores.get("family_top1_conf", 0.0)
                     if "function" in critic_task_dims:
@@ -1314,6 +1319,9 @@ def main() -> None:
                         termination_bias_steps=int(info.get("termination_bias_steps", 0)),
                         last_termination_class=info.get("last_termination_class"),
                         critic_stability=critic_stability,
+                        critic_stability_megascale_delta_g_pred_kcal_mol=(
+                            critic_stability_megascale_delta_g_pred_kcal_mol
+                        ),
                         critic_family_prob=critic_family_prob,
                         critic_function_prob=critic_function_prob,
                         raw_gqs=raw_result.gqs,
@@ -1516,13 +1524,21 @@ def main() -> None:
                 median_gqs_norm = float(stats.median(norms))
 
         # Optional critic summary
-        mean_crit_stab = None
-        mean_crit_fam = None
-        mean_crit_func = None
-        if any(getattr(r, "critic_stability", 0.0) > 0.0 for r in rks):
-            mean_crit_stab = float(sum(r.critic_stability for r in rks) / len(rks))
-            mean_crit_fam = float(sum(r.critic_family_prob for r in rks) / len(rks))
-            mean_crit_func = float(sum(r.critic_function_prob for r in rks) / len(rks))
+        stability_probs = [r.critic_stability for r in rks if r.critic_stability is not None]
+        stability_delta_g = [
+            r.critic_stability_megascale_delta_g_pred_kcal_mol
+            for r in rks
+            if r.critic_stability_megascale_delta_g_pred_kcal_mol is not None
+        ]
+        mean_crit_stab = float(sum(stability_probs) / len(stability_probs)) if stability_probs else None
+        mean_crit_fam = (
+            float(sum(r.critic_family_prob for r in rks) / len(rks))
+            if "family" in critic_task_dims else None
+        )
+        mean_crit_func = (
+            float(sum(r.critic_function_prob or 0.0 for r in rks) / len(rks))
+            if "function" in critic_task_dims else None
+        )
 
         summary.append(
             {
@@ -1552,10 +1568,27 @@ def main() -> None:
                 **(
                     {
                         "mean_critic_stability": mean_crit_stab,
-                        "mean_critic_family_prob": mean_crit_fam,
-                        "mean_critic_function_prob": mean_crit_func,
                     }
                     if mean_crit_stab is not None
+                    else {}
+                ),
+                **(
+                    {"mean_critic_family_prob": mean_crit_fam}
+                    if mean_crit_fam is not None
+                    else {}
+                ),
+                **(
+                    {"mean_critic_function_prob": mean_crit_func}
+                    if mean_crit_func is not None
+                    else {}
+                ),
+                **(
+                    {
+                        "mean_critic_stability_megascale_delta_g_pred_kcal_mol": (
+                            float(sum(stability_delta_g) / len(stability_delta_g))
+                        )
+                    }
+                    if stability_delta_g
                     else {}
                 ),
                 "n": len(rks),
@@ -1588,7 +1621,13 @@ def main() -> None:
         if any("mean_gqs_norm" in s for s in summary):
             extra += ["mean_gqs_norm", "median_gqs_norm"]
         if any("mean_critic_stability" in s for s in summary):
-            extra += ["mean_critic_stability", "mean_critic_family_prob", "mean_critic_function_prob"]
+            extra += ["mean_critic_stability"]
+        if any("mean_critic_family_prob" in s for s in summary):
+            extra += ["mean_critic_family_prob"]
+        if any("mean_critic_function_prob" in s for s in summary):
+            extra += ["mean_critic_function_prob"]
+        if any("mean_critic_stability_megascale_delta_g_pred_kcal_mol" in s for s in summary):
+            extra += ["mean_critic_stability_megascale_delta_g_pred_kcal_mol"]
 
         writer = csv.DictWriter(f, fieldnames=base_cols + extra)
         writer.writeheader()
