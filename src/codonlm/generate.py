@@ -419,7 +419,12 @@ def batch_score_critic(
 ) -> torch.Tensor:
     """
     Evaluates a batch of candidate amino acid sequences on the critic or EBM.
-    Returns a tensor of scores (log probabilities or negative energy scores) of shape (K,).
+    Returns one higher-is-better score per candidate. Classification tasks return
+    target-class log probabilities, regression tasks return the raw prediction,
+    and EBM scoring returns negative energy. For stability regression that raw
+    prediction is the model's MegaScale assay ΔG target estimate in kcal/mol, not
+    a measurement of the candidate; the caller's guidance coefficient therefore
+    controls preference per kcal/mol and guidance remains experimental.
     """
     if not aa_seqs:
         return torch.zeros(0, device=device)
@@ -475,6 +480,14 @@ def batch_score_critic(
             return torch.zeros(len(aa_seqs), device=device)
             
         logits = logits_dict[target_task] # (K, n_classes)
+        if target_task in getattr(critic_model, "regression_tasks", ()):
+            if logits.ndim != 2 or logits.size(-1) != 1:
+                raise ValueError(
+                    f"Regression task {target_task!r} must emit one scalar per sequence; "
+                    f"got shape {tuple(logits.shape)}."
+                )
+            return logits.squeeze(-1)
+
         probs = torch.softmax(logits, dim=-1)
         
         # Default target class is class 0

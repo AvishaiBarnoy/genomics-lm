@@ -26,8 +26,12 @@ def get_top_sequence(csv_path: Path) -> dict:
             records.append(row)
     if not records:
         return None
-    # Select sequence with lowest unstable probability
-    sorted_recs = sorted(records, key=lambda x: float(x.get("stability_prob", 1.0)))
+    # This legacy optimizer expects its historical classifier CSV schema.
+    scored_records = [row for row in records if row.get("stability_prob", "") != ""]
+    if not scored_records:
+        raise ValueError(f"No legacy stability_prob scores found in {csv_path}.")
+    # Select sequence with lowest historical instability score.
+    sorted_recs = sorted(scored_records, key=lambda x: float(x["stability_prob"]))
     return sorted_recs[0]
 
 import torch.nn as nn
@@ -41,6 +45,11 @@ def main():
     critic_cfg = "configs/protein_critic.yaml"
     print(f"[*] Loading critic model from {critic_ckpt}...")
     critic, tokenizer, task_dims = load_critic(critic_ckpt, critic_cfg, device)
+    if "stability" in critic.regression_tasks:
+        raise SystemExit(
+            "This Langevin report and its input CSV are classifier-probability based; "
+            "the loaded critic predicts a continuous MegaScale assay target instead."
+        )
     
     # 2. Load EBM
     ebm_ckpt = "runs/protein_ebm/checkpoints/best_ebm.pt"
@@ -99,7 +108,9 @@ def main():
     # 5. Score optimized sequence under the critic
     from scripts.generative_design_loop import score_with_critic
     opt_crit = score_with_critic(critic, tokenizer, task_dims, optimized_seq, device)
-    opt_stability_prob = opt_crit.get("stability_prob", 1.0)
+    opt_stability_prob = opt_crit.get("stability_prob")
+    if opt_stability_prob is None:
+        raise RuntimeError("Classifier critic did not return a stability probability.")
     
     # Calculate vocabulary distance stats
     with torch.no_grad():

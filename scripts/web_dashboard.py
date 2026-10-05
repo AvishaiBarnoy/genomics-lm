@@ -955,7 +955,12 @@ def main():
 
                             with st.spinner("Analyzing starting sequence stability..."):
                                 initial_score = score_with_critic(critic_model, c_tokenizer, task_dims, seq_input, device)
-                                initial_unstable_prob = initial_score.get("stability_prob", 1.0)
+                                stability_is_regression = "stability" in critic_model.regression_tasks
+                                stability_score_key = (
+                                    "stability_megascale_delta_g_pred_kcal_mol"
+                                    if stability_is_regression else "stability_prob"
+                                )
+                                initial_stability_score = initial_score.get(stability_score_key)
 
                             with st.spinner("Running Langevin MCMC Optimization..."):
                                 opt_seq, energy_history = latent_langevin_sample(
@@ -974,19 +979,21 @@ def main():
 
                             with st.spinner("Analyzing optimized sequence stability..."):
                                 opt_score = score_with_critic(critic_model, c_tokenizer, task_dims, opt_seq, device)
-                                opt_unstable_prob = opt_score.get("stability_prob", 1.0)
+                                opt_stability_score = opt_score.get(stability_score_key)
 
                             st.session_state["ebm_opt_seq"] = opt_seq
                             st.session_state["ebm_energy_hist"] = energy_history
-                            st.session_state["ebm_init_unstable"] = initial_unstable_prob
-                            st.session_state["ebm_opt_unstable"] = opt_unstable_prob
+                            st.session_state["ebm_init_stability_score"] = initial_stability_score
+                            st.session_state["ebm_opt_stability_score"] = opt_stability_score
+                            st.session_state["ebm_stability_is_regression"] = stability_is_regression
                             st.session_state["ebm_folded"] = None
 
                         if "ebm_opt_seq" in st.session_state:
                             opt_seq = st.session_state["ebm_opt_seq"]
                             energy_history = st.session_state["ebm_energy_hist"]
-                            initial_unstable_prob = st.session_state["ebm_init_unstable"]
-                            opt_unstable_prob = st.session_state["ebm_opt_unstable"]
+                            initial_stability_score = st.session_state["ebm_init_stability_score"]
+                            opt_stability_score = st.session_state["ebm_opt_stability_score"]
+                            stability_is_regression = st.session_state["ebm_stability_is_regression"]
                             
                             st.success("Optimization completed successfully!")
                             
@@ -1005,8 +1012,38 @@ def main():
                                 st.metric("Start Energy", f"{energy_history[0]:.4f}")
                                 st.metric("Final Energy", f"{energy_history[-1]:.4f}", f"{energy_history[-1] - energy_history[0]:.4f} delta")
                             with col_m2:
-                                st.metric("Initial Unstable Prob", f"{initial_unstable_prob * 100:.2f}%")
-                                st.metric("Optimized Unstable Prob", f"{opt_unstable_prob * 100:.2f}%", f"{(opt_unstable_prob - initial_unstable_prob) * 100:+.2f}% delta")
+                                if stability_is_regression:
+                                    metric_label = "Predicted MegaScale assay ΔG target (kcal/mol)"
+                                    initial_metric = (
+                                        f"{initial_stability_score:.3f}"
+                                        if initial_stability_score is not None else "N/A"
+                                    )
+                                    optimized_metric = (
+                                        f"{opt_stability_score:.3f}"
+                                        if opt_stability_score is not None else "N/A"
+                                    )
+                                    metric_delta = (
+                                        f"{opt_stability_score - initial_stability_score:+.3f}"
+                                        if initial_stability_score is not None and opt_stability_score is not None
+                                        else None
+                                    )
+                                else:
+                                    metric_label = "Unstable Prob"
+                                    initial_metric = (
+                                        f"{initial_stability_score * 100:.2f}%"
+                                        if initial_stability_score is not None else "N/A"
+                                    )
+                                    optimized_metric = (
+                                        f"{opt_stability_score * 100:.2f}%"
+                                        if opt_stability_score is not None else "N/A"
+                                    )
+                                    metric_delta = (
+                                        f"{(opt_stability_score - initial_stability_score) * 100:+.2f}% delta"
+                                        if initial_stability_score is not None and opt_stability_score is not None
+                                        else None
+                                    )
+                                st.metric(f"Initial {metric_label}", initial_metric)
+                                st.metric(f"Optimized {metric_label}", optimized_metric, metric_delta)
                             with col_m3:
                                 mutations = sum(1 for a, b in zip(seq_input, opt_seq) if a != b)
                                 mutation_pct = (mutations / len(seq_input)) * 100 if seq_input else 0.0

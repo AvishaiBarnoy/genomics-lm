@@ -21,7 +21,10 @@ def run_cmd(cmd: list[str], log_path: Path):
 def analyze_config(csv_path: Path, is_baseline: bool) -> dict:
     if not csv_path.exists():
         print(f"[ablation] error: {csv_path} not found")
-        return {"yield": 0.0, "avg_attempts": 0.0, "total_tokens": 0, "avg_stability": 0.0}
+        return {
+            "yield": 0.0, "avg_attempts": 0.0, "total_tokens": 0,
+            "avg_stability": float("nan"), "stability_metric_label": "unavailable",
+        }
     
     records = []
     with open(csv_path) as f:
@@ -30,7 +33,10 @@ def analyze_config(csv_path: Path, is_baseline: bool) -> dict:
             records.append(row)
             
     if not records:
-        return {"yield": 0.0, "avg_attempts": 0.0, "total_tokens": 0, "avg_stability": 0.0}
+        return {
+            "yield": 0.0, "avg_attempts": 0.0, "total_tokens": 0,
+            "avg_stability": float("nan"), "stability_metric_label": "unavailable",
+        }
         
     terminated_flags = [row["terminated"].lower() == "true" for row in records]
     yield_pct = 100.0 * sum(terminated_flags) / len(records)
@@ -52,14 +58,35 @@ def analyze_config(csv_path: Path, is_baseline: bool) -> dict:
         # Total tokens = successful generation + failed attempts
         total_tokens += n_codons + (n_att - 1) * failed_len
         
-    stability_probs = [float(row["stability_prob"]) for row in records if "stability_prob" in row]
-    avg_stability = np.mean(stability_probs) if stability_probs else 0.0
+    stability_columns = {
+        column for column in (
+            "stability_prob",
+            "stability_megascale_delta_g_pred_kcal_mol",
+        )
+        if any(row.get(column, "") != "" for row in records)
+    }
+    if len(stability_columns) > 1:
+        raise ValueError(f"Mixed critic stability score types in {csv_path}: {sorted(stability_columns)}")
+    stability_column = next(iter(stability_columns), None)
+    stability_values = (
+        [float(row[stability_column]) for row in records if row.get(stability_column, "") != ""]
+        if stability_column else []
+    )
+    avg_stability = float(np.mean(stability_values)) if stability_values else float("nan")
+    stability_metric_label = (
+        "predicted MegaScale assay ΔG target (kcal/mol)"
+        if stability_column == "stability_megascale_delta_g_pred_kcal_mol"
+        else "legacy stability probability"
+        if stability_column == "stability_prob"
+        else "unavailable"
+    )
     
     return {
         "yield": yield_pct,
         "avg_attempts": avg_attempts,
         "total_tokens": total_tokens,
         "avg_stability": avg_stability,
+        "stability_metric_label": stability_metric_label,
         "count": len(records)
     }
 
@@ -135,13 +162,21 @@ def main():
             res["savings"] = 0.0
             
     # Build report
+    stability_metric_labels = {
+        res["stability_metric_label"]
+        for res in results.values()
+        if res["stability_metric_label"] != "unavailable"
+    }
+    if len(stability_metric_labels) > 1:
+        raise ValueError(f"Ablation outputs contain inconsistent critic metrics: {sorted(stability_metric_labels)}")
+    stability_metric_label = next(iter(stability_metric_labels), "unavailable")
     report = f"""# Ablation Study: Sequence Guidance Performance Matrix
 
 This report evaluates 4 different configurations for guiding and early-aborting the de novo sequence generation loop in CodonLM.
 
 ## 📊 Summary Comparison Matrix
 
-| Configuration | Generation Yield (%) | Avg Attempts / Seq | Total Estimated Tokens | Token Savings (%) | Avg Stability Prob | Wall-Clock Time |
+| Configuration | Generation Yield (%) | Avg Attempts / Seq | Total Estimated Tokens | Token Savings (%) | Avg {stability_metric_label} | Wall-Clock Time |
 |---|---|---|---|---|---|---|
 | **1. Baseline (No Guide)** | {results['baseline']['yield']:.1f}% | {results['baseline']['avg_attempts']:.2f} | {results['baseline']['total_tokens']:,} | -- | {results['baseline']['avg_stability']:.4f} | {results['baseline']['wall_time_sec']:.1f}s |
 | **2. Shannon Entropy Only** | {results['entropy']['yield']:.1f}% | {results['entropy']['avg_attempts']:.2f} | {results['entropy']['total_tokens']:,} | {results['entropy']['savings']:.1f}% | {results['entropy']['avg_stability']:.4f} | {results['entropy']['wall_time_sec']:.1f}s |
@@ -151,7 +186,7 @@ This report evaluates 4 different configurations for guiding and early-aborting 
 ## 🔑 Key Insights & Observations
 1. **Token Generation Savings**: Guided early-abort filters (Entropy, EBM, and Dual) achieve significant computational savings by identifying and terminating loops/unstable sequences early in the trajectory instead of generating up to the 300-codon hard cap.
 2. **Generation Yield**: Compares the percentage of sequences successfully terminating naturally with length $\\ge 50$ amino acids.
-3. **Stability Profile**: Measured under the Multi-Task Protein-Critic stability classification head.
+3. **Stability Profile**: Reported using {stability_metric_label}. For regression runs, this is a model prediction of the MegaScale assay target, not a measurement of generated sequences.
 
 ---
 Report compiled on: {time.strftime('%Y-%m-%d %H:%M:%S UTC')}

@@ -133,7 +133,18 @@ def _write_report(
     esm_rows: list[dict],
 ) -> None:
     aa_seqs = [r["aa_seq"] for r in rows if r["aa_seq"]]
-    stability = [float(r.get("stability_prob", 0.0)) for r in rows]
+    stability_is_regression = any(
+        "stability_megascale_delta_g_pred_kcal_mol" in row for row in rows
+    )
+    stability_key = (
+        "stability_megascale_delta_g_pred_kcal_mol"
+        if stability_is_regression else "stability_prob"
+    )
+    stability = [float(r[stability_key]) for r in rows if stability_key in r]
+    stability_label = (
+        "predicted MegaScale assay ΔG target (kcal/mol)"
+        if stability_is_regression else "stability probability"
+    )
     family_conf = [float(r.get("family_top1_conf", 0.0)) for r in rows]
     term = sum(1 for r in rows if r["terminated"])
     lines = [
@@ -156,26 +167,27 @@ def _write_report(
         "| Metric | Value |",
         "|---|---|",
         f"| terminated | {term}/{len(rows)} ({term / max(len(rows), 1) * 100:.1f}%) |",
-        f"| mean stability_prob | {np.mean(stability):.3f} |",
-        f"| max stability_prob | {np.max(stability):.3f} |",
+        f"| mean {stability_label} | {np.mean(stability) if stability else float('nan'):.3f} |",
+        f"| max {stability_label} | {np.max(stability) if stability else float('nan'):.3f} |",
         f"| mean family_top1_conf | {np.mean(family_conf):.4f} |",
         f"| mean pairwise AA identity | {pairwise_identity(aa_seqs) * 100:.1f}% |",
         f"| 3-mer AA k-mer coverage | {kmer_diversity(aa_seqs) * 100:.2f}% |",
         "",
         "## By Prefix",
         "",
-        "| Prefix | n | terminated | mean stability | mean AA length |",
+        f"| Prefix | n | terminated | mean {stability_label} | mean AA length |",
         "|---|---:|---:|---:|---:|",
     ]
     for key in PREFIXES:
         group = [r for r in rows if r["prefix_id"] == key]
         if not group:
             continue
-        g_stab = [float(r.get("stability_prob", 0.0)) for r in group]
+        g_stab = [float(r[stability_key]) for r in group if stability_key in r]
         g_len = [int(r.get("n_aa", 0)) for r in group]
         g_term = sum(1 for r in group if r["terminated"])
+        mean_stability = np.mean(g_stab) if g_stab else float("nan")
         lines.append(
-            f"| {key} | {len(group)} | {g_term} | {np.mean(g_stab):.3f} | {np.mean(g_len):.1f} |"
+            f"| {key} | {len(group)} | {g_term} | {mean_stability:.3f} | {np.mean(g_len):.1f} |"
         )
 
     if esm_rows:
@@ -197,6 +209,10 @@ def _write_report(
         "## Interpretation",
         "",
         "This experiment tests whether a fold-family prompt can bias CodonLM toward more structured continuations without retraining. It should be compared against the BOS-only and critic-filtered design-loop reports. If ESMFold remains low, the result supports the broader structured-generation finding: sampling controls alter sequence statistics and critic scores, but do not provide a true structural training signal.",
+        *(
+            ["The stability column is a model prediction of the MegaScale assay ΔG target, not a measured value for these generated sequences."]
+            if stability_is_regression else []
+        ),
         "",
     ]
     path.write_text("\n".join(lines))
@@ -223,6 +239,11 @@ def main() -> None:
 
     codon_model, itos, stoi = load_codon_lm(args.run_dir, device)
     critic_model, tokenizer, task_dims = load_critic(args.critic_ckpt, args.critic_cfg, device)
+    stability_key = (
+        "stability_megascale_delta_g_pred_kcal_mol"
+        if "stability" in critic_model.regression_tasks
+        else "stability_prob"
+    )
 
     rows: list[dict] = []
     start = time.time()
@@ -262,11 +283,16 @@ def main() -> None:
             seq_id += 1
             print(f"[prefix] {prefix_id} {local_idx + 1}/{args.sequences_per_prefix}: "
                   f"len={row['n_aa']} terminated={terminated} "
-                  f"stability={row.get('stability_prob', 0):.3f}")
+                  f"{('predicted MegaScale ΔG target (kcal/mol)' if 'stability_megascale_delta_g_pred_kcal_mol' in row else 'stability probability')}="
+                  f"{row.get('stability_megascale_delta_g_pred_kcal_mol', row.get('stability_prob', float('nan'))):.3f}")
 
     esm_rows: list[dict] = []
     if args.esm_fold_top > 0:
-        top_rows = sorted(rows, key=lambda r: float(r.get("stability_prob", 0.0)), reverse=True)[:args.esm_fold_top]
+        top_rows = sorted(
+            (row for row in rows if stability_key in row),
+            key=lambda row: float(row[stability_key]),
+            reverse=True,
+        )[:args.esm_fold_top]
         for rank, row in enumerate(top_rows, 1):
             fold = esm_fold(row["aa_seq"])
             if not fold:
