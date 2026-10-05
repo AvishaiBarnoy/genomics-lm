@@ -15,15 +15,44 @@ binds the selected file to the manifest's `val_tokens` artifact.
 
 ## Status
 
-Interim seed-1337 result recorded on 2026-07-25. The first corrected primary
-genome-holdout model completed training, but it did not pass the predeclared
-intrinsic promotion gate. Expensive downstream and generation claims are paused
-pending diagnosis.
+The locked batch-64, LR `1.5e-4` basic configuration passed the frozen-test
+trigram gate in both seeds: PPL `39.133` (1337) and `39.492` (2027), versus
+trigram `42.037`. See [Perplexity Baselines](PERPLEXITY_BASELINES.md) and the
+[replication record](benchmarks/corrected_lr15_replication.json) for the current
+results and checkpoint identities.
 
-This is not the final multi-seed primary result. Genome seed 2027 and the separately
-labelled genus-holdout run have not yet been trained.
+The single-seed evaluation below is retained as historical evidence for the earlier
+training configuration; its failed promotion decision was superseded by the locked
+replicated configuration.
 
-## Checkpoints
+## Reproducible multi-seed check-up
+
+The command below fits unigram, bigram, and separator-aware trigram baselines once
+from the manifest's training tokens, then evaluates each explicitly selected
+checkpoint against that same frozen test artifact:
+
+```bash
+python -m scripts.evaluate_primary_models \
+  --manifest data/processed/corrected/corrected-codonlm-v1/genome/manifest.json \
+  --checkpoint seed1337=runs/corrected-codonlm-v1-batch64-lr-ablation-lr_1_5e4/checkpoints/best.pt \
+  --checkpoint seed2027=runs/corrected-codonlm-v1-batch64-lr15-seed2027/checkpoints/best.pt \
+  --output-dir reports/corrected-primary-eval-2026-10-05
+```
+
+The output directory must be new. It contains a combined Markdown/JSON
+report and isolated benchmark receipts/results for each checkpoint. The report
+records the manifest, train/test/vocabulary and checkpoint hashes, evaluator
+revision, baseline settings, token-count agreement, and whether every input stayed
+unchanged through evaluation. Evaluation runs on CPU. Checkpoint selection remains
+explicit; the script does not infer `best.pt` versus `last.pt` for the user.
+
+To run one seed, pass one `--checkpoint NAME=PATH`. Add another only when its
+checkpoint is part of the already-authorized evaluation set; this command does not
+train or select new seeds.
+
+## Historical interim seed-1337 evaluation
+
+### Checkpoints
 
 | Checkpoint | Epoch | SHA-256 |
 | --- | ---: | --- |
@@ -34,7 +63,7 @@ Training applied exactly 5,000 optimizer/scheduler steps and 252,384,380 non-PAD
 tokens with zero non-finite microbatches, aborted groups, or discarded finite
 microbatches. The smoothed validation selector chose epoch 4.
 
-## Frozen Test Results
+### Frozen Test Results
 
 All rows use the same 2,228,589 non-PAD tokens from the frozen genome-held-out test
 artifact. CodonLM perplexity is computed from ordinary unsmoothed cross-entropy;
@@ -53,7 +82,7 @@ The selected CodonLM beats unigram by 0.01847 nats/codon and 0.90 PPL, but trail
 bigram by 0.09676 nats/codon and trigram by 0.13819 nats/codon. Epoch 10 is worse
 than epoch 4 on unsmoothed test NLL, so the selected checkpoint remains correct.
 
-## Sequence Controls
+### Sequence Controls
 
 The selected epoch-4 checkpoint was evaluated on deterministic controls derived
 from the same frozen test artifact:
@@ -72,7 +101,7 @@ composition rather than sequential ordering. The synonymous control shows strong
 sensitivity to native codon usage. The protein-shuffle control is not an isolated
 protein-order test because its construction also chooses random synonymous codons.
 
-## Context Diagnosis
+### Context Diagnosis
 
 The manifest-bound context sweep passed the independently reconstructed causal and
 separator-mask audit. Resetting trigram history after `<SEP>` did not change its
@@ -111,7 +140,7 @@ identify a separate grammar weakness. Windows containing chunk continuations are
 not worse than other windows (`47.42` versus `48.87` PPL), so chunk continuation is
 not the immediate failure mode.
 
-## Decision
+### Historical Decision
 
 The Phase 3 promotion criterion requires CodonLM to outperform the best simple
 intrinsic baseline on identical held-out tokens. Seed 1337 fails that criterion.
