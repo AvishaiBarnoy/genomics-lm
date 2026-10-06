@@ -1,0 +1,292 @@
+{
+  "schema_version": 1,
+  "dataset_id": "corrected-protein-critic-v2",
+  "checkpoint": {
+    "path": "runs/corrected-protein-critic-v1-b2e32-seed1337/checkpoints/best_critic.pt",
+    "sha256": "37467f1a6da8f09cddbb7d36dde0c3d7e0379d3f072105106e727d0ba55dfde0"
+  },
+  "manifest_sha256": "44dd91ba9f5464de4de1dfa795b11a58591bed719cb6f0b7879ba63405ea900f",
+  "split_sha256": {
+    "train": "aa822464f8120a38b6b4db2e42dad7dc80685f082d4a1b88b08919d68fc9d1a5",
+    "validation": "5e0c19092fef982ecad8e10776c9c15c5a4d79d1a3316e6561998fb7a743db47",
+    "test": "4f5afe6cad055f478946842ec002f499bb2faa77f128811d6fd3071a33745ae4"
+  },
+  "task_vocabs_sha256": "f167bd57a0a7265ffd737a7efe7fd4a4b68ba9c49351b6456fd9e4958c09c0ae",
+  "critic_inference_config": {
+    "block_size": 512,
+    "n_layer": 8,
+    "n_head": 8,
+    "n_embd": 256,
+    "pooling": "attention",
+    "bidirectional": true
+  },
+  "critic_device": "cpu",
+  "protocol": {
+    "selection_split": "validation",
+    "xgboost_fit_split": "train_only",
+    "final_split": "test_once",
+    "xgboost_selection_grid": [
+      {
+        "max_depth": 2,
+        "n_estimators": 50
+      },
+      {
+        "max_depth": 3,
+        "n_estimators": 100
+      }
+    ],
+    "bootstrap_unit": "protein_cluster",
+    "raw_features": "log_length, amino-acid composition, normalized dipeptide and tripeptide frequencies",
+    "stability_additional_features": "mean Kyte-Doolittle hydropathy, net charge/residue, aromatic fraction, aliphatic fraction, cysteine fraction"
+  },
+  "tasks": {
+    "pfam": {
+      "raw_sequence": {
+        "selected_params": {
+          "max_depth": 3,
+          "n_estimators": 100
+        },
+        "n_train_labelled": 4204,
+        "n_validation_labelled": 447,
+        "n_test_labelled": 473,
+        "n_test_clusters": 442,
+        "validation_selection_metric": "balanced_accuracy_maximized",
+        "selected_validation_score": 0.47589716905945406,
+        "test_metric": "balanced_accuracy",
+        "test_score": 0.4715924584291637,
+        "test_score_95pct_cluster_bootstrap_ci": {
+          "status": "estimated",
+          "n_clusters": 442,
+          "lower": 0.4233522918143372,
+          "upper": 0.5161359608980338,
+          "valid_replicates": 1000
+        },
+        "test_improvement_over_critic": 0.1698195379471929,
+        "test_improvement_over_critic_95pct_paired_cluster_bootstrap_ci": {
+          "status": "estimated",
+          "n_clusters": 442,
+          "lower": 0.11822309733845678,
+          "upper": 0.22410912912846542,
+          "valid_replicates": 1000
+        },
+        "test_macro_f1": 0.47326756931759456
+      },
+      "frozen_critic_embedding": {
+        "selected_params": {
+          "max_depth": 3,
+          "n_estimators": 100
+        },
+        "n_train_labelled": 4204,
+        "n_validation_labelled": 447,
+        "n_test_labelled": 473,
+        "n_test_clusters": 442,
+        "validation_selection_metric": "balanced_accuracy_maximized",
+        "selected_validation_score": 0.3905941238853272,
+        "test_metric": "balanced_accuracy",
+        "test_score": 0.37808332468405187,
+        "test_score_95pct_cluster_bootstrap_ci": {
+          "status": "estimated",
+          "n_clusters": 442,
+          "lower": 0.32811976533181264,
+          "upper": 0.4234170582826106,
+          "valid_replicates": 1000
+        },
+        "test_improvement_over_critic": 0.07631040420208107,
+        "test_improvement_over_critic_95pct_paired_cluster_bootstrap_ci": {
+          "status": "estimated",
+          "n_clusters": 442,
+          "lower": 0.035086159253283435,
+          "upper": 0.11979920277342168,
+          "valid_replicates": 1000
+        },
+        "test_macro_f1": 0.36657373827557654
+      },
+      "protein_critic": {
+        "checkpoint_sha256": "37467f1a6da8f09cddbb7d36dde0c3d7e0379d3f072105106e727d0ba55dfde0",
+        "metrics": {
+          "validation": {
+            "n_labelled": 447,
+            "balanced_accuracy": 0.30899899448938883,
+            "macro_f1": 0.26072052179428945
+          },
+          "test": {
+            "n_labelled": 473,
+            "balanced_accuracy": 0.3017729204819708,
+            "macro_f1": 0.2670396758846817,
+            "balanced_accuracy_95pct_cluster_bootstrap_ci": {
+              "status": "estimated",
+              "n_clusters": 442,
+              "lower": 0.261452309638361,
+              "upper": 0.3409647868238831,
+              "valid_replicates": 1000
+            }
+          }
+        }
+      }
+    },
+    "ec": {
+      "raw_sequence": {
+        "selected_params": {
+          "max_depth": 3,
+          "n_estimators": 100
+        },
+        "n_train_labelled": 8551,
+        "n_validation_labelled": 523,
+        "n_test_labelled": 517,
+        "n_test_clusters": 472,
+        "validation_selection_metric": "balanced_accuracy_maximized",
+        "selected_validation_score": 0.18787144436815542,
+        "test_metric": "balanced_accuracy",
+        "test_score": 0.21127907342712365,
+        "test_score_95pct_cluster_bootstrap_ci": {
+          "status": "estimated",
+          "n_clusters": 472,
+          "lower": 0.17814399043616286,
+          "upper": 0.25228823200424727,
+          "valid_replicates": 1000
+        },
+        "test_improvement_over_critic": -0.02675519646060673,
+        "test_improvement_over_critic_95pct_paired_cluster_bootstrap_ci": {
+          "status": "estimated",
+          "n_clusters": 472,
+          "lower": -0.08811258770948424,
+          "upper": 0.031011812082644568,
+          "valid_replicates": 1000
+        },
+        "test_macro_f1": 0.205397514222574
+      },
+      "frozen_critic_embedding": {
+        "selected_params": {
+          "max_depth": 3,
+          "n_estimators": 100
+        },
+        "n_train_labelled": 8551,
+        "n_validation_labelled": 523,
+        "n_test_labelled": 517,
+        "n_test_clusters": 472,
+        "validation_selection_metric": "balanced_accuracy_maximized",
+        "selected_validation_score": 0.23831797873893992,
+        "test_metric": "balanced_accuracy",
+        "test_score": 0.2603371236134903,
+        "test_score_95pct_cluster_bootstrap_ci": {
+          "status": "estimated",
+          "n_clusters": 472,
+          "lower": 0.21311179723672682,
+          "upper": 0.31000891531010866,
+          "valid_replicates": 1000
+        },
+        "test_improvement_over_critic": 0.022302853725759936,
+        "test_improvement_over_critic_95pct_paired_cluster_bootstrap_ci": {
+          "status": "estimated",
+          "n_clusters": 472,
+          "lower": -0.017245644553303085,
+          "upper": 0.056796152420341875,
+          "valid_replicates": 1000
+        },
+        "test_macro_f1": 0.2627050153851111
+      },
+      "protein_critic": {
+        "checkpoint_sha256": "37467f1a6da8f09cddbb7d36dde0c3d7e0379d3f072105106e727d0ba55dfde0",
+        "metrics": {
+          "validation": {
+            "n_labelled": 523,
+            "balanced_accuracy": 0.2190029001911127,
+            "macro_f1": 0.20931037409579153
+          },
+          "test": {
+            "n_labelled": 517,
+            "balanced_accuracy": 0.23803426988773038,
+            "macro_f1": 0.22326246963449928,
+            "balanced_accuracy_95pct_cluster_bootstrap_ci": {
+              "status": "estimated",
+              "n_clusters": 472,
+              "lower": 0.18825784651871394,
+              "upper": 0.2897516669711363,
+              "valid_replicates": 1000
+            }
+          }
+        }
+      }
+    },
+    "stability": {
+      "raw_sequence": {
+        "selected_params": {
+          "max_depth": 2,
+          "n_estimators": 50
+        },
+        "n_train_labelled": 1122,
+        "n_validation_labelled": 80,
+        "n_test_labelled": 62,
+        "n_test_clusters": 1,
+        "validation_selection_metric": "mae_minimized",
+        "selected_validation_score": 1.0933091553566752,
+        "test_metric": "mae",
+        "test_score": 0.695270807449766,
+        "test_score_95pct_cluster_bootstrap_ci": {
+          "status": "not_estimable_fewer_than_two_clusters",
+          "n_clusters": 1,
+          "lower": null,
+          "upper": null
+        },
+        "test_improvement_over_critic": 0.06654264875264593,
+        "test_improvement_over_critic_95pct_paired_cluster_bootstrap_ci": {
+          "status": "not_estimable_fewer_than_two_clusters",
+          "n_clusters": 1,
+          "lower": null,
+          "upper": null
+        },
+        "test_macro_f1": null
+      },
+      "frozen_critic_embedding": {
+        "selected_params": {
+          "max_depth": 2,
+          "n_estimators": 50
+        },
+        "n_train_labelled": 1122,
+        "n_validation_labelled": 80,
+        "n_test_labelled": 62,
+        "n_test_clusters": 1,
+        "validation_selection_metric": "mae_minimized",
+        "selected_validation_score": 1.1293655668962335,
+        "test_metric": "mae",
+        "test_score": 0.9775928495303136,
+        "test_score_95pct_cluster_bootstrap_ci": {
+          "status": "not_estimable_fewer_than_two_clusters",
+          "n_clusters": 1,
+          "lower": null,
+          "upper": null
+        },
+        "test_improvement_over_critic": -0.21577939332790164,
+        "test_improvement_over_critic_95pct_paired_cluster_bootstrap_ci": {
+          "status": "not_estimable_fewer_than_two_clusters",
+          "n_clusters": 1,
+          "lower": null,
+          "upper": null
+        },
+        "test_macro_f1": null
+      },
+      "protein_critic": {
+        "checkpoint_sha256": "37467f1a6da8f09cddbb7d36dde0c3d7e0379d3f072105106e727d0ba55dfde0",
+        "metrics": {
+          "validation": {
+            "n_labelled": 80,
+            "mae": 1.0923950560948572,
+            "macro_f1": null
+          },
+          "test": {
+            "n_labelled": 62,
+            "mae": 0.7618134562024119,
+            "macro_f1": null,
+            "mae_95pct_cluster_bootstrap_ci": {
+              "status": "not_estimable_fewer_than_two_clusters",
+              "n_clusters": 1,
+              "lower": null,
+              "upper": null
+            }
+          }
+        }
+      }
+    }
+  },
+  "xgboost_version": "3.2.0"
+}
