@@ -17,6 +17,14 @@ aliphatic fraction, and cysteine fraction. Raw features and critic inputs use
 the same maximum sequence window (`block_size - 2` residues); labels and
 features are never used to build the split.
 
+The hydropathy feature uses the Kyte-Doolittle scale ([Kyte & Doolittle,
+1982](https://doi.org/10.1016/0022-2836(82)90515-0); [ExPASy ProtScale
+table](https://web.expasy.org/protscale/pscale/Hphob.Doolittle.html)). It is a
+sequence hydropathicity index, not a measured folding free energy or stability
+value. The charge descriptor is deliberately approximate: K/R contribute +1,
+D/E contribute -1, and other residues contribute zero; it is not pH-dependent
+and omits termini and histidine.
+
 The fixed hyperparameter grid is selected on validation only: maximum tree
 depth 3 or 6 and 200 or 500 estimators, with learning rate 0.05, row and column
 subsampling 0.8, L2 regularization 1.0, one CPU worker, and a fixed seed.
@@ -25,6 +33,17 @@ minimizes MAE. After selection, XGBoost is refit on labelled train plus
 validation examples, then evaluated on test once. Test comparisons report
 balanced accuracy and macro-F1 for classification or MAE for stability, with
 95% bootstrap intervals resampling protein clusters.
+
+An interval is reported only when at least two independent labelled test
+clusters are available. In the current corrected-v2 split, stability has 62
+labelled test proteins but just one cluster, so its cluster-bootstrap and
+paired-improvement intervals are explicitly marked not estimable. The point
+metrics remain descriptive for that held-out cluster and do not establish
+generalization to new stability clusters.
+
+The critic inference device defaults to `auto` (CUDA, then MPS, then CPU) and
+can be set explicitly with `--device`. XGBoost remains CPU-based for this
+benchmark.
 
 Example (after placing the exact best-checkpoint file locally and installing
 the optional XGBoost dependency):

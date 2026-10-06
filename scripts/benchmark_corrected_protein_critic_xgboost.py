@@ -33,6 +33,8 @@ HYDROPATHY = {
     "L": 3.8, "K": -3.9, "M": 1.9, "F": 2.8, "P": -1.6,
     "S": -0.8, "T": -0.7, "W": -0.9, "Y": -1.3, "V": 4.2,
 }
+# Kyte & Doolittle hydropathicity scale (J. Mol. Biol. 157:105-132, 1982),
+# also listed by ExPASy ProtScale: https://web.expasy.org/protscale/pscale/Hphob.Doolittle.html
 
 
 def sha256(path: Path) -> str:
@@ -49,15 +51,20 @@ def read_jsonl(path: Path) -> list[dict]:
 
 
 def verify_manifest(manifest_path: Path, split_paths: dict[str, Path], vocab_path: Path):
-    manifest = json.loads(manifest_path.read_text())
+    manifest_bytes = manifest_path.read_bytes()
+    manifest = json.loads(manifest_bytes)
     if manifest.get("protocol") != "mmseqs_cluster_held_out_multitask_protein_critic":
         raise ValueError("Unexpected corrected-critic dataset protocol")
+    verified_hashes = {}
     for role, path in {**split_paths, "task_vocabs": vocab_path}.items():
         key = "validation" if role == "validation" else role
         expected = manifest["artifacts"][key]["sha256"]
-        if sha256(path) != expected:
+        actual = sha256(path)
+        if actual != expected:
             raise ValueError(f"{role} artifact SHA-256 differs from dataset manifest")
-    return manifest
+        verified_hashes[role] = actual
+    manifest_hash = hashlib.sha256(manifest_bytes).hexdigest()
+    return manifest, verified_hashes, manifest_hash
 
 
 def raw_features(records: list[dict], stability: bool, max_residues: int) -> np.ndarray:
@@ -113,16 +120,31 @@ def labels(records: list[dict], task: str) -> np.ndarray:
     return np.asarray([-1 if value is None else int(value) for value in values], dtype=int)
 
 
+INFERENCE_CONFIG_KEYS = ("block_size", "n_layer", "n_head", "n_embd", "pooling", "bidirectional")
+
+
 def load_checkpoint(path: Path, cfg: dict, vocabs: dict, tokenizer: ProteinTokenizer, device):
     state = torch.load(path, map_location="cpu", weights_only=False)
     if not isinstance(state, dict) or state.get("dataset_provenance", {}).get("status") != "manifest_verified":
         raise ValueError("Checkpoint lacks manifest-verified dataset provenance")
+    checkpoint_cfg = state.get("cfg")
+    if not isinstance(checkpoint_cfg, dict):
+        raise ValueError("Checkpoint is missing its saved model configuration")
+    for key in INFERENCE_CONFIG_KEYS:
+        if key not in checkpoint_cfg:
+            raise ValueError(f"Checkpoint config is missing inference setting {key}")
+        if cfg.get(key) != checkpoint_cfg[key]:
+            raise ValueError(
+                f"Configured {key}={cfg.get(key)!r} differs from checkpoint value "
+                f"{checkpoint_cfg[key]!r}"
+            )
     dims = {"family": len(vocabs["pfam"]), "function": len(vocabs["ec"]), "stability": 1}
     model_cfg = ProteinClassifierConfig(
-        vocab_size=len(tokenizer.vocab), block_size=cfg["block_size"],
-        n_layer=cfg["n_layer"], n_head=cfg["n_head"], n_embd=cfg["n_embd"],
-        dropout=0.0, num_classes=0, pooling=cfg["pooling"],
-        bidirectional=cfg["bidirectional"],
+        vocab_size=len(tokenizer.vocab), block_size=checkpoint_cfg["block_size"],
+        n_layer=checkpoint_cfg["n_layer"], n_head=checkpoint_cfg["n_head"],
+        n_embd=checkpoint_cfg["n_embd"], dropout=0.0, num_classes=0,
+        pooling=checkpoint_cfg["pooling"],
+        bidirectional=checkpoint_cfg["bidirectional"],
     )
     model = MultiTaskProteinClassifier(model_cfg, dims)
     weights = state.get("model_state_dict", state)
@@ -209,6 +231,13 @@ def tune_xgb(task, x_train, y_train, x_val, y_val, seed):
 
 def bootstrap_ci(task, y, pred, groups, seed, replicates=1000):
     unique = np.unique(groups)
+    if unique.size < 2:
+        return {
+            "status": "not_estimable_fewer_than_two_clusters",
+            "n_clusters": int(unique.size),
+            "lower": None,
+            "upper": None,
+        }
     rng = np.random.default_rng(seed)
     values = []
     for _ in range(replicates):
@@ -219,13 +248,31 @@ def bootstrap_ci(task, y, pred, groups, seed, replicates=1000):
             continue
         values.append(metric(task, sample_y, sample_pred))
     if not values:
-        return [None, None]
-    return [float(np.quantile(values, 0.025)), float(np.quantile(values, 0.975))]
+        return {
+            "status": "not_estimable_no_valid_replicates",
+            "n_clusters": int(unique.size),
+            "lower": None,
+            "upper": None,
+        }
+    return {
+        "status": "estimated",
+        "n_clusters": int(unique.size),
+        "lower": float(np.quantile(values, 0.025)),
+        "upper": float(np.quantile(values, 0.975)),
+        "valid_replicates": len(values),
+    }
 
 
 def paired_improvement_ci(task, y, candidate, critic, groups, seed, replicates=1000):
     """Positive means candidate is better (higher balanced accuracy/lower MAE)."""
     unique = np.unique(groups)
+    if unique.size < 2:
+        return {
+            "status": "not_estimable_fewer_than_two_clusters",
+            "n_clusters": int(unique.size),
+            "lower": None,
+            "upper": None,
+        }
     rng = np.random.default_rng(seed)
     values = []
     for _ in range(replicates):
@@ -237,8 +284,33 @@ def paired_improvement_ci(task, y, candidate, critic, groups, seed, replicates=1
         delta = metric(task, sample_y, candidate[indices]) - metric(task, sample_y, critic[indices])
         values.append(-delta if task == "stability" else delta)
     if not values:
-        return [None, None]
-    return [float(np.quantile(values, 0.025)), float(np.quantile(values, 0.975))]
+        return {
+            "status": "not_estimable_no_valid_replicates",
+            "n_clusters": int(unique.size),
+            "lower": None,
+            "upper": None,
+        }
+    return {
+        "status": "estimated",
+        "n_clusters": int(unique.size),
+        "lower": float(np.quantile(values, 0.025)),
+        "upper": float(np.quantile(values, 0.975)),
+        "valid_replicates": len(values),
+    }
+
+
+def resolve_device(name: str) -> torch.device:
+    if name == "auto":
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        if torch.backends.mps.is_available():
+            return torch.device("mps")
+        return torch.device("cpu")
+    if name == "cuda" and not torch.cuda.is_available():
+        raise ValueError("CUDA was requested but is not available")
+    if name == "mps" and not torch.backends.mps.is_available():
+        raise ValueError("MPS was requested but is not available")
+    return torch.device(name)
 
 
 def main():
@@ -249,7 +321,8 @@ def main():
                         help="Training report that records the selected best checkpoint SHA-256")
     parser.add_argument("--out", type=Path, default=Path("docs/benchmarks/corrected_protein_critic_xgboost_v1.json"))
     parser.add_argument("--batch-size", type=int, default=8)
-    parser.add_argument("--device", choices=("cpu", "mps", "cuda"), default="cpu")
+    parser.add_argument("--device", choices=("auto", "cpu", "mps", "cuda"), default="auto",
+                        help="Device for frozen ProteinCritic inference; XGBoost remains CPU-based")
     parser.add_argument("--seed", type=int, default=1337)
     parser.add_argument("--bootstrap-replicates", type=int, default=1000)
     args = parser.parse_args()
@@ -262,7 +335,8 @@ def main():
     paths = {split: base / f"{name}.jsonl" for split, name in
              (("train", "train"), ("validation", "validation"), ("test", "test"))}
     vocab_path = Path(cfg["task_vocabs"])
-    manifest = verify_manifest(Path(cfg["dataset_manifest"]), paths, vocab_path)
+    manifest_path = Path(cfg["dataset_manifest"])
+    manifest, verified_hashes, manifest_hash = verify_manifest(manifest_path, paths, vocab_path)
     if not args.checkpoint.is_file():
         raise FileNotFoundError(args.checkpoint)
     report = json.loads(args.critic_report.read_text())
@@ -274,18 +348,21 @@ def main():
         raise ValueError("Selected checkpoint is not the report's frozen best checkpoint")
     tokenizer = ProteinTokenizer()
     vocabs = json.loads(vocab_path.read_text())
-    device = torch.device(args.device)
+    device = resolve_device(args.device)
     model, checkpoint = load_checkpoint(args.checkpoint, cfg, vocabs, tokenizer, device)
     expected_checkpoint = checkpoint.get("checkpoint_sha256")
     if expected_checkpoint and expected_checkpoint != checkpoint_hash:
         raise ValueError("Checkpoint's embedded SHA-256 does not match the selected file")
-    for role, path in paths.items():
+    provenance = checkpoint["dataset_provenance"]
+    if provenance.get("manifest", {}).get("sha256") != manifest_hash:
+        raise ValueError("Dataset manifest SHA-256 differs from checkpoint provenance")
+    for role in (*paths.keys(), "task_vocabs"):
         key = "validation" if role == "validation" else role
-        if checkpoint["dataset_provenance"]["artifacts"][key]["sha256"] != manifest["artifacts"][key]["sha256"]:
+        if provenance["artifacts"][key]["sha256"] != verified_hashes[role]:
             raise ValueError(f"Checkpoint provenance differs for {role} split")
 
     records = {role: read_jsonl(path) for role, path in paths.items()}
-    max_residues = cfg["block_size"] - 2
+    max_residues = model.config.block_size - 2
     raw = {role: raw_features(rows, stability=False, max_residues=max_residues)
            for role, rows in records.items()}
     raw_stability = {role: raw_features(rows, stability=True, max_residues=max_residues)
@@ -298,7 +375,12 @@ def main():
     }
     results = {"schema_version": 1, "dataset_id": cfg["critic_training_contract"]["dataset_id"],
                "checkpoint": {"path": str(args.checkpoint), "sha256": checkpoint_hash},
-               "split_sha256": {role: sha256(path) for role, path in paths.items()},
+               "manifest_sha256": manifest_hash,
+               "split_sha256": {role: verified_hashes[role] for role in paths},
+               "task_vocabs_sha256": verified_hashes["task_vocabs"],
+               "critic_inference_config": {key: checkpoint["cfg"][key]
+                                           for key in INFERENCE_CONFIG_KEYS},
+               "critic_device": str(device),
                "protocol": {"selection_split": "validation", "final_split": "test_once",
                             "bootstrap_unit": "protein_cluster", "raw_features":
                             "log_length, amino-acid composition, normalized dipeptide and tripeptide frequencies",
@@ -344,6 +426,7 @@ def main():
                 "n_train_labelled": train_count,
                 "n_validation_labelled": validation_count,
                 "n_test_labelled": int(mask.sum()),
+                "n_test_clusters": int(np.unique(test_groups).size),
                 "validation_selection_metric": "mae_minimized" if task == "stability" else "balanced_accuracy_maximized",
                 "selected_validation_score": validation_score,
                 "test_metric": "mae" if task == "stability" else "balanced_accuracy",
