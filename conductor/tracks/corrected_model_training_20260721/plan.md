@@ -7,11 +7,13 @@ baseline on the frozen test set in two seeds (PPL `39.133` and `39.492` versus
 `42.037`); the previous seed-1337 result and failed pilot/ablation results below
 are historical, not the current primary result. The separate genus-held-out primary
 run has not been trained. The corrected ProteinCritic's report-selected checkpoint
-is present and hash-verified locally; its XGBoost benchmark implementation is
-merged, but benchmark execution awaits a working environment with the optional
-`xgboost` dependency. The project Conda environment has working scikit-learn but
-does not currently have XGBoost installed. Generation termination/replay and
-biological representation claims remain separately gated as described below.
+is present and hash-verified locally. The matched XGBoost comparison completed
+and was merged with its versioned metrics and protocol in
+`docs/benchmarks/corrected_protein_critic_xgboost_v1.json` and
+`docs/benchmarks/corrected_protein_critic_xgboost_protocol_v1.md` (PR #184).
+The optional XGBoost package was used from a temporary environment; the project
+Conda environment remains unchanged. Generation termination/replay and biological
+representation claims remain separately gated as described below.
 
 ## Phase 0: Freeze Primary Contracts
 
@@ -212,26 +214,29 @@ corrected report passes its promotion criteria. Otherwise pause and audit.
   class weighting: Pfam balanced accuracy/macro-F1 fell from 0.3090/0.2607 to
   0.2846/0.2484, although EC improved from 0.2190/0.2093 to 0.2419/0.2288 and
   stability MAE improved from 1.0924 to 1.0486. The test split remains sealed.
-- [ ] Compare the corrected critic with XGBoost on the identical frozen splits.
+- [x] Compare the corrected critic with XGBoost on the identical frozen splits.
   Pfam and EC controls use training-fitted amino-acid composition, sequence length,
   and dipeptide/3-mer features; stability additionally uses declared
   physicochemical descriptors. Select XGBoost hyperparameters on validation only
   and report the same class-aware or regression metrics and confidence intervals.
-- [ ] Run separate XGBoost probes on frozen ProteinCritic embeddings and raw
+- [x] Run separate XGBoost probes on frozen ProteinCritic embeddings and raw
   sequence features. Treat improved embedding-probe performance as representation
   evidence only when it also exceeds the matched raw-feature XGBoost control.
-- The benchmark script and protocol are merged (`PR #178` and `PR #179`), and the
-  exact report-selected best checkpoint is present locally with the manifest SHA.
-  Execution is currently blocked only because `xgboost` is not installed in the
-  project Conda environment (which does have working PyTorch and scikit-learn).
-  Keep the comparison unchecked until the benchmark completes and writes its
-  versioned report; do not replace the best checkpoint with `last`.
+- The completed comparison is documented in PR #184 and its versioned report.
+  XGBoost exceeded the frozen critic on PFAM using both raw sequence features
+  (balanced accuracy 0.4716 vs 0.3018; paired 95% cluster-bootstrap improvement
+  interval 0.1182–0.2241) and critic embeddings (0.3781; interval 0.0351–0.1198).
+  EC differences were inconclusive because the paired intervals included zero.
+  Stability results remain descriptive only: the 62 labelled test examples came
+  from one protein cluster, so a cluster-bootstrap interval was not estimable.
+  Keep this v2 split frozen and do not replace the selected best checkpoint with
+  `last`.
 - [ ] Version the passing critic checkpoint and bind it to its dataset, labels,
   architecture, and calibration artifacts.
 
 ### Stability scaffold-diversity follow-up (not a replacement for the v2 benchmark)
 
-- [ ] Keep the current v2 XGBoost-vs-Critic benchmark on its frozen split as the
+- [x] Keep the current v2 XGBoost-vs-Critic benchmark on its frozen split as the
   first controlled algorithm comparison. Do not silently add records to that split.
 - [ ] Audit additional experimental stability sources for raw measurement
   semantics, protein/domain identifiers, assay conditions, and reuse permissions.
