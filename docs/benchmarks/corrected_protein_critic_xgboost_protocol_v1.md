@@ -29,10 +29,20 @@ The fixed hyperparameter grid is selected on validation only: maximum tree
 depth 3 or 6 and 200 or 500 estimators, with learning rate 0.05, row and column
 subsampling 0.8, L2 regularization 1.0, one CPU worker, and a fixed seed.
 Classification selection maximizes balanced accuracy; stability selection
-minimizes MAE. After selection, XGBoost is refit on labelled train plus
-validation examples, then evaluated on test once. Test comparisons report
+minimizes MAE. The selected estimator remains fitted on labelled training
+examples only and is evaluated on test once. This intentionally matches the
+ProteinCritic's training-data boundary; validation labels select hyperparameters
+but are not added to XGBoost's fit set. A larger-data/scaling comparison should be
+a separately named experiment with a common expanded training set for both models.
+Test comparisons report
 balanced accuracy and macro-F1 for classification or MAE for stability, with
 95% bootstrap intervals resampling protein clusters.
+
+For Pfam and EC, null task labels are excluded from that task's fit and scoring;
+they are not mapped to an `unknown` class. These are closed-set classifiers over
+the frozen eligible vocabularies (43 Pfam first-domain labels and seven top-level
+EC labels). They cannot reject an unseen family/function without a separately
+designed open-set calibration and evaluation.
 
 An interval is reported only when at least two independent labelled test
 clusters are available. In the current corrected-v2 split, stability has 62
@@ -50,7 +60,7 @@ the optional XGBoost dependency):
 
 ```sh
 python scripts/benchmark_corrected_protein_critic_xgboost.py \
-  --checkpoint runs/corrected-protein-critic-v1-seed1337/checkpoints/best_critic.pt \
+  --checkpoint runs/corrected-protein-critic-v1-b2e32-seed1337/checkpoints/best_critic.pt \
   --out docs/benchmarks/corrected_protein_critic_xgboost_v1.json
 ```
 
