@@ -229,6 +229,31 @@ corrected report passes its promotion criteria. Otherwise pause and audit.
 - [ ] Version the passing critic checkpoint and bind it to its dataset, labels,
   architecture, and calibration artifacts.
 
+### Stability scaffold-diversity follow-up (not a replacement for the v2 benchmark)
+
+- [ ] Keep the current v2 XGBoost-vs-Critic benchmark on its frozen split as the
+  first controlled algorithm comparison. Do not silently add records to that split.
+- [ ] Audit additional experimental stability sources for raw measurement
+  semantics, protein/domain identifiers, assay conditions, and reuse permissions.
+  The source release to inspect includes the [Mega-scale experimental analysis
+  data tables](https://zenodo.org/records/7992926).
+  The current `dG_extdG_data_Fig1.csv` source contributes only 10 distinct PDB IDs
+  to the present stability task. A separate local Fig. 5 table has 104 PDB IDs,
+  but contains derived per-site substitution quantities rather than the same
+  protein-level `deltaG` target; do not treat it as interchangeable labels without
+  validating its exact target semantics.
+- [ ] Build a separately versioned stability dataset with broader parent-domain
+  coverage. Keep all variants from a parent domain together and cluster related
+  domains before splitting. Freeze multiple independent validation and test
+  scaffold groups before training.
+- [ ] Predeclare whether the endpoint is absolute folding `deltaG`, mutation
+  `delta-deltaG`, or a thresholded assay-specific foldability label. Do not mix
+  endpoints or equate structure-prediction confidence with experimental stability.
+- [ ] Train critic and XGBoost controls on the same expanded training examples and
+  evaluate the same held-out scaffold groups. Size the number of held-out groups
+  using a power/precision analysis; a large number of variants from one scaffold
+  does not substitute for scaffold diversity.
+
 Exit gate: the corrected critic is suitable for its declared ranking or calibrated-
 probability use. Until then, legacy critic outputs are exploratory only and cannot
 support promotion, stability, family, function, or guidance claims.
@@ -306,6 +331,41 @@ short-sequence collapse, or material primary-quality regression.
 Screening status: passed, but not promoted. Natural completion improves within the
 NLL gate and without forced stopping; the material length shift and poorly calibrated
 auxiliary classes require independent replay replication.
+
+### Follow-on: Natural-Termination Ablation Matrix (proposed; not yet run)
+
+Terminology guard: in the corrected raw-generation protocol, a hard cap is a maximum
+generation length. It truncates an unfinished sequence and is counted as a failure;
+it does **not** append a stop codon. The separate `require_terminal_stop` mode keeps
+sampling until a stop token is generated or the cap is reached. A decoder-forced
+terminal marker, if ever tested, must be reported as forced completion, never as a
+natural stop.
+
+Use a staged rather than full-factorial matrix, with identical frozen prompts,
+sample seeds, model checkpoint, and length-matched evaluation:
+
+- [ ] **Decode-only controls:** unrestricted raw decoding with full vocabulary and
+  no forced stop; a predeclared temperature/top-k sweep that keeps stop codons in
+  the sampling support; and a calibrated stop-logit/hazard intervention, optionally
+  gated by a validation-selected minimum length. Keep syntax/length-constrained or
+  forced-terminal output as engineering controls, not intrinsic model results.
+- [ ] **Token-loss intervention:** compare the standard objective with a small,
+  validation-selected terminal-stop-token loss-weight sweep. Track premature stops
+  as a co-primary guardrail so a higher stop rate cannot win by collapsing lengths.
+- [x] **Distance-to-stop auxiliary head:** screened once; intermediate distance
+  buckets were poorly calibrated and it did not improve natural stopping alone.
+- [ ] **Generated-state replay:** replicate the current hard-cap replay condition
+  with an independent training seed; retain the original seed as the anchor.
+- [ ] **Length-conditioned option:** only if the decode/loss/replay comparisons do
+  not meet the gate, prototype explicit target-length or stop-hazard conditioning
+  as a separately labelled training objective.
+
+Every candidate reports natural-stop, premature-stop, EOS, hard-cap and forced-stop
+rates separately, plus generated-length distributions, frozen-test NLL/PPL, and
+uncertainty. Compare termination and length distributions with held-out complete
+CDSs; do not select on test. Any forced completion remains outside the natural-stop
+acceptance metric. Freeze the matrix values and promotion thresholds before any
+additional training.
 
 ## Phase 7: Biophysical Shape-Guidance Ablation
 
