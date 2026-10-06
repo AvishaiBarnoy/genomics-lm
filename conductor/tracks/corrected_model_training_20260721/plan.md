@@ -2,12 +2,16 @@
 
 ## Status
 
-In progress, with the intrinsic gate paused for diagnosis. Dataset, evaluator,
-generation-protocol, MPS runtime, immutable primary-config, and bounded MPS pilot
-gates are complete. The genome seed-1337 primary run completed, but its unsmoothed
-test PPL `48.267` did not beat the trigram baseline `42.037`, and natural sequence
-was indistinguishable from the codon-order shuffle. Internal CodonLM extensions and
-the external ProteinCritic remain gated and cannot conceal this failure.
+In progress. The locked basic genome-held-out CodonLM now clears the trigram
+baseline on the frozen test set in two seeds (PPL `39.133` and `39.492` versus
+`42.037`); the previous seed-1337 result and failed pilot/ablation results below
+are historical, not the current primary result. The separate genus-held-out primary
+run has not been trained. The corrected ProteinCritic's report-selected checkpoint
+is present and hash-verified locally; its XGBoost benchmark implementation is
+merged, but benchmark execution awaits a working environment with the optional
+`xgboost` dependency. The project Conda environment has working scikit-learn but
+does not currently have XGBoost installed. Generation termination/replay and
+biological representation claims remain separately gated as described below.
 
 ## Phase 0: Freeze Primary Contracts
 
@@ -55,7 +59,7 @@ counter/provenance mismatch, or an unexplained loss anomaly.
 ## Phase 2: Train the Primary Basic Model
 
 - [x] Train the genome-held-out primary model at seed `1337`.
-- [ ] Train the identical genome-held-out primary model at seed `2027`.
+- [x] Train and evaluate the identical genome-held-out primary model at seed `2027`.
 - [ ] Train the separately labelled genus-held-out primary model from random
   initialization.
 - [ ] Verify matched architecture, objective, non-PAD exposure, and config identity
@@ -65,16 +69,19 @@ counter/provenance mismatch, or an unexplained loss anomaly.
 Exit gate: all primary runs finish without leakage, OOM, invalid update, counter
 mismatch, or provenance failure.
 
+The genus manifest assigns `Helicobacter` and `Streptomyces` to test and
+`Bacillus` and `Borreliella` to validation; those genera are excluded from the
+genus-run training split. The run itself remains pending, so these are split
+assignments, not completed generalization results.
+
 ## Phase 3: Evaluate and Decide on the Primary Model
 
-Interim seed-1337 intrinsic evaluation is recorded in
-`docs/CORRECTED_PRIMARY_INTRINSIC_EVALUATION.md`. It beats unigram but not bigram
-or trigram and therefore fails the promotion gate. Pause dependent downstream and
-generation evaluation. The mask audit passed; context ablation showed all useful
-gain saturating at four input tokens, with no gain from longer context and a paired
-`+0.13819` nats/token deficit to trigram. Run the predeclared regularization matrix
-before considering an architecture extension. The checklist remains open until all
-Phase 2 runs and matched evaluations are complete.
+The initial seed-1337 intrinsic result, recorded in
+`docs/CORRECTED_PRIMARY_INTRINSIC_EVALUATION.md`, failed the trigram gate. It was
+superseded by the matched batch-64/LR-`1.5e-4` primary condition below, which clears
+the trigram gate on frozen test data for both seeds. Earlier diagnostics and
+regularization/effective-batch experiments below are retained as history, not as
+the current primary result. The separate genus-held-out run remains outstanding.
 
 The four-condition regularization matrix is complete. At identical two-epoch
 exposure, the untied/no-smoothing/dropout-0.05 variant reached validation PPL
@@ -213,6 +220,12 @@ corrected report passes its promotion criteria. Otherwise pause and audit.
 - [ ] Run separate XGBoost probes on frozen ProteinCritic embeddings and raw
   sequence features. Treat improved embedding-probe performance as representation
   evidence only when it also exceeds the matched raw-feature XGBoost control.
+- The benchmark script and protocol are merged (`PR #178` and `PR #179`), and the
+  exact report-selected best checkpoint is present locally with the manifest SHA.
+  Execution is currently blocked only because `xgboost` is not installed in the
+  project Conda environment (which does have working PyTorch and scikit-learn).
+  Keep the comparison unchecked until the benchmark completes and writes its
+  versioned report; do not replace the best checkpoint with `last`.
 - [ ] Version the passing critic checkpoint and bind it to its dataset, labels,
   architecture, and calibration artifacts.
 
