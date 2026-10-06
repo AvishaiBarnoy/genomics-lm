@@ -15,6 +15,13 @@ mixture of uniform, BLOSUM-conservative, Grantham-radical, and ProteinLM-context
 decoys; select on validation and externally test what EBM energy represents before
 using it as a biological quality score.*
 
+- [ ] **Track: AdamW vs SGD Optimizer Ablation**
+*Link: [./tracks/optimizer_ablation_20261006/](./tracks/optimizer_ablation_20261006/)*
+*Summary: Proposed controlled optimizer comparison for next-codon training; keep
+the locked AdamW baseline and separate the SGD/RLVR paper's motivation from direct
+evidence. Training waits behind the genus and corrected critic benchmark readiness
+gates.*
+
 - [x] **Track: Shared Training Run Lifecycle**
 *Link: [./tracks/shared_training_run_lifecycle_20260805/](./tracks/shared_training_run_lifecycle_20260805/)*
 *Summary: Centralize collision-safe run allocation, locking, resume lineage and
