@@ -381,7 +381,8 @@ def main():
                "critic_inference_config": {key: checkpoint["cfg"][key]
                                            for key in INFERENCE_CONFIG_KEYS},
                "critic_device": str(device),
-               "protocol": {"selection_split": "validation", "final_split": "test_once",
+               "protocol": {"selection_split": "validation", "xgboost_fit_split": "train_only",
+                            "final_split": "test_once",
                             "bootstrap_unit": "protein_cluster", "raw_features":
                             "log_length, amino-acid composition, normalized dipeptide and tripeptide frequencies",
                             "stability_additional_features":
@@ -393,25 +394,9 @@ def main():
                     "frozen_critic_embedding": frozen}
         y = {role: labels(rows, task) for role, rows in records.items()}
         for name, matrices in features.items():
-            best_params, _, validation_score, train_count, validation_count = tune_xgb(
+            best_params, estimator, validation_score, train_count, validation_count = tune_xgb(
                 task, matrices["train"], y["train"], matrices["validation"],
                 y["validation"], args.seed)
-            fit_mask = np.isfinite(y["train"]) if task == "stability" else y["train"] >= 0
-            fit_val = np.isfinite(y["validation"]) if task == "stability" else y["validation"] >= 0
-            fit_x = np.concatenate((matrices["train"][fit_mask], matrices["validation"][fit_val]))
-            fit_y = np.concatenate((y["train"][fit_mask], y["validation"][fit_val]))
-            try:
-                from xgboost import XGBClassifier, XGBRegressor
-            except ImportError as error:
-                raise RuntimeError("Install the optional xgboost dependency to run this benchmark") from error
-            estimator_args = dict(**best_params, learning_rate=0.05, subsample=0.8,
-                                  colsample_bytree=0.8, reg_lambda=1.0, n_jobs=1,
-                                  random_state=args.seed, tree_method="hist")
-            if task == "stability":
-                estimator = XGBRegressor(objective="reg:squarederror", **estimator_args)
-            else:
-                estimator = XGBClassifier(objective="multi:softprob", eval_metric="mlogloss", **estimator_args)
-            estimator.fit(fit_x, fit_y)
             test_y = y["test"]
             mask = np.isfinite(test_y) if task == "stability" else test_y >= 0
             prediction = estimator.predict(matrices["test"][mask])
