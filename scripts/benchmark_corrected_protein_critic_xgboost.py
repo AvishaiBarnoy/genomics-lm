@@ -207,11 +207,29 @@ def metric(task: str, y: np.ndarray, pred: np.ndarray) -> float:
     return float(balanced_accuracy_score(y, pred))
 
 
-def tune_xgb(task, x_train, y_train, x_val, y_val, seed):
+def fit_xgb_with_params(task, x_train, y_train, params, seed):
     try:
         from xgboost import XGBClassifier, XGBRegressor
     except ImportError as error:
         raise RuntimeError("Install the optional xgboost dependency to run this benchmark") from error
+    valid_train = np.isfinite(y_train) if task == "stability" else y_train >= 0
+    train_x, train_y = x_train[valid_train], y_train[valid_train]
+    if len(train_y) == 0:
+        raise ValueError(f"No labelled training records for {task}")
+    depth = int(params["max_depth"])
+    trees = int(params["n_estimators"])
+    args = dict(n_estimators=trees, max_depth=depth, learning_rate=0.05,
+                subsample=0.8, colsample_bytree=0.8, reg_lambda=1.0,
+                n_jobs=1, random_state=seed, tree_method="hist")
+    if task == "stability":
+        model = XGBRegressor(objective="reg:squarederror", **args)
+    else:
+        model = XGBClassifier(objective="multi:softprob", eval_metric="mlogloss", **args)
+    model.fit(train_x, train_y)
+    return model, int(valid_train.sum())
+
+
+def tune_xgb(task, x_train, y_train, x_val, y_val, seed):
     valid_train = np.isfinite(y_train) if task == "stability" else y_train >= 0
     valid_val = np.isfinite(y_val) if task == "stability" else y_val >= 0
     train_x, train_y = x_train[valid_train], y_train[valid_train]
@@ -223,19 +241,13 @@ def tune_xgb(task, x_train, y_train, x_val, y_val, seed):
     # covering a shallow/short and a deeper/longer boosted ensemble.
     grid = ((2, 50), (3, 100))
     for depth, trees in grid:
-        args = dict(n_estimators=trees, max_depth=depth, learning_rate=0.05,
-                    subsample=0.8, colsample_bytree=0.8, reg_lambda=1.0,
-                    n_jobs=1, random_state=seed, tree_method="hist")
-        if task == "stability":
-            model = XGBRegressor(objective="reg:squarederror", **args)
-        else:
-            model = XGBClassifier(objective="multi:softprob", eval_metric="mlogloss", **args)
-        model.fit(train_x, train_y)
+        params = {"max_depth": depth, "n_estimators": trees}
+        model, _ = fit_xgb_with_params(task, train_x, train_y, params, seed)
         prediction = model.predict(val_x)
         score = metric(task, val_y, prediction)
         rank_score = -score if task == "stability" else score
         if best is None or rank_score > best[0]:
-            best = (rank_score, {"max_depth": depth, "n_estimators": trees}, model, score)
+            best = (rank_score, params, model, score)
     return best[1], best[2], best[3], int(valid_train.sum()), int(valid_val.sum())
 
 
