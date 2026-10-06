@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import itertools
 import json
 import math
 from pathlib import Path
@@ -16,6 +15,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import yaml
+from scipy.sparse import csr_matrix
 from sklearn.metrics import balanced_accuracy_score, f1_score, mean_absolute_error
 from torch.utils.data import DataLoader
 
@@ -27,12 +27,19 @@ from src.protein_lm.tokenizer import ProteinTokenizer
 
 AA = "ARNDCEQGHILKMFPSTWYV"
 AA_INDEX = {aa: i for i, aa in enumerate(AA)}
+AA_LOOKUP = np.full(256, -1, dtype=np.int16)
+for _aa, _index in AA_INDEX.items():
+    AA_LOOKUP[ord(_aa)] = _index
 HYDROPATHY = {
     "A": 1.8, "R": -4.5, "N": -3.5, "D": -3.5, "C": 2.5,
     "Q": -3.5, "E": -3.5, "G": -0.4, "H": -3.2, "I": 4.5,
     "L": 3.8, "K": -3.9, "M": 1.9, "F": 2.8, "P": -1.6,
     "S": -0.8, "T": -0.7, "W": -0.9, "Y": -1.3, "V": 4.2,
 }
+HYDROPATHY_ARRAY = np.asarray([HYDROPATHY[aa] for aa in AA], dtype=np.float32)
+CHARGE_ARRAY = np.asarray([1 if aa in "KR" else -1 if aa in "DE" else 0 for aa in AA])
+AROMATIC_INDICES = np.asarray([AA_INDEX[aa] for aa in "FWY"])
+ALIPHATIC_INDICES = np.asarray([AA_INDEX[aa] for aa in "ILV"])
 # Kyte & Doolittle hydropathicity scale (J. Mol. Biol. 157:105-132, 1982),
 # also listed by ExPASy ProtScale: https://web.expasy.org/protscale/pscale/Hphob.Doolittle.html
 
@@ -67,49 +74,50 @@ def verify_manifest(manifest_path: Path, split_paths: dict[str, Path], vocab_pat
     return manifest, verified_hashes, manifest_hash
 
 
-def raw_features(records: list[dict], stability: bool, max_residues: int) -> np.ndarray:
+def raw_features(records: list[dict], stability: bool, max_residues: int) -> csr_matrix:
     """Fixed, label-free features; all residue n-grams are normalized frequencies."""
     width = 1 + 20 + 20**2 + 20**3 + (5 if stability else 0)
     matrix = np.zeros((len(records), width), dtype=np.float32)
     for row, record in enumerate(records):
         # Match the critic's BOS/EOS-aware truncation window exactly.
-        sequence = record["sequence"].upper()[:max_residues]
+        sequence = record["sequence"].upper()[:max_residues].encode("ascii")
+        encoded = AA_LOOKUP[np.frombuffer(sequence, dtype=np.uint8)]
+        valid = encoded >= 0
         matrix[row, 0] = math.log1p(len(sequence))
-        counts = np.zeros(20, dtype=np.float32)
-        for residue in sequence:
-            if residue in AA_INDEX:
-                counts[AA_INDEX[residue]] += 1
-        if len(sequence):
+        counts = np.bincount(encoded[valid], minlength=20).astype(np.float32)
+        if sequence:
+            # Preserve the original definition: ambiguous symbols count in the
+            # sequence-length denominator but not in any canonical-AA bin.
             counts /= len(sequence)
         matrix[row, 1:21] = counts
         offset = 21
         for n in (2, 3):
             size = 20**n
             grams = matrix[row, offset:offset + size]
-            total = 0
-            for start in range(max(0, len(sequence) - n + 1)):
-                gram = sequence[start:start + n]
-                if all(letter in AA_INDEX for letter in gram):
-                    index = 0
-                    for letter in gram:
-                        index = index * 20 + AA_INDEX[letter]
-                    grams[index] += 1
-                    total += 1
-            if total:
-                grams /= total
+            if encoded.size >= n:
+                codes = encoded[: encoded.size - n + 1].astype(np.int32)
+                valid_grams = codes >= 0
+                for shift in range(1, n):
+                    part = encoded[shift : shift + codes.size]
+                    valid_grams &= part >= 0
+                    codes = codes * 20 + part
+                if valid_grams.any():
+                    frequencies = np.bincount(codes[valid_grams], minlength=size)
+                    grams[:] = frequencies / int(valid_grams.sum())
             offset += size
         if stability:
-            known = [residue for residue in sequence if residue in AA_INDEX]
-            denominator = max(1, len(known))
-            charge = sum(1 if r in "KR" else -1 if r in "DE" else 0 for r in known)
+            known = encoded[valid]
+            denominator = max(1, known.size)
             matrix[row, offset:] = (
-                sum(HYDROPATHY[r] for r in known) / denominator,
-                charge / denominator,
-                sum(r in "FWY" for r in known) / denominator,
-                sum(r in "ILV" for r in known) / denominator,
-                sum(r == "C" for r in known) / denominator,
+                HYDROPATHY_ARRAY[known].sum() / denominator,
+                CHARGE_ARRAY[known].sum() / denominator,
+                np.isin(known, AROMATIC_INDICES).sum() / denominator,
+                np.isin(known, ALIPHATIC_INDICES).sum() / denominator,
+                (known == AA_INDEX["C"]).sum() / denominator,
             )
-    return matrix
+    # N-gram features are naturally sparse; keep them sparse for XGBoost's
+    # histogram learner instead of materializing mostly-zero dense matrices.
+    return csr_matrix(matrix)
 
 
 def labels(records: list[dict], task: str) -> np.ndarray:
@@ -211,7 +219,9 @@ def tune_xgb(task, x_train, y_train, x_val, y_val, seed):
     if len(train_y) == 0 or len(val_y) == 0:
         raise ValueError(f"No labelled train/validation records for {task}")
     best = None
-    grid = itertools.product((3, 6), (200, 500))
+    # A compact, declared grid keeps the multiclass benchmark practical while
+    # covering a shallow/short and a deeper/longer boosted ensemble.
+    grid = ((2, 50), (3, 100))
     for depth, trees in grid:
         args = dict(n_estimators=trees, max_depth=depth, learning_rate=0.05,
                     subsample=0.8, colsample_bytree=0.8, reg_lambda=1.0,
@@ -239,10 +249,11 @@ def bootstrap_ci(task, y, pred, groups, seed, replicates=1000):
             "upper": None,
         }
     rng = np.random.default_rng(seed)
+    rows_by_group = {group: np.flatnonzero(groups == group) for group in unique}
     values = []
     for _ in range(replicates):
         selected = rng.choice(unique, size=len(unique), replace=True)
-        indices = np.concatenate([np.flatnonzero(groups == group) for group in selected])
+        indices = np.concatenate([rows_by_group[group] for group in selected])
         sample_y, sample_pred = y[indices], pred[indices]
         if task != "stability" and len(np.unique(sample_y)) < 2:
             continue
@@ -274,10 +285,11 @@ def paired_improvement_ci(task, y, candidate, critic, groups, seed, replicates=1
             "upper": None,
         }
     rng = np.random.default_rng(seed)
+    rows_by_group = {group: np.flatnonzero(groups == group) for group in unique}
     values = []
     for _ in range(replicates):
         selected = rng.choice(unique, size=len(unique), replace=True)
-        indices = np.concatenate([np.flatnonzero(groups == group) for group in selected])
+        indices = np.concatenate([rows_by_group[group] for group in selected])
         sample_y = y[indices]
         if task != "stability" and len(np.unique(sample_y)) < 2:
             continue
@@ -383,6 +395,10 @@ def main():
                "critic_device": str(device),
                "protocol": {"selection_split": "validation", "xgboost_fit_split": "train_only",
                             "final_split": "test_once",
+                            "xgboost_selection_grid": [
+                                {"max_depth": 2, "n_estimators": 50},
+                                {"max_depth": 3, "n_estimators": 100},
+                            ],
                             "bootstrap_unit": "protein_cluster", "raw_features":
                             "log_length, amino-acid composition, normalized dipeptide and tripeptide frequencies",
                             "stability_additional_features":
