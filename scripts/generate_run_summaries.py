@@ -65,8 +65,21 @@ def parse_run(run_dir: Path) -> Dict[str, Any]:
                         summary_data["wall_time"] = f"{m}m {s}s"
                 
                 summary_data["model_spec"] = meta.get("model_spec", {})
+                if "synonymous_uniform_alternative_median_delta_nll" in meta:
+                    summary_data["synonymous_delta_nll"] = meta["synonymous_uniform_alternative_median_delta_nll"]
+                    summary_data["synonymous_win_rate"] = meta.get("synonymous_uniform_alternative_win_rate")
         except Exception as e:
             print(f"Error reading metrics for {run_id}: {e}", file=sys.stderr)
+
+    syn_path = run_dir / "scores" / "synonymous_controls_uniform_alternative.json"
+    if syn_path.exists():
+        try:
+            with open(syn_path, "r") as f:
+                syn_data = json.load(f)
+                summary_data["synonymous_delta_nll"] = syn_data.get("median_delta_nll")
+                summary_data["synonymous_win_rate"] = syn_data.get("win_rate")
+        except Exception:
+            pass
 
     # Fallback status if missing but log file or checkpoints exist
     if summary_data["status"] == "unknown":
@@ -127,6 +140,11 @@ def make_markdown(data: Dict[str, Any]) -> str:
         md.append(f"- **Final Perplexity:** {perp}")
         
     md.append(f"- **Wall Time:** {data['wall_time']}")
+    syn_delta = data.get("synonymous_delta_nll")
+    if syn_delta is not None and isinstance(syn_delta, (int, float)):
+        win_rate = data.get("synonymous_win_rate")
+        win_str = f" (Win Rate: {win_rate * 100:.1f}%)" if win_rate is not None else ""
+        md.append(f"- **Biological Codon Choice (ΔNLL):** `{syn_delta:+.4f}` nats/codon{win_str}")
     md.append("")
     
     # Heuristics for intent / focus

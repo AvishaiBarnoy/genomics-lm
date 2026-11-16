@@ -4,6 +4,10 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
+- [x] **Track: Synonymous Controls Pilot Evaluation**
+*Link: [./tracks/synonymous_controls_pilot_20261116/](./tracks/synonymous_controls_pilot_20261116/)*
+*Summary: Test whether CodonLM learns biological codon choice using paired synonymous controls on 100 validation genes, evaluating length-normalized ΔNLL.*
+
 - [x] **Track: Deterministic Check-up Scripts**
 *Link: [./tracks/deterministic_checkups_20261001/](./tracks/deterministic_checkups_20261001/)*
 *Summary: CI status, historical run analysis with explicit benchmarks, and read-only live training checks with shared Markdown/JSON reports.*

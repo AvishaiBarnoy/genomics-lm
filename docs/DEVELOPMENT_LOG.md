@@ -10,6 +10,16 @@ This document captures the end-to-end journey of Genomics-LM. It details how we 
 > evidence. Corrected revalidation is tracked in
 > [issue #92](https://github.com/AvishaiBarnoy/genomics-lm/issues/92).
 
+## 2026-11-16: Synonymous Controls Validation (Biological Codon Choice)
+
+* Validated whether CodonLM learns authentic biological codon choice rather than solely memorizing amino-acid-level protein sequences.
+* Implemented `src/eval/synonymous_controls.py` to synonymously recode genes while strictly preserving the start codon, terminal stop codon, translational reading frame, length, and exact translated protein sequence.
+* Evaluated 100 validation genes from the frozen genome split on `runs/corrected-codonlm-v1-batch64-lr15-seed2027` (`checkpoints/best.pt`):
+  * **Uniform alternative controls**: The model favored the natural sequence in **100% of tested genes** ($\text{median } \Delta\mathrm{NLL} = +0.4354$ nats/codon, $p = 1.95 \times 10^{-18}$).
+  * **Within-gene frequency-preserving controls**: Preserving exact per-gene codon counts and permuting only positions still favored natural sequences in **80% of genes** ($\text{median } \Delta\mathrm{NLL} = +0.0150$ nats/codon, $p = 3.01 \times 10^{-11}$).
+  * **Negative baseline**: An untrained architecture-matched model achieved $\Delta\mathrm{NLL} \approx 0.0239$ ($\approx 18\times$ smaller), confirming that preference is an internalized learned biological regularity.
+* Shipped CLI tooling (`scripts/eval_synonymous_controls.py`), automated KPI extraction in `scripts/generate_run_summaries.py`, track documentation (`conductor/tracks/synonymous_controls_pilot_20261116/plan.md`), and full unit tests (`tests/test_synonymous_controls.py`). Full report at `docs/SYNONYMOUS_CONTROLS_PILOT_REPORT.md`.
+
 ## 2026-09-28: Explicit Checkpoint Forks
 
 * Added explicit checkpoint forks to the shared training lifecycle. Registered
