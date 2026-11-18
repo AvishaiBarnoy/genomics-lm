@@ -67,7 +67,10 @@ def apply_weight_space_programming(
     # 3. Termination Subspace Steering along ln_f.bias
     if stop_steering_alpha > 0.0 and "ln_f.bias" in state:
         ln_f_b = state["ln_f.bias"].detach()
-        b_dir = ln_f_b / torch.dot(ln_f_b, ln_f_b)
+        bias_norm_sq = torch.dot(ln_f_b, ln_f_b)
+        if bias_norm_sq <= 0:
+            raise ValueError("Cannot steer stop rows with a zero ln_f.bias vector")
+        b_dir = ln_f_b / bias_norm_sq
         for sid in stop_ids:
             state["head.weight"][sid] += float(stop_steering_alpha) * b_dir
         edited_tensors.append("head.weight (stop_steering)")
@@ -129,7 +132,7 @@ def apply_weight_space_programming(
         "edited_tensors": edited_tensors,
         "orig_head_sha256": orig_head_hash,
         "new_head_sha256": new_head_hash,
-        "status": "completed",
+        "status": "experimental_unvalidated",
     }
     with open(target_ckpt_dir / "meta.json", "w") as f:
         json.dump(meta, f, indent=2)

@@ -37,7 +37,7 @@ Other corrected evaluations give a more specific picture:
 
 The corrected EC classification evaluation is **pending**: the available annotated records do not provide an EC test set outside the pretraining genomes. The controlled AMR test excludes exact pretraining CDS duplicates, but some protein clusters still overlap pretraining and are disclosed in the [downstream readiness report](docs/CORRECTED_DOWNSTREAM_EVALUATION_READINESS.md).
 
-Earlier Stage 2.6 figures remain in the [historical benchmark table](conference/sota_benchmark_table.md). They predate mandatory global genome-aware splitting and corrected causal embedding extraction, so they should not be read as current validated performance claims.
+Earlier Stage 2.6 figures remain in the [historical benchmark table](conference/sota_benchmark_table.md). They used a legacy protocol that predates mandatory global genome-aware splitting and corrected causal embedding extraction, so they should not be read as current validated performance claims.
 
 ## Getting started
 

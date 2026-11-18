@@ -57,7 +57,11 @@ def run(n_prompts: int, seeds: int, max_new: int, output: Path, temperature: flo
     genes = [s.strip() for s in dna_file.read_text().splitlines()]
     itos = (repo / "runs" / RUNS["primary_source"] / "itos.txt").read_text().splitlines()
     stoi = {t: i for i, t in enumerate(itos)}
-    assert all((repo / "runs" / r / "itos.txt").read_text().splitlines() == itos for r in RUNS.values())
+    if not models:
+        raise ValueError("At least one model must be selected")
+    for label in models:
+        if (repo / "runs" / RUNS[label] / "itos.txt").read_text().splitlines() != itos:
+            raise ValueError(f"Vocabulary mismatch for {label}")
     prefixes = []
     for g in genes:
         c = [g[i:i+3] for i in range(0, len(g) - 2, 3)]
