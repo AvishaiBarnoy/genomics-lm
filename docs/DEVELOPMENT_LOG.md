@@ -10,6 +10,15 @@ This document captures the end-to-end journey of Genomics-LM. It details how we 
 > evidence. Corrected revalidation is tracked in
 > [issue #92](https://github.com/AvishaiBarnoy/genomics-lm/issues/92).
 
+## 2026-11-18: ESM-2 (8M) External Protein Critic Integration
+
+* Established the **Generator $\to$ Translation $\to$ External Critic** evaluation interface by integrating a frozen pretrained ESM-2 8M (`esm2_t6_8M_UR50D`) protein language model.
+* Implemented `src/eval/protein_critic_esm.py` with `ESM2ProteinCritic`, calculating mean masked-residue log-likelihood across 16 random positions per protein.
+* Evaluated 32 generated coding sequences against 32 length-matched real validation proteins from the held-out genome split:
+  * All 64 protein sequences received finite plausibility scores.
+  * Real validation proteins achieved a significantly higher median plausibility score than generated sequences: $\text{Median}_{\text{real}} = -2.6142$ vs. $\text{Median}_{\text{gen}} = -2.8613$ ($\Delta\text{Median} = +0.2471$, Mann-Whitney $U = 770.0, p = 2.73 \times 10^{-4}$).
+* Added full test coverage (`tests/test_protein_critic_esm.py`: 6/6 pass), CLI runner (`scripts/eval_esm2_critic.py`), track documentation (`conductor/tracks/esm2_protein_critic_20261116/plan.md`), and automated KPI reporting in `scripts/generate_run_summaries.py`. Full report at `docs/ESM2_PROTEIN_CRITIC_REPORT.md`.
+
 ## 2026-11-16: Synonymous Controls Validation (Biological Codon Choice)
 
 * Validated whether CodonLM learns authentic biological codon choice rather than solely memorizing amino-acid-level protein sequences.

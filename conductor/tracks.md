@@ -4,6 +4,10 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
+- [x] **Track: ESM-2 (8M) External Protein Critic**
+*Link: [./tracks/esm2_protein_critic_20261116/](./tracks/esm2_protein_critic_20261116/)*
+*Summary: Establish generator -> translation -> external critic evaluation using frozen ESM-2 (8M) masked log-likelihood.*
+
 - [x] **Track: Synonymous Controls Pilot Evaluation**
 *Link: [./tracks/synonymous_controls_pilot_20261116/](./tracks/synonymous_controls_pilot_20261116/)*
 *Summary: Test whether CodonLM learns biological codon choice using paired synonymous controls on 100 validation genes, evaluating length-normalized ΔNLL.*

@@ -81,6 +81,17 @@ def parse_run(run_dir: Path) -> Dict[str, Any]:
         except Exception:
             pass
 
+    esm2_path = run_dir / "scores" / "esm2_critic_benchmark.json"
+    if esm2_path.exists():
+        try:
+            with open(esm2_path, "r") as f:
+                esm2_data = json.load(f)
+                summary_data["esm2_delta_median"] = esm2_data.get("delta_median_score")
+                summary_data["esm2_p_value"] = esm2_data.get("p_value")
+                summary_data["esm2_success"] = esm2_data.get("success")
+        except Exception:
+            pass
+
     # Fallback status if missing but log file or checkpoints exist
     if summary_data["status"] == "unknown":
         if (run_dir / "checkpoints" / "best.pt").exists() or (run_dir / "checkpoints" / "last.pt").exists():
@@ -145,6 +156,12 @@ def make_markdown(data: Dict[str, Any]) -> str:
         win_rate = data.get("synonymous_win_rate")
         win_str = f" (Win Rate: {win_rate * 100:.1f}%)" if win_rate is not None else ""
         md.append(f"- **Biological Codon Choice (ΔNLL):** `{syn_delta:+.4f}` nats/codon{win_str}")
+    esm2_delta = data.get("esm2_delta_median")
+    if esm2_delta is not None and isinstance(esm2_delta, (int, float)):
+        p_val = data.get("esm2_p_value")
+        p_str = f" (p = {p_val:.2e})" if p_val is not None else ""
+        verdict = "✅ Natural > Generated" if data.get("esm2_success") else "⚠️ Generated >= Natural"
+        md.append(f"- **ESM-2 Protein Plausibility (ΔScore):** `{esm2_delta:+.4f}` {verdict}{p_str}")
     md.append("")
     
     # Heuristics for intent / focus
