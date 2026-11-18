@@ -21,3 +21,4 @@ dependencies:
       - jinja2
       - pytest-cov
       - ruff
+      - fair-esm

@@ -13,3 +13,4 @@ streamlit
 joblib
 tabulate
 jinja2
+fair-esm

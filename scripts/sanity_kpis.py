@@ -7,6 +7,7 @@ KPIs:
 - frameshift_delta: mean ΔNLL when shifting the input window by +1 token (codon).
 - startstop_delta.start / .stop: mean ΔNLL when mutating a start (ATG) / stop (TAA/TAG/TGA) token in-context.
 - syn_gap: average (ΔNLL_nonSyn − ΔNLL_syn).
+- [optional] esm2_critic_delta_median: median ESM-2 log-likelihood gap (Real − Generated). Enable with --with_esm2.
 
 Keeps runtime small by sampling at most N windows.
 """
@@ -307,12 +308,147 @@ def compute_kpis(
     }
 
 
+def compute_esm2_kpis(
+    model: TinyGPT,
+    device: torch.device,
+    run_dir: Path,
+    itos: List[str],
+    stoi: Dict[str, int],
+    *,
+    num_seqs: int = 32,
+    max_codons: int = 128,
+    num_positions: int = 16,
+    seed: int = 42,
+    manifest: Path | None = None,
+) -> Dict[str, float]:
+    """Score num_seqs generated proteins vs length-matched real proteins with frozen ESM-2 (8M).
+
+    Returns a dict with keys:
+        esm2_critic_real_median_score
+        esm2_critic_generated_median_score
+        esm2_critic_delta_median
+        esm2_critic_mann_whitney_p
+    """
+    from scripts.query_model import generate as cds_generate
+    from src.eval.protein_critic_esm import (
+        ESM2ProteinCritic,
+        extract_length_matched_validation_proteins,
+        run_esm2_critic_benchmark,
+    )
+    from src.eval.translation import translate_codons
+
+    # Always use CPU for ESM-2 critic (sequential autoregressive decoding is faster on CPU for Mac)
+    critic_device = torch.device("cpu")
+
+    torch.manual_seed(seed)
+    bos_id = stoi.get("<BOS_CDS>", 1)
+    eos_id = stoi.get("<EOS_CDS>")
+
+    generated_proteins: list[tuple[str, str]] = []
+    target_lengths: list[int] = []
+
+    gen_model = model
+    gen_device = torch.device("cpu")
+    gen_model_cpu = gen_model.to(gen_device) if device.type != "cpu" else gen_model
+
+    for i in range(num_seqs):
+        ids = cds_generate(
+            gen_model_cpu,
+            gen_device,
+            ctx_ids=[bos_id],
+            max_new=max_codons,
+            temperature=1.0,
+            topk=0,
+            eos_idx=eos_id,
+        )
+        tokens = [itos[j] if 0 <= j < len(itos) else f"<{j}>" for j in ids]
+        report = translate_codons(tokens)
+        prot = report.protein_sequence or "M"
+        generated_proteins.append((f"gen_{i:02d}", prot))
+        target_lengths.append(len(prot))
+
+    # Resolve manifest path
+    repo = Path(__file__).resolve().parents[1]
+    if manifest is None:
+        manifest = repo / "data/processed/corrected/corrected-codonlm-v1/genome/manifest.json"
+
+    real_proteins = extract_length_matched_validation_proteins(
+        manifest,
+        target_lengths,
+        seed=seed,
+    )
+
+    critic = ESM2ProteinCritic(device=critic_device)
+    summary = run_esm2_critic_benchmark(
+        critic,
+        generated_proteins,
+        real_proteins,
+        num_positions=num_positions,
+        seed=seed,
+    )
+
+    # Persist full benchmark report alongside run scores
+    scores_dir = run_dir / "scores"
+    scores_dir.mkdir(parents=True, exist_ok=True)
+    out_dict = summary.to_dict()
+    (scores_dir / "esm2_critic_benchmark.json").write_text(
+        __import__("json").dumps(out_dict, indent=2) + "\n"
+    )
+
+    return {
+        "esm2_critic_real_median_score": summary.median_real_score,
+        "esm2_critic_generated_median_score": summary.median_generated_score,
+        "esm2_critic_delta_median": summary.delta_median_score,
+        "esm2_critic_mann_whitney_p": summary.p_value,
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run_dir", help="outputs/checkpoints/<RUN_ID>")
     ap.add_argument("--run_id", help="Run id (alternative to --run_dir)")
     ap.add_argument("--max_windows", type=int, default=200)
     ap.add_argument("--test_npz", help="override test NPZ path")
+    ap.add_argument(
+        "--with_esm2",
+        action="store_true",
+        default=False,
+        help="Also run the frozen ESM-2 (8M) protein critic KPI. "
+             "Generates --esm2_num_seqs proteins, scores them vs length-matched "
+             "real validation proteins, and merges results into metrics.json. "
+             "Adds ~2 min on CPU for the default 32 sequences.",
+    )
+    ap.add_argument(
+        "--esm2_num_seqs",
+        type=int,
+        default=32,
+        help="Number of generated/real proteins to score with ESM-2 (default: 32).",
+    )
+    ap.add_argument(
+        "--esm2_num_positions",
+        type=int,
+        default=16,
+        help="Masked residue positions evaluated per protein (default: 16).",
+    )
+    ap.add_argument(
+        "--esm2_max_codons",
+        type=int,
+        default=128,
+        help="Max codons generated per sequence for ESM-2 scoring (default: 128).",
+    )
+    ap.add_argument(
+        "--esm2_seed",
+        type=int,
+        default=42,
+        help="Fixed seed for ESM-2 generation and position sampling (default: 42).",
+    )
+    ap.add_argument(
+        "--esm2_manifest",
+        type=Path,
+        default=None,
+        help="Path to dataset manifest.json for real validation proteins "
+             "(default: auto-detected from data/processed/corrected/).",
+    )
     args = ap.parse_args()
 
     repo = Path(__file__).resolve().parents[1]
@@ -346,8 +482,30 @@ def main() -> None:
             else:
                 test_npz = repo / f"data/processed/test_bs{cfg['block_size']}.npz"
 
-    itos, _ = load_vocab(run_id, repo)
+    itos, stoi = load_vocab(run_id, repo)
     kpis = compute_kpis(model, dev(), test_npz, itos, sample_windows=args.max_windows)
+
+    if args.with_esm2:
+        print("[sanity_kpis] Running ESM-2 protein critic KPI (this may take ~2 min) ...")
+        esm2_kpis = compute_esm2_kpis(
+            model,
+            dev(),
+            run_dir,
+            itos,
+            stoi,
+            num_seqs=args.esm2_num_seqs,
+            max_codons=args.esm2_max_codons,
+            num_positions=args.esm2_num_positions,
+            seed=args.esm2_seed,
+            manifest=args.esm2_manifest,
+        )
+        kpis.update(esm2_kpis)
+        delta = esm2_kpis.get("esm2_critic_delta_median", float("nan"))
+        p = esm2_kpis.get("esm2_critic_mann_whitney_p")
+        status = "PASS" if delta > 0 else "FAIL"
+        p_str = f"p={p:.2e}" if p is not None else "p=n/a"
+        print(f"[sanity_kpis] ESM-2 KPI: ΔMedian={delta:+.4f} ({p_str}) → {status}")
+
     metrics_path = repo / "outputs/scores" / run_id / "metrics.json"
     write_merge_metrics(metrics_path, kpis)
     print(json.dumps(kpis, indent=2))

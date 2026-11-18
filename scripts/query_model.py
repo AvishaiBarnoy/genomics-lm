@@ -309,7 +309,13 @@ def main() -> None:
     )
     ap.add_argument("--mode", choices=["next", "generate", "score"], default="next")
     ap.add_argument("--dna", help="DNA prompt (uppercase ACGT)")
-    ap.add_argument("--topk", type=int, default=5)
+    ap.add_argument(
+        "--topk",
+        type=int,
+        default=0,
+        help="Top-K sampling (default: 0 = unconstrained). "
+             "top_k>0 can cause amino-acid mode collapse at the protein level.",
+    )
     ap.add_argument("--temperature", type=float, default=1.0)
     ap.add_argument("--max_new", type=int, default=30)
     ap.add_argument("--interactive", action="store_true")

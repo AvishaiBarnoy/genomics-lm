@@ -2,11 +2,11 @@
 
 **Date:** 2026-11-18  
 **Status:** Completed & Validated (Pass)  
-**Track:** [conductor/tracks/esm2_protein_critic_20261116/plan.md](file:///Users/User/github/genomics-lm/conductor/tracks/esm2_protein_critic_20261116/plan.md)  
+**Track:** [ESM-2 track](../conductor/tracks/esm2_protein_critic_20261116/plan.md)
 **Implementation Modules:**
-- [src/eval/protein_critic_esm.py](file:///Users/User/github/genomics-lm/src/eval/protein_critic_esm.py)
-- [scripts/eval_esm2_critic.py](file:///Users/User/github/genomics-lm/scripts/eval_esm2_critic.py)
-- [tests/test_protein_critic_esm.py](file:///Users/User/github/genomics-lm/tests/test_protein_critic_esm.py)
+- [src/eval/protein_critic_esm.py](../src/eval/protein_critic_esm.py)
+- [scripts/eval_esm2_critic.py](../scripts/eval_esm2_critic.py)
+- [tests/test_protein_critic_esm.py](../tests/test_protein_critic_esm.py)
 
 ---
 
@@ -27,10 +27,10 @@ We evaluated 32 *de novo* generated coding sequences against 32 length-matched r
 
 ## 2. Experimental Setup
 
-- **Generator Checkpoint:** `runs/corrected-codonlm-v1-batch64-lr15-seed2027` ([checkpoints/best.pt](file:///Users/User/github/genomics-lm/runs/corrected-codonlm-v1-batch64-lr15-seed2027/checkpoints/best.pt))
+- **Generator Checkpoint:** `runs/corrected-codonlm-v1-batch64-lr15-seed2027/checkpoints/best.pt`
 - **Generator Generation Protocol:** 32 sequences, max 128 codons, seed 42, temperature 1.0, unconstrained sampling (`top_k=0`).
 - **Translation:** Standard bacterial code (NCBI Table 11) via [src/eval/translation.py](file:///Users/User/github/genomics-lm/src/eval/translation.py).
-- **Validation Dataset:** [data/processed/corrected/corrected-codonlm-v1/genome/manifest.json](file:///Users/User/github/genomics-lm/data/processed/corrected/corrected-codonlm-v1/genome/manifest.json) (length-matched to generated proteins).
+- **Validation Dataset:** `data/processed/corrected/corrected-codonlm-v1/genome/manifest.json` (length-matched to generated proteins).
 - **External Critic:** Pretrained `esm2_t6_8M_UR50D` (Meta AI, UniRef50-trained).
 - **Masked Log-Likelihood Formulation:**
   For residue position $i_k$, replace input token with `<mask>` (token 32), compute forward pass, and evaluate log-softmax probability of the ground-truth residue $x_{i_k}$:
@@ -65,4 +65,4 @@ python -m scripts.eval_esm2_critic \
     --device cpu
 ```
 
-Output report: [runs/corrected-codonlm-v1-batch64-lr15-seed2027/scores/esm2_critic_benchmark.json](file:///Users/User/github/genomics-lm/runs/corrected-codonlm-v1-batch64-lr15-seed2027/scores/esm2_critic_benchmark.json)
+Output report: `runs/corrected-codonlm-v1-batch64-lr15-seed2027/scores/esm2_critic_benchmark.json`. The ESM-2 checks are marked `external` because they load pretrained weights; install dependencies from `environment.yml` or `requirements.txt` before running them.

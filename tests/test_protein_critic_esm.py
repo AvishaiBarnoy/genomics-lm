@@ -8,6 +8,8 @@ from src.eval.protein_critic_esm import (
     translate_and_score_cds,
 )
 
+pytestmark = pytest.mark.external
+
 
 @pytest.fixture(scope="module")
 def critic():
