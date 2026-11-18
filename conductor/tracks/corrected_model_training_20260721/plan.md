@@ -231,6 +231,16 @@ corrected report passes its promotion criteria. Otherwise pause and audit.
   from one protein cluster, so a cluster-bootstrap interval was not estimable.
   Keep this v2 split frozen and do not replace the selected best checkpoint with
   `last`.
+- A post-hoc class-level decomposition is recorded in
+  `docs/benchmarks/corrected_protein_critic_xgboost_class_diagnostics_v1.md` and
+  its JSON. Raw XGBoost recall exceeded the critic in 25/43 PFAM classes; the
+  critic was higher in 11 and tied in 7. EC differences vary by class, with the
+  raw model more concentrated on class 2. Most PFAM classes have fewer than 20
+  test examples, so these per-class test observations are descriptive and must
+  not be used to tune a follow-up model.
+- [ ] Use validation-only per-class support and error analysis to decide whether
+  a focused PFAM critic-head or loss ablation is justified. Keep the v2 test
+  report frozen; use a fresh external/frozen test set for confirmatory claims.
 - [ ] Version the passing critic checkpoint and bind it to its dataset, labels,
   architecture, and calibration artifacts.
 

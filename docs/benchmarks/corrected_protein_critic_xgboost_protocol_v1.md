@@ -82,6 +82,12 @@ single cluster, so no cluster-based uncertainty estimate is possible. These
 results do not yet show that critic embeddings improve generation guidance; that
 requires a separate controlled generation evaluation.
 
+A post-hoc PFAM/EC class-level error analysis, using the already selected XGBoost
+parameters and verifying that aggregate scores reproduce, is documented in
+[`corrected_protein_critic_xgboost_class_diagnostics_v1.md`](corrected_protein_critic_xgboost_class_diagnostics_v1.md).
+It is descriptive only and does not authorize selecting changes against the v2
+test set.
+
 The critic inference device defaults to `auto` (CUDA, then MPS, then CPU) and
 can be set explicitly with `--device`. XGBoost remains CPU-based for this
 benchmark.
